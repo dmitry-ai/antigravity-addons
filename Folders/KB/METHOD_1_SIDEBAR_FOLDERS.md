@@ -26,7 +26,7 @@
                |  dist/utils.js: createWindow()                       |
                |     |                                                |
                |     v                                                |
-               |  1 - UI/code/bootstrap.js                            |
+               |  CSS/code/bootstrap.js                               |
                |     |                                                |
                |     v                                                |
                |  Folders/code/folders-bootstrap.js                   |
@@ -114,7 +114,7 @@ node "C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\too
 
 ## 5. Гарантии надежности и безопасности
 
-1. **Неприкосновенность `app.asar`**: Архив `app.asar` программы не модифицируется повторно. Вся маршрутизация идет через уже имеющийся внешний вызов `bootstrap.js` в каталоге `1 - UI/code`.
+1. **Неприкосновенность `app.asar`**: Архив `app.asar` программы не модифицируется повторно. Вся маршрутизация идет через уже имеющийся внешний вызов `bootstrap.js` в каталоге `CSS/code`.
 2. **Нулевой риск падения UI (Graceful Degradation)**: Если контрольные анкоры в бандле не обнаружены (например, при масштабном апдейте Antigravity), `folders-patch.js` возвращает исходный код без изменений. Пользователь получает штатный интерфейс без падения или белого экрана.
 3. **Сохранность баз данных**: Внутренние базы Antigravity (`conversation_summaries.db`) не затрагиваются, риск повреждения метаданных исключен.
 4. **Мгновенный откат**: Для отключения достаточно выполнить `node uninstall-folders.js`.

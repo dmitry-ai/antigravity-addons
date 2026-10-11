@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BOOTSTRAP_PATH = 'C:/work/research/provision/code/Software/Google/AI/Antigravity/ꙮ/2026/10/11/1 - UI/code/bootstrap.js';
+const BOOTSTRAP_PATH = 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/bootstrap.js';
 const FOLDERS_BOOTSTRAP_PATH = path.join(__dirname, 'folders-bootstrap.js').replace(/\\/g, '/');
 
 const INJECTION_LINE = `\ttry { require('${FOLDERS_BOOTSTRAP_PATH}')(win); } catch (e) { console.error('[folders-bootstrap]', e); }`;
