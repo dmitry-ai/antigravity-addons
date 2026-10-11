@@ -70,12 +70,13 @@
 Все исходные файлы и утилиты размещены строго в папке:
 [`C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\Folders\code`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code)
 
-1. [`folders-patch.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-patch.js) — ядро трансформации AST/строк бандла. Находит точки внедрения в цикле `VIb`, группирует проекты по папкам, внедряет структуру `folders.json` и защищенный fallback.
-2. [`folders-bootstrap.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-bootstrap.js) — модуль для главного процесса Electron. Перехватывает запросы протокола HTTPS (`protocol.handle`), кэширует пропатченный бандл и следит за изменением `folders.json`.
-3. [`folders-manager.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-manager.js) — CLI и программный интерфейс для управления папками и привязками проектов.
-4. [`install-folders.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/install-folders.js) — безопасный скрипт подключения хука в `bootstrap.js` с автоматическим созданием резервной копии (`.bak`).
-5. [`uninstall-folders.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/uninstall-folders.js) — скрипт мгновенного отката.
-6. [`test-suite.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/test-suite.js) — автоматический набор тестов (парсинг V8, проверка целостности AST, операции с JSON).
+1. [`folders-patch.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-patch.js) — ядро трансформации AST/строк бандла. Группирует проекты по папкам, обеспечивает показ пустых папок, перехватывает `storageService` в хуке `hR` для мгновенных реактивных обновлений и бандлит клиентский контроллер.
+2. [`folders-client.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-client.js) — клиентский UI-контроллер в окне рендерера: кнопка «Создать папку» `📁+`, контекстные меню папок и проектов, инлайн-переименование (`F2`), Drag & Drop проектов на папки с визуальной подсветкой и обработка горячих клавиш.
+3. [`folders-bootstrap.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-bootstrap.js) — Electron-модуль перехвата протокола HTTPS (`protocol.handle`). Обслуживает бандл `/main.js` и внутренний REST API `/api/project-folders` для всех операций (создание, переименование, удаление, привязка/отвязка).
+4. [`folders-manager.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-manager.js) — ядро операций с JSON и CLI-утилита.
+5. [`install-folders.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/install-folders.js) — безопасный скрипт подключения хука в `bootstrap.js`.
+6. [`uninstall-folders.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/uninstall-folders.js) — скрипт мгновенного отката.
+7. [`test-suite.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/test-suite.js) — автоматический набор из 21 теста.
 
 ---
 
@@ -84,40 +85,15 @@
 Хранится локально в каталоге инструмента:
 [`C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\Folders\code\folders.json`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders.json)
 
-Текущее распределение:
-- **Upwork** (`folder-upwork`):
-  - `d464191e-4dc5-4ca8-a7d7-ed412d141f5f` (`U.P - 2026-10-11 - howaboutnope.com`)
-  - `0b25ef38-ecf5-44eb-8cc2-1f8b4611e19e`
-  - `c9d81597-a231-4809-baf0-f4873e50b7c2`
-- **Клиенты** (`folder-clients`):
-  - `3b33b970-7f45-42b5-ba3d-a82584d1e07b`
-- **Внутренние** (`folder-internal`):
-  - `35a3532c-a530-4eb4-820b-46461ce86e4e`
-  - `a1632d2e-185c-4456-87ce-49d0de5ebab7`
-  - `9c3529dd-3238-4418-a9e5-43fff7ff80ee`
-  - `cd16380f-c085-4876-a083-62bf924eda55`
-- **Архив** (`folder-archive`)
-
-Управление через CLI:
-```powershell
-# Список папок и проектов
-node "C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\Folders\code\folders-manager.js" list
-
-# Добавить папку
-node "C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\Folders\code\folders-manager.js" add-folder "folder-my" "Моя папка"
-
-# Назначить проект в папку
-node "C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\Folders\code\folders-manager.js" assign "<projectId>" "folder-my"
-```
-
 ---
 
 ## 5. Гарантии надежности и безопасности
 
 1. **Неприкосновенность `app.asar`**: Архив `app.asar` программы не модифицируется повторно. Вся маршрутизация идет через уже имеющийся внешний вызов `bootstrap.js` в каталоге `CSS/code`.
-2. **Нулевой риск падения UI (Graceful Degradation)**: Если контрольные анкоры в бандле не обнаружены (например, при масштабном апдейте Antigravity), `folders-patch.js` возвращает исходный код без изменений. Пользователь получает штатный интерфейс без падения или белого экрана.
-3. **Сохранность баз данных**: Внутренние базы Antigravity (`conversation_summaries.db`) не затрагиваются, риск повреждения метаданных исключен.
-4. **Мгновенный откат**: Для отключения достаточно выполнить `node uninstall-folders.js`.
+2. **Нулевой риск падения UI (Graceful Degradation)**: Если контрольные анкоры в бандле не обнаружены (например, при масштабном апдейте Antigravity), `folders-patch.js` возвращает исходный код без изменений.
+3. **Мгновенные реактивные обновления (Zero Reload)**: Благодаря перехвату `storageService` в хуке `hR`, любые действия в UI вызывают немедленную перерисовку дерева без `Ctrl+R`.
+4. **Сохранность баз данных**: Внутренние базы Antigravity (`conversation_summaries.db`) не затрагиваются, сетевые порты не открываются.
+5. **Мгновенный откат**: Для отключения достаточно выполнить `node uninstall-folders.js`.
 
 ---
 
@@ -128,16 +104,28 @@ node "C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\too
 --- TEST 1: Anchor discovery in extracted main.js ---
 ✅ PASS: LOOP_ANCHOR found in main.js
 ✅ PASS: LOOP_END found in main.js
+✅ PASS: HR_ANCHOR found in main.js
 --- TEST 2: Syntax and AST validity of patched main.js ---
 ✅ PASS: Patched source is larger than original source
 ✅ PASS: Header contains window.__PROJECT_FOLDERS_DATA__
+✅ PASS: Header contains window.__PROJECT_FOLDERS_CLIENT__
+✅ PASS: Hooks window.__STORAGE_SERVICE__ in hR
+✅ PASS: Renders placeholder for empty folders
 ✅ PASS: Contains folder icon prefix
 ✅ PASS: Patched main.js parsed by V8 compiler with zero syntax errors
---- TEST 3: folders-manager operations on isolated mock config ---
+--- TEST 3: folders-client.js standalone syntax validity ---
+✅ PASS: folders-client.js exists
+✅ PASS: Contains showCreateFolderDialog
+✅ PASS: Contains startInlineRename (F2)
+✅ PASS: Contains showFolderContextMenu
+✅ PASS: Contains showProjectContextMenu
+✅ PASS: Contains Drag & Drop handling
+--- TEST 4: folders-manager operations on isolated mock config ---
 ✅ PASS: Folder Alpha added
+✅ PASS: Folder Alpha renamed
 ✅ PASS: Project proj-x assigned to fld-1
 ✅ PASS: Project proj-x unassigned
 ✅ PASS: Folder fld-1 removed
 
-🎉 Test Suite Completed: 10/10 tests passed.
+🎉 Test Suite Completed: 21/21 tests passed.
 ```

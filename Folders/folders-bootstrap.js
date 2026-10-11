@@ -7,8 +7,8 @@
 
 const { net } = require('electron');
 const fs = require('fs');
-const path = require('path');
 const { applyFolderPatch } = require('./folders-patch');
+const { addFolder, renameFolder, removeFolder, assignProject, unassignProject, writeConfig } = require('./folders-manager');
 
 const DEFAULT_FOLDERS_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
 
@@ -132,14 +132,66 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
         }
       }
 
-      // 2. Local REST endpoint for folder data query/update
-      if (url.pathname === '/api/project-folders') {
+      // 2. Local REST endpoint for folder data query/mutations
+      if (url.pathname === '/api/project-folders' || url.pathname.startsWith('/api/project-folders/')) {
         if (request.method === 'GET') {
           const data = loadFoldersData(configPath);
           return new Response(JSON.stringify(data), {
             status: 200,
-            headers: { 'content-type': 'application/json' }
+            headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
           });
+        }
+
+        if (request.method === 'POST') {
+          try {
+            let body = {};
+            const text = await request.text();
+            if (text) {
+              body = JSON.parse(text);
+            }
+            const { action } = body;
+            console.log(`[folders-bootstrap] Received action: ${action}`, body);
+
+            if (action === 'add-folder') {
+              addFolder(body.name, body.id, body.color, configPath);
+            } else if (action === 'rename-folder') {
+              renameFolder(body.id || body.query, body.newName, configPath);
+            } else if (action === 'remove-folder') {
+              removeFolder(body.id || body.query, configPath);
+            } else if (action === 'assign-project') {
+              assignProject(body.projectId || body.projectQuery, body.folderId || body.folderQuery, configPath);
+            } else if (action === 'unassign-project') {
+              unassignProject(body.projectId || body.projectQuery, configPath);
+            } else if (action === 'save-config') {
+              writeConfig(body.data, configPath);
+            }
+
+            const updated = loadFoldersData(configPath);
+            cachedPatchedBundle = null; // Invalidate bundle cache
+
+            // Broadcast to window renderer
+            if (win && !win.isDestroyed()) {
+              try {
+                win.webContents.executeJavaScript(`
+                  window.__PROJECT_FOLDERS_DATA__ = ${JSON.stringify(updated)};
+                  if (window.__PROJECT_FOLDERS_CLIENT__ && typeof window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate === 'function') {
+                    window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate(${JSON.stringify(updated)});
+                  }
+                `).catch(() => {});
+              } catch (_) {}
+            }
+
+            return new Response(JSON.stringify({ success: true, data: updated }), {
+              status: 200,
+              headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
+            });
+          } catch (err) {
+            console.error('[folders-bootstrap] Failed handling action:', err);
+            return new Response(JSON.stringify({ success: false, error: err.message }), {
+              status: 500,
+              headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
+            });
+          }
         }
       }
 
