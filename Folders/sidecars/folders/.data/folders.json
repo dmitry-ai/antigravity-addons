@@ -1,0 +1,27 @@
+{
+  "folders": [
+    {
+      "id": "folder-clients",
+      "name": "Клиенты",
+      "parentId": null,
+      "color": "#3b82f6",
+      "isExpanded": true
+    },
+    {
+      "id": "folder-internal",
+      "name": "Внутренние",
+      "parentId": null,
+      "color": "#10b981",
+      "isExpanded": true
+    },
+    {
+      "id": "folder-archive",
+      "name": "Архив",
+      "parentId": null,
+      "color": "#64748b",
+      "isExpanded": false
+    }
+  ],
+  "projectFolderMap": {},
+  "collapsedFolders": []
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#2563eb" />
+  <!-- Folder shape -->
+  <path d="M16 22C16 20.3431 17.3431 19 19 19H27.1716C27.9672 19 28.7303 19.3161 29.2929 19.8787L31.4142 22H45C46.6569 22 48 23.3431 48 25V42C48 43.6569 46.6569 45 45 45H19C17.3431 45 16 43.6569 16 42V22Z" fill="#ffffff" fill-opacity="0.9" />
+  <!-- Subfolder / Project badge inside -->
+  <rect x="22" y="28" width="20" height="4" rx="2" fill="#2563eb" />
+  <rect x="22" y="35" width="14" height="4" rx="2" fill="#3b82f6" />
+</svg>
