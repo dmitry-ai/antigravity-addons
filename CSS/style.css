@@ -93,3 +93,28 @@ button[data-project-card] svg {
 	padding: 0 !important;
 	width: 20px !important;
 }
+
+/* Сдвиг жёлтых папок влево */
+[data-testid='section-header'][data-title*='📁'],
+[data-testid='section-header'][data-title^='📁'] {
+	cursor: pointer;
+	margin-top: 3px !important;
+	opacity: 0.95 !important;
+}
+[data-testid='section-header'][data-title*='📁'] > div,
+[data-testid='section-header'][data-title^='📁'] > div,
+[data-testid='section-header'][data-title*='📁'] .group\/section-header,
+[data-testid='section-header'][data-title^='📁'] .group\/section-header {
+	padding-left: 0 !important;
+	margin-left: -4px !important;
+}
+[data-testid='section-header'][data-title*='📁'] h2,
+[data-testid='section-header'][data-title^='📁'] h2 {
+	font-weight: 600 !important;
+	font-size: 11.5px !important;
+}
+[data-testid='section-header'][data-title*='📁'] button,
+[data-testid='section-header'][data-title^='📁'] button {
+	padding-left: 0 !important;
+	margin-left: 0 !important;
+}
