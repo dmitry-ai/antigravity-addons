@@ -22,11 +22,11 @@
       "isExpanded": true
     },
     {
-      "id": "folder-archive",
-      "name": "Архив",
+      "id": "folder-2026",
+      "name": "2026",
       "parentId": null,
-      "color": "#64748b",
-      "isExpanded": false
+      "color": "#10b981",
+      "isExpanded": true
     }
   ],
   "projectFolderMap": {
