@@ -933,9 +933,20 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   assert.ok(css.includes("calc(8px + var(--folder-depth"), 'Folder header base padding 8px matches project icon position');
   assert.ok(css.includes("calc(4px + var(--folder-depth"), 'Project card base padding 4px');
 
-  // Exact text alignment: conversation rows & placeholders align with project title at 30px base
-  assert.ok(css.includes("calc(30px + var(--folder-depth"), 'Conversation rows and placeholders align with project title (30px base)');
-  assert.ok(css.includes("calc(22px + var(--folder-depth"), 'See all container base 22px + 8px button aligns with 30px text');
+  // Compact conversation rows indentation: 16px base + D * 14px aligns cleanly under projects
+  assert.ok(css.includes("calc(16px + var(--folder-depth"), 'Conversation rows and placeholders use compact indentation (16px base)');
+
+  // Timestamp hiding: timestamps on sidebar conversation rows are completely hidden
+  assert.ok(css.includes("[data-testid='conversation-row-sidebar'] [data-screenshot-volatile]"), 'Sidebar conversation timestamps are hidden via data-screenshot-volatile');
+  assert.ok(css.includes("[data-testid='conversation-row-sidebar'] span.min-w-4"), 'Sidebar conversation timestamp min-w-4 is hidden');
+
+  // Full-width title continuation & right-hand controls z-index:
+  assert.ok(css.includes("[data-testid='conversation-row-sidebar'] > div.grow"), 'Conversation title container expands across full row width');
+  assert.ok(css.includes("[data-testid='conversation-row-sidebar'] > div.shrink-0"), 'Right-hand controls container is positioned absolutely on the right');
+  assert.ok(css.includes("z-index: 20 !important"), 'Right-hand controls container has z-index 20');
+  assert.ok(css.includes("z-index: 25 !important"), 'Hover action buttons container has z-index 25 and opaque gradient background');
+  assert.ok(css.includes("z-index: 30 !important"), 'Buttons have z-index 30');
+  assert.ok(css.includes("pointer-events: none !important"), 'Controls container does not intercept clicks when not hovered');
 
   // Depth mapping covers up to depth 12
   assert.ok(css.includes("[data-folder-depth='12']"), 'CSS custom property mapping scales up to depth 12');

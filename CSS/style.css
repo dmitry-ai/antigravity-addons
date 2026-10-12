@@ -412,17 +412,18 @@ button[data-project-card][data-folder-depth],
 }
 
 /* Плейсхолдеры пустых папок и проектов: идеальное выравнивание по вертикальной оси текста проектов (30px) */
+/* Плейсхолдеры пустых папок и проектов: компактный отступ (16px база + D * 14px) */
 [data-testid='empty-placeholder'][data-folder-depth],
 [data-index][data-folder-depth] [data-testid='empty-placeholder'] {
-	padding-left: calc(30px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 	font-size: 11.5px !important;
 	font-style: italic !important;
 	opacity: 0.5 !important;
 }
 
-/* Строки разговоров внутри проектов: 30px базовый отступ (строго совпадает с текстом заголовка проекта) */
+/* Строки разговоров внутри проектов: компактный отступ (16px база + D * 14px) */
 [data-index][data-folder-depth] [data-testid='conversation-row-sidebar'] {
-	padding-left: calc(30px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 }
 
 /* Обнуляем отступ у внешнего контейнера строки разговоров, чтобы он никогда не дублировал padding-left */
@@ -431,9 +432,108 @@ button[data-project-card][data-folder-depth],
 	padding-left: 0 !important;
 }
 
-/* Кнопка "See all / See less" внутри проектов: 22px контейнер + 8px кнопка = 30px базовый отступ */
+/* Кнопка "See all / See less" внутри проектов: 16px базовый отступ */
 [data-index][data-folder-depth] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
-	padding-left: calc(22px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+}
+
+/* Указатель времени справа от чатов в сайдбаре (убран по требованию пользователя) */
+[data-testid='conversation-row-sidebar'] [data-screenshot-volatile],
+[data-testid='conversation-row-sidebar'] span.text-xs.opacity-60,
+[data-testid='conversation-row-sidebar'] span.min-w-4,
+[data-testid^='conversation-row-'] [data-screenshot-volatile],
+[data-testid^='conversation-row-'] span.min-w-4 {
+	display: none !important;
+}
+
+/* Заголовок чата продолжается на всю доступную ширину строки без пустого пространства справа */
+[data-testid='conversation-row-sidebar'] {
+	position: relative !important;
+	padding-right: 6px !important;
+}
+
+[data-testid='conversation-row-sidebar'] > div.grow,
+[data-testid^='conversation-row-'] > div.grow {
+	flex: 1 1 0% !important;
+	min-width: 0 !important;
+	width: 100% !important;
+	margin-right: 0 !important;
+	z-index: 1 !important;
+}
+
+[data-testid='conversation-row-sidebar'] > div.grow > div,
+[data-testid^='conversation-row-'] > div.grow > div,
+[data-testid='conversation-row-sidebar'] > div.grow span.truncate,
+[data-testid^='conversation-row-'] > div.grow span.truncate {
+	width: 100% !important;
+	max-width: 100% !important;
+}
+
+/* Правый блок элементов управления (Pin, Меню, Архив) вынесен из потока flex,
+   чтобы заголовок занимал всё свободное место, а кнопки при наведении накладывались с правильным z-index */
+[data-testid='conversation-row-sidebar'] > div.shrink-0,
+[data-testid^='conversation-row-'] > div.shrink-0 {
+	position: absolute !important;
+	right: 4px !important;
+	top: 0 !important;
+	bottom: 0 !important;
+	height: 100% !important;
+	margin-left: 0 !important;
+	z-index: 20 !important;
+	display: flex !important;
+	align-items: center !important;
+}
+
+/* В неактивном состоянии правый блок не блокирует клики по строке разговора */
+[data-testid='conversation-row-sidebar']:not(:hover):not(:focus-within) > div.shrink-0,
+[data-testid^='conversation-row-']:not(:hover):not(:focus-within) > div.shrink-0 {
+	pointer-events: none !important;
+}
+
+[data-testid='conversation-row-sidebar']:hover > div.shrink-0,
+[data-testid='conversation-row-sidebar']:focus-within > div.shrink-0,
+[data-testid^='conversation-row-']:hover > div.shrink-0,
+[data-testid^='conversation-row-']:focus-within > div.shrink-0 {
+	pointer-events: auto !important;
+}
+
+/* Контейнер кнопок действий при наведении: z-index, высота 100% и плотный градиентный фон,
+   исключающий просвечивание текста под кнопками */
+[data-testid='conversation-row-sidebar'] > div.shrink-0 > div,
+[data-testid^='conversation-row-'] > div.shrink-0 > div {
+	height: 100% !important;
+	display: flex !important;
+	align-items: center !important;
+}
+
+[data-testid='conversation-row-sidebar'] > div.shrink-0 div.absolute,
+[data-testid^='conversation-row-'] > div.shrink-0 div.absolute {
+	height: 100% !important;
+	top: 0 !important;
+	bottom: 0 !important;
+	right: 0 !important;
+	padding-left: 24px !important;
+	z-index: 25 !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: flex-end !important;
+	background: linear-gradient(to right, transparent 0%, var(--row-bg, var(--sidebar)) 18px, var(--row-bg, var(--sidebar)) 100%) !important;
+}
+
+[data-testid='conversation-row-sidebar']:hover > div.shrink-0 div.absolute,
+[data-testid^='conversation-row-']:hover > div.shrink-0 div.absolute {
+	background: linear-gradient(to right, transparent 0%, var(--row-bg, var(--sidebar-muted, #e0e0e0)) 18px, var(--row-bg, var(--sidebar-muted, #e0e0e0)) 100%) !important;
+}
+
+[data-testid='conversation-row-sidebar'][data-selected='true'] > div.shrink-0 div.absolute,
+[data-testid^='conversation-row-'][data-selected='true'] > div.shrink-0 div.absolute {
+	background: linear-gradient(to right, transparent 0%, var(--sidebar-secondary, #e4e4e4) 18px, var(--sidebar-secondary, #e4e4e4) 100%) !important;
+}
+
+[data-testid='conversation-row-sidebar'] button,
+[data-testid^='conversation-row-'] button {
+	position: relative !important;
+	z-index: 30 !important;
 }
 
 /* 3. Эксплицитные селекторы для гарантированной отрисовки (уровни 0 - 8) */
@@ -477,42 +577,42 @@ button[data-project-card][data-folder-depth='7'],
 button[data-project-card][data-folder-depth='8'],
 [data-index][data-folder-depth='8'] button[data-project-card] { padding-left: 116px !important; }
 
-/* Плейсхолдеры и строки разговоров: 30px + D * 14px */
+/* Плейсхолдеры и строки разговоров: 16px + D * 14px */
 [data-testid='empty-placeholder'][data-folder-depth='0'],
 [data-index][data-folder-depth='0'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='0'] [data-testid='conversation-row-sidebar'] { padding-left: 30px !important; }
+[data-index][data-folder-depth='0'] [data-testid='conversation-row-sidebar'] { padding-left: 16px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='1'],
 [data-index][data-folder-depth='1'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='1'] [data-testid='conversation-row-sidebar'] { padding-left: 44px !important; }
+[data-index][data-folder-depth='1'] [data-testid='conversation-row-sidebar'] { padding-left: 30px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='2'],
 [data-index][data-folder-depth='2'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='2'] [data-testid='conversation-row-sidebar'] { padding-left: 58px !important; }
+[data-index][data-folder-depth='2'] [data-testid='conversation-row-sidebar'] { padding-left: 44px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='3'],
 [data-index][data-folder-depth='3'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='3'] [data-testid='conversation-row-sidebar'] { padding-left: 72px !important; }
+[data-index][data-folder-depth='3'] [data-testid='conversation-row-sidebar'] { padding-left: 58px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='4'],
 [data-index][data-folder-depth='4'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='4'] [data-testid='conversation-row-sidebar'] { padding-left: 86px !important; }
+[data-index][data-folder-depth='4'] [data-testid='conversation-row-sidebar'] { padding-left: 72px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='5'],
 [data-index][data-folder-depth='5'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='5'] [data-testid='conversation-row-sidebar'] { padding-left: 100px !important; }
+[data-index][data-folder-depth='5'] [data-testid='conversation-row-sidebar'] { padding-left: 86px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='6'],
 [data-index][data-folder-depth='6'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='6'] [data-testid='conversation-row-sidebar'] { padding-left: 114px !important; }
+[data-index][data-folder-depth='6'] [data-testid='conversation-row-sidebar'] { padding-left: 100px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='7'],
 [data-index][data-folder-depth='7'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='7'] [data-testid='conversation-row-sidebar'] { padding-left: 128px !important; }
+[data-index][data-folder-depth='7'] [data-testid='conversation-row-sidebar'] { padding-left: 114px !important; }
 
 [data-testid='empty-placeholder'][data-folder-depth='8'],
 [data-index][data-folder-depth='8'] [data-testid='empty-placeholder'],
-[data-index][data-folder-depth='8'] [data-testid='conversation-row-sidebar'] { padding-left: 142px !important; }
+[data-index][data-folder-depth='8'] [data-testid='conversation-row-sidebar'] { padding-left: 128px !important; }
 
 
 
