@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const patchModulePath = require.resolve('./folders-patch');
-const { addFolder, renameFolder, removeFolder, assignProject, unassignProject, writeConfig } = require('./folders-manager');
+const { addFolder, renameFolder, moveFolder, removeFolder, assignProject, unassignProject, writeConfig, validateTree } = require('./folders-manager');
 
 const DEFAULT_FOLDERS_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
 
@@ -163,9 +163,16 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
             console.log(`[folders-bootstrap] Received action: ${action}`, body);
 
             if (action === 'add-folder') {
-              addFolder(body.name, body.id, body.color, configPath);
+              addFolder({
+                name: body.name,
+                parentId: body.parentId || null,
+                id: body.id || null,
+                color: body.color || '#10b981'
+              }, configPath);
             } else if (action === 'rename-folder') {
               renameFolder(body.id || body.query, body.newName, configPath);
+            } else if (action === 'move-folder') {
+              moveFolder(body.id || body.query, body.newParentId !== undefined ? body.newParentId : (body.newParentQuery !== undefined ? body.newParentQuery : null), configPath);
             } else if (action === 'remove-folder') {
               removeFolder(body.id || body.query, configPath);
             } else if (action === 'assign-project') {
@@ -173,6 +180,9 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
             } else if (action === 'unassign-project') {
               unassignProject(body.projectId || body.projectQuery, configPath);
             } else if (action === 'save-config') {
+              if (body.data && Array.isArray(body.data.folders)) {
+                validateTree(body.data.folders);
+              }
               writeConfig(body.data, configPath);
             } else {
               return new Response(JSON.stringify({ success: false, error: 'Unknown folder action' }), { status: 400, headers: { 'content-type': 'application/json' } });

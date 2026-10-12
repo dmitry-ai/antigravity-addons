@@ -328,3 +328,21 @@ button[data-project-card] svg {
 	background: var(--secondary, rgba(255, 255, 255, 0.15)) !important;
 }
 
+/* Иерархические отступы для подпапок по глубине (Method 1) */
+[data-testid='section-header'][data-folder-depth='1'] > div,
+[data-testid='section-header'][data-folder-depth='1'] .group\/section-header {
+	padding-left: 12px !important;
+}
+[data-testid='section-header'][data-folder-depth='2'] > div,
+[data-testid='section-header'][data-folder-depth='2'] .group\/section-header {
+	padding-left: 24px !important;
+}
+[data-testid='section-header'][data-folder-depth='3'] > div,
+[data-testid='section-header'][data-folder-depth='3'] .group\/section-header {
+	padding-left: 36px !important;
+}
+[data-testid='section-header'][data-folder-depth='4'] > div,
+[data-testid='section-header'][data-folder-depth='4'] .group\/section-header {
+	padding-left: 48px !important;
+}
+

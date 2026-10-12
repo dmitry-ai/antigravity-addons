@@ -1,9 +1,11 @@
 /**
  * folders-patch.js
- * Implements Method 1 & 2 from res/13.md: transforms Antigravity 2.0 client bundle (main.js)
- * to group projects under collapsible folder section headers in the left sidebar virtual list,
- * support empty folders, subscribe React to configuration changes,
- * and bundle the interactive Folders client controller (drag-drop, inline rename, context menus).
+ * Implements Method 1 from res/16.md: Parent References tree model with DFS traversal.
+ * Transforms Antigravity 2.0 client bundle (main.js)
+ * to group projects under hierarchical collapsible folder section headers in the left sidebar virtual list,
+ * support arbitrary nesting depths via parentId, prevent hidden projects leaking on collapse,
+ * subscribe React to configuration changes,
+ * and bundle the interactive Folders client controller.
  */
 
 const fs = require('fs');
@@ -14,10 +16,10 @@ const LOOP_END = 'B&&q.push({type:"show-more",id:`show-more-${v.id}`,label:x?`Se
 const HR_ANCHOR = 'function hR(a,b,c,e){var {core:f}=Lc(),g=f.storageService,'; // retained for source compatibility
 const ROW_HOOK_ANCHOR = 'includePinnedSection:v=!1}){var w=YIb()';
 const ROW_MEMO_ANCHOR = '[ba,b,h,m,X,k,l,n,E,D,v,w]';
+const SECTION_OUTER_ANCHOR = 'A.createElement("div",{"data-testid":"section-header","data-title":T.title,"data-collapsed":!!T.isCollapsed},A.createElement(CRb,{title:T.title,headerActions:T.headerActions,surface:c,';
 const HEADER_PROPS_ANCHOR = 'isActionMenuOpen:m=!1,"data-testid":n})=>{var p=WI();';
 const HEADER_DOM_ANCHOR = 'return A.createElement("div",{"data-testid":n,className:Xi("group/section-header';
 const PROJECT_DOM_ANCHOR = '"data-project-card":!0,"aria-expanded":!a.isCollapsed';
-
 
 /**
  * Applies folder grouping transformation to main.js source code.
@@ -33,7 +35,16 @@ function applyFolderPatch(source, foldersData) {
   const startIdx = source.indexOf(LOOP_ANCHOR);
   const endIdx = source.indexOf(LOOP_END);
 
-  const requiredAnchors = [LOOP_ANCHOR, LOOP_END, ROW_HOOK_ANCHOR, ROW_MEMO_ANCHOR, HEADER_PROPS_ANCHOR, HEADER_DOM_ANCHOR, PROJECT_DOM_ANCHOR];
+  const requiredAnchors = [
+    LOOP_ANCHOR,
+    LOOP_END,
+    ROW_HOOK_ANCHOR,
+    ROW_MEMO_ANCHOR,
+    SECTION_OUTER_ANCHOR,
+    HEADER_PROPS_ANCHOR,
+    HEADER_DOM_ANCHOR,
+    PROJECT_DOM_ANCHOR
+  ];
   if (startIdx === -1 || endIdx <= startIdx || requiredAnchors.some(anchor => source.split(anchor).length !== 2)) {
     console.warn('[folders-patch] Critical loop anchors not found in main.js. Fallback to unpatched source.');
     return source;
@@ -52,43 +63,64 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   var __fldMap=__fd.projectFolderMap||{};
   var __projGroups=__allGroups.filter(v=>v.id!=="standalone");
   var __standalone=__allGroups.find(v=>v.id==="standalone");
-  var __rendered=new Set();
-  for(var __fi=0;__fi<__fd.folders.length;__fi++){
-    var __f=__fd.folders[__fi];
-    var __inF=__projGroups.filter(v=>__fldMap[v.id]===__f.id);
-    var __isCol=t("folder-"+__f.id);
-    q.push({
-      type:"section-header",
-      id:"section-folder-"+__f.id,
-      title:"📁 "+__f.name+" ("+__inF.length+")",
-      isCollapsible:!0,
-      isCollapsed:__isCol,
-      collapseId:"folder-"+__f.id,
-      folderId:__f.id,
-      folderName:__f.name,
-      itemCount:__inF.length
-    });
-    for(var __pi=0;__pi<__inF.length;__pi++){
-      __rendered.add(__inF[__pi].id);
+
+  var __childrenMap={};
+  var __validFolderIds=new Set();
+  for(var __i=0;__i<__fd.folders.length;__i++){
+    var __f=__fd.folders[__i];
+    __validFolderIds.add(__f.id);
+    var __pId=__f.parentId||"__root__";
+    if(!__childrenMap[__pId])__childrenMap[__pId]=[];
+    __childrenMap[__pId].push(__f);
+  }
+
+  var __renderFolderBranch=function(__parentKey,__depth){
+    var __levelFolders=__childrenMap[__parentKey]||[];
+    for(var __fi=0;__fi<__levelFolders.length;__fi++){
+      var __f=__levelFolders[__fi];
+      var __inF=__projGroups.filter(function(v){return __fldMap[v.id]===__f.id;});
+      var __subFolders=__childrenMap[__f.id]||[];
+      var __isCol=t("folder-"+__f.id);
+      q.push({
+        type:"section-header",
+        id:"section-folder-"+__f.id,
+        title:"📁 "+__f.name+" ("+__inF.length+")",
+        isCollapsible:!0,
+        isCollapsed:__isCol,
+        collapseId:"folder-"+__f.id,
+        folderId:__f.id,
+        folderName:__f.name,
+        folderDepth:__depth,
+        itemCount:__inF.length
+      });
       if(!__isCol){
-        __renderItem(__inF[__pi]);
+        for(var __pi=0;__pi<__inF.length;__pi++){
+          __renderItem(__inF[__pi]);
+        }
+        __renderFolderBranch(__f.id,__depth+1);
+        if(__inF.length===0&&__subFolders.length===0){
+          q.push({
+            type:"empty-placeholder",
+            id:"empty-folder-"+__f.id,
+            groupId:"folder-"+__f.id,
+            label:"(папка пуста)",
+            isIndented:!0,
+            folderDepth:__depth
+          });
+        }
       }
     }
-    if(!__isCol&&__inF.length===0){
-      q.push({
-        type:"empty-placeholder",
-        id:"empty-folder-"+__f.id,
-        groupId:"folder-"+__f.id,
-        label:"(папка пуста)",
-        isIndented:!0
-      });
-    }
-  }
+  };
+
+  __renderFolderBranch("__root__",0);
+
   for(var __pi=0;__pi<__projGroups.length;__pi++){
-    if(!__rendered.has(__projGroups[__pi].id)){
+    var __assignedFid=__fldMap[__projGroups[__pi].id];
+    if(!__assignedFid||!__validFolderIds.has(__assignedFid)){
       __renderItem(__projGroups[__pi]);
     }
   }
+
   if(__standalone){
     __renderItem(__standalone);
   }
@@ -112,18 +144,22 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   let patched = headerPrefix + source.slice(0, startIdx) + replacement + source.slice(endIdx + LOOP_END.length);
 
   // Subscribe inside the shared row hook and include the revision in its memo.
-  // Re-storing an unchanged value in Antigravity's own storage does not notify React.
   patched = patched.replace(ROW_HOOK_ANCHOR,
     'includePinnedSection:v=!1}){var [__folderRevision,__setFolderRevision]=(0,A.useState)(0);(0,A.useEffect)(()=>{var __listener=()=>__setFolderRevision(__v=>__v+1);window.addEventListener("antigravity-folders-updated",__listener);return()=>window.removeEventListener("antigravity-folders-updated",__listener)},[]);var w=YIb()');
   patched = patched.replace(ROW_MEMO_ANCHOR, '[ba,b,h,m,X,k,l,n,E,D,v,w,__folderRevision]');
-  // Publish stable IDs and titles on real DOM nodes; the controller never resolves by display name.
+
+  // Inject folderId and folderDepth into outer div and inner CRb component
+  patched = patched.replace(SECTION_OUTER_ANCHOR,
+    'A.createElement("div",{"data-testid":"section-header","data-title":T.title,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,"data-collapsed":!!T.isCollapsed},A.createElement(CRb,{title:T.title,headerActions:T.headerActions,surface:c,folderId:T.folderId,folderDepth:T.folderDepth,');
+
   patched = patched.replace(HEADER_PROPS_ANCHOR,
-    'isActionMenuOpen:m=!1,"data-testid":n,folderId:__folderId})=>{var p=WI();');
+    'isActionMenuOpen:m=!1,"data-testid":n,folderId:__folderId,folderDepth:__folderDepth})=>{var p=WI();');
   patched = patched.replace(HEADER_DOM_ANCHOR,
-    'return A.createElement("div",{"data-testid":n,"data-title":a,"data-folder-id":__folderId,className:Xi("group/section-header');
+    'return A.createElement("div",{"data-testid":n,"data-title":a,"data-folder-id":__folderId,"data-folder-depth":__folderDepth,className:Xi("group/section-header');
   patched = patched.replace(PROJECT_DOM_ANCHOR,
     '"data-project-card":!0,"data-project-id":c,"aria-expanded":!a.isCollapsed');
-  // A malformed transformation must not be served as the application's main script.
+
+  // Verify compiled syntax
   try { new (require('vm').Script)(patched); } catch (error) {
     console.error('[folders-patch] Invalid transformed JavaScript; returning original bundle:', error.message);
     return source;
@@ -136,5 +172,11 @@ module.exports = {
   applyFolderPatch,
   LOOP_ANCHOR,
   LOOP_END,
-  HR_ANCHOR, ROW_HOOK_ANCHOR, ROW_MEMO_ANCHOR, HEADER_PROPS_ANCHOR, HEADER_DOM_ANCHOR, PROJECT_DOM_ANCHOR
+  HR_ANCHOR,
+  ROW_HOOK_ANCHOR,
+  ROW_MEMO_ANCHOR,
+  SECTION_OUTER_ANCHOR,
+  HEADER_PROPS_ANCHOR,
+  HEADER_DOM_ANCHOR,
+  PROJECT_DOM_ANCHOR
 };

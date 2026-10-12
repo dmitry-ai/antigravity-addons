@@ -1,16 +1,14 @@
 /**
  * folders-manager.js
- * CLI and API tool to manage folders and project assignments in Antigravity 2.0.
- * Supports resolving projects and folders by human-readable names as well as by IDs.
+ * CLI and API tool to manage hierarchical folders and project assignments in Antigravity 2.0.
+ * Implements Method 1 from res/16.md: Parent References tree model.
  *
- * Usage:
- *   node folders-manager.js list
- *   node folders-manager.js projects
- *   node folders-manager.js add-folder <name> [id] [color]
- *   node folders-manager.js rename-folder <id_or_name> <new_name>
- *   node folders-manager.js remove-folder <id_or_name>
- *   node folders-manager.js assign <project_name_or_id> <folder_name_or_id>
- *   node folders-manager.js unassign <project_name_or_id>
+ * Supports:
+ * - Arbitrary nesting depths via `parentId`
+ * - Same folder names in different branches
+ * - Cycle prevention and validation
+ * - Promotion of subfolders and projects to parent on folder deletion
+ * - Tree traversal, resolution by path, ID, or name
  */
 
 const fs = require('fs');
@@ -86,6 +84,7 @@ function readConfig(configPath = DEFAULT_CONFIG_PATH) {
 }
 
 function writeConfig(data, configPath = DEFAULT_CONFIG_PATH) {
+  validateTree(data.folders);
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -94,19 +93,139 @@ function writeConfig(data, configPath = DEFAULT_CONFIG_PATH) {
 }
 
 /**
- * Finds a folder by ID or name.
+ * Validates the folder tree structure:
+ * 1. All IDs must be unique strings.
+ * 2. Every parentId must be null or reference an existing folder.
+ * 3. No cycles (walking up parentId never revisits a node).
+ * 4. Siblings under the same parent must have unique names (case-insensitive).
+ */
+function validateTree(folders) {
+  if (!Array.isArray(folders)) {
+    throw new Error('folders must be an array');
+  }
+
+  const idMap = new Map();
+  for (const f of folders) {
+    if (!f.id || typeof f.id !== 'string') {
+      throw new Error(`Invalid folder id: ${JSON.stringify(f.id)}`);
+    }
+    if (idMap.has(f.id)) {
+      throw new Error(`Duplicate folder ID: "${f.id}"`);
+    }
+    idMap.set(f.id, f);
+  }
+
+  // Check parent references & cycles
+  for (const f of folders) {
+    if (f.parentId !== null && f.parentId !== undefined) {
+      if (!idMap.has(f.parentId)) {
+        throw new Error(`Folder "${f.name}" (${f.id}) references non-existent parentId: "${f.parentId}"`);
+      }
+
+      // Check for cycles by walking up ancestor chain
+      const visited = new Set([f.id]);
+      let curr = f;
+      while (curr.parentId) {
+        if (visited.has(curr.parentId)) {
+          throw new Error(`Cycle detected in folder hierarchy involving "${f.name}" (${f.id})`);
+        }
+        visited.add(curr.parentId);
+        curr = idMap.get(curr.parentId);
+        if (!curr) break;
+      }
+    }
+  }
+
+  // Check sibling name uniqueness
+  const siblingGroups = new Map();
+  for (const f of folders) {
+    const parentKey = f.parentId || '__root__';
+    if (!siblingGroups.has(parentKey)) {
+      siblingGroups.set(parentKey, new Set());
+    }
+    const nameLower = (f.name || '').trim().toLowerCase();
+    const group = siblingGroups.get(parentKey);
+    if (group.has(nameLower)) {
+      throw new Error(`Sibling folder name collision under parent "${f.parentId}": "${f.name}"`);
+    }
+    group.add(nameLower);
+  }
+}
+
+/**
+ * Returns a Set of all descendant IDs for a given folder.
+ */
+function getDescendantIds(folderId, folders) {
+  const childrenMap = new Map();
+  for (const f of folders) {
+    const pid = f.parentId || null;
+    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    childrenMap.get(pid).push(f.id);
+  }
+
+  const descendants = new Set();
+  function collect(id) {
+    const children = childrenMap.get(id) || [];
+    for (const cid of children) {
+      descendants.add(cid);
+      collect(cid);
+    }
+  }
+  collect(folderId);
+  return descendants;
+}
+
+/**
+ * Computes human-readable breadcrumb path for a folder (e.g. "Upwork / 2026").
+ */
+function getFolderPath(folderId, folders) {
+  const map = new Map(folders.map(f => [f.id, f]));
+  const parts = [];
+  let curr = map.get(folderId);
+  const seen = new Set();
+  while (curr && !seen.has(curr.id)) {
+    seen.add(curr.id);
+    parts.unshift(curr.name);
+    curr = curr.parentId ? map.get(curr.parentId) : null;
+  }
+  return parts.join(' / ');
+}
+
+/**
+ * Finds a folder by ID, exact name, or path.
  */
 function resolveFolder(query, configPath = DEFAULT_CONFIG_PATH) {
   if (!query) return null;
   const data = readConfig(configPath);
-  const qLower = query.toLowerCase().trim();
+  const qTrim = query.trim();
+  const qLower = qTrim.toLowerCase();
 
-  const byId = data.folders.find(f => f.id === query);
+  // 1. By ID
+  const byId = data.folders.find(f => f.id === qTrim);
   if (byId) return byId;
 
-  const byExactName = data.folders.find(f => f.name.toLowerCase() === qLower);
-  if (byExactName) return byExactName;
+  // 2. By Path (e.g. "Upwork / 2026")
+  if (qTrim.includes('/')) {
+    const pathParts = qTrim.split('/').map(p => p.trim().toLowerCase());
+    let currentParentId = null;
+    let currentMatch = null;
+    for (const part of pathParts) {
+      currentMatch = data.folders.find(f => (f.parentId || null) === currentParentId && f.name.toLowerCase() === part);
+      if (!currentMatch) break;
+      currentParentId = currentMatch.id;
+    }
+    if (currentMatch) return currentMatch;
+  }
 
+  // 3. Exact Name match
+  const byExactName = data.folders.filter(f => f.name.toLowerCase() === qLower);
+  if (byExactName.length === 1) return byExactName[0];
+  if (byExactName.length > 1) {
+    // Return root one or first one
+    return byExactName.find(f => f.parentId === null) || byExactName[0];
+  }
+
+  // 4. Substring match
   const bySub = data.folders.filter(f => f.name.toLowerCase().includes(qLower));
   if (bySub.length >= 1) return bySub[0];
 
@@ -123,41 +242,82 @@ function slugify(name) {
 /**
  * Creates or updates a folder.
  * Supports:
- * - addFolder(name, [customId], [color], [configPath])
- * - addFolder(id, name, [color], [configPath]) (legacy/test signature)
+ * - addFolder(name, [parentId], [customId], [color], [configPath])
+ * - addFolder(id, name, [color], [configPath]) (legacy signature)
  */
-function addFolder(arg1, arg2 = null, color = '#10b981', configPath = DEFAULT_CONFIG_PATH) {
-  let id, name;
-  if (arg2) {
-    if (typeof arg1 === 'string' && (arg1.startsWith('fld-') || arg1.startsWith('folder-'))) {
-      id = arg1;
-      name = arg2;
-    } else if (typeof arg2 === 'string' && (arg2.startsWith('fld-') || arg2.startsWith('folder-'))) {
-      name = arg1;
-      id = arg2;
-    } else {
-      name = arg1;
-      id = arg2;
-    }
+function addFolder(arg1, arg2 = null, arg3 = null, arg4 = '#10b981', configPath = DEFAULT_CONFIG_PATH) {
+  let name, parentId = null, customId = null, color = '#10b981', targetConfig = DEFAULT_CONFIG_PATH;
+
+  // Handle object argument
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    name = arg1.name;
+    parentId = arg1.parentId || null;
+    customId = arg1.id || null;
+    color = arg1.color || '#10b981';
+    targetConfig = arg2 || DEFAULT_CONFIG_PATH;
+  } else if (typeof arg1 === 'string' && (arg1.startsWith('fld-') || arg1.startsWith('folder-')) && typeof arg2 === 'string') {
+    // Legacy test signature: addFolder(id, name, color, configPath)
+    customId = arg1;
+    name = arg2;
+    color = typeof arg3 === 'string' ? arg3 : '#10b981';
+    targetConfig = typeof arg4 === 'string' ? arg4 : DEFAULT_CONFIG_PATH;
   } else {
     name = arg1;
-    id = slugify(name);
+    // arg2 might be parentId or customId
+    if (typeof arg2 === 'string') {
+      const data = readConfig(configPath);
+      if (data.folders.some(f => f.id === arg2)) {
+        parentId = arg2;
+      } else if (arg2.startsWith('fld-') || arg2.startsWith('folder-')) {
+        customId = arg2;
+      } else {
+        parentId = arg2;
+      }
+    }
+    if (typeof arg3 === 'string') {
+      if (arg3.startsWith('#')) {
+        color = arg3;
+      } else {
+        customId = arg3;
+      }
+    }
+    if (typeof arg4 === 'string' && !arg4.startsWith('#')) {
+      targetConfig = arg4;
+    } else if (typeof configPath === 'string') {
+      targetConfig = configPath;
+    }
   }
 
-  const data = readConfig(configPath);
-  const existing = data.folders.find(f => f.id === id || f.name.toLowerCase() === name.toLowerCase());
-  if (existing) {
-    existing.name = name;
-    existing.color = color;
-    writeConfig(data, configPath);
-    console.log(`✅ Папка "${name}" (${existing.id}) обновлена.`);
-    return existing;
+  const data = readConfig(targetConfig);
+
+  // Normalize parentId
+  if (parentId) {
+    const parentFolder = data.folders.find(f => f.id === parentId || f.name.toLowerCase() === parentId.toLowerCase());
+    parentId = parentFolder ? parentFolder.id : null;
+  } else {
+    parentId = null;
   }
 
-  const newFolder = { id, name, parentId: null, color, isExpanded: true };
+  // Check sibling name collision
+  const sibling = data.folders.find(f => (f.parentId || null) === parentId && f.name.toLowerCase() === name.toLowerCase());
+  if (sibling) {
+    sibling.color = color;
+    writeConfig(data, targetConfig);
+    console.log(`✅ Папка "${name}" (${sibling.id}) под родителем "${parentId || 'корень'}" обновлена.`);
+    return sibling;
+  }
+
+  // Generate unique ID
+  let id = customId || slugify(name);
+  let idCounter = 1;
+  while (data.folders.some(f => f.id === id)) {
+    id = `${customId || slugify(name)}-${idCounter++}`;
+  }
+
+  const newFolder = { id, name, parentId, color, isExpanded: true };
   data.folders.push(newFolder);
-  writeConfig(data, configPath);
-  console.log(`✅ Создана папка "${name}" (ID: ${id}).`);
+  writeConfig(data, targetConfig);
+  console.log(`✅ Создана папка "${name}" (ID: ${id}, Parent: ${parentId || 'корень'}).`);
   return newFolder;
 }
 
@@ -178,15 +338,77 @@ function renameFolder(query, newName, configPath = DEFAULT_CONFIG_PATH) {
     return false;
   }
 
+  const cleanName = newName.trim();
+  // Check sibling name collision
+  const collision = data.folders.find(f => f.id !== folder.id && (f.parentId || null) === (folder.parentId || null) && f.name.toLowerCase() === cleanName.toLowerCase());
+  if (collision) {
+    console.error(`❌ В той же ветке уже существует папка с именем "${cleanName}".`);
+    return false;
+  }
+
   const oldName = folder.name;
-  folder.name = newName;
+  folder.name = cleanName;
   writeConfig(data, configPath);
-  console.log(`✅ Папка "${oldName}" переименована в "${newName}" (ID: ${folder.id}).`);
+  console.log(`✅ Папка "${oldName}" переименована в "${cleanName}" (ID: ${folder.id}).`);
   return true;
 }
 
 /**
- * Deletes a folder and unassigns its projects.
+ * Moves a folder to a new parent (or to root).
+ * Enforces cycle prevention: cannot move into self or any descendant.
+ */
+function moveFolder(query, newParentQuery, configPath = DEFAULT_CONFIG_PATH) {
+  const data = readConfig(configPath);
+  const folder = resolveFolder(query, configPath);
+  if (!folder) {
+    console.error(`❌ Папка "${query}" не найдена.`);
+    return false;
+  }
+
+  let newParentId = null;
+  if (newParentQuery && newParentQuery !== 'root' && newParentQuery !== 'null') {
+    const parentFolder = resolveFolder(newParentQuery, configPath);
+    if (!parentFolder) {
+      console.error(`❌ Целевая родительская папка "${newParentQuery}" не найдена.`);
+      return false;
+    }
+    newParentId = parentFolder.id;
+  }
+
+  // 1. Cannot move to self
+  if (folder.id === newParentId) {
+    console.error(`❌ Нельзя переместить папку "${folder.name}" внутрь самой себя.`);
+    throw new Error('Cannot move folder into itself');
+  }
+
+  // 2. Cannot move into any of its descendants (cycle prevention)
+  const descendants = getDescendantIds(folder.id, data.folders);
+  if (descendants.has(newParentId)) {
+    console.error(`❌ Нельзя переместить папку "${folder.name}" внутрь её подпапки (обнаружен цикл).`);
+    throw new Error('Cannot move folder into its own descendant (cycle detected)');
+  }
+
+  // 3. Sibling name check in target parent
+  const collision = data.folders.find(f => f.id !== folder.id && (f.parentId || null) === newParentId && f.name.toLowerCase() === folder.name.toLowerCase());
+  if (collision) {
+    console.error(`❌ В целевой папке уже есть элемент с именем "${folder.name}".`);
+    throw new Error(`Sibling folder name collision in destination: "${folder.name}"`);
+  }
+
+  const oldParent = folder.parentId;
+  const targetFolder = data.folders.find(f => f.id === folder.id);
+  if (!targetFolder) {
+    console.error(`❌ Папка "${query}" не найдена в конфигурации.`);
+    return false;
+  }
+  targetFolder.parentId = newParentId;
+  writeConfig(data, configPath);
+  console.log(`✅ Папка "${folder.name}" перемещена: ${oldParent || 'корень'} ➔ ${newParentId || 'корень'}.`);
+  return true;
+}
+
+/**
+ * Deletes a folder, promoting its subfolders and projects to its parent (or to root).
  */
 function removeFolder(query, configPath = DEFAULT_CONFIG_PATH) {
   const data = readConfig(configPath);
@@ -198,18 +420,35 @@ function removeFolder(query, configPath = DEFAULT_CONFIG_PATH) {
 
   const id = folder.id;
   const name = folder.name;
-  data.folders = data.folders.filter(f => f.id !== id);
+  const parentId = folder.parentId || null;
 
-  let unassignedCount = 0;
-  for (const [projId, fId] of Object.entries(data.projectFolderMap)) {
-    if (fId === id) {
-      delete data.projectFolderMap[projId];
-      unassignedCount++;
+  // 1. Promote direct child folders to parent
+  let promotedFoldersCount = 0;
+  for (const f of data.folders) {
+    if (f.parentId === id) {
+      f.parentId = parentId;
+      promotedFoldersCount++;
     }
   }
 
+  // 2. Promote projects to parent (or remove if root)
+  let promotedProjectsCount = 0;
+  for (const [projId, fId] of Object.entries(data.projectFolderMap)) {
+    if (fId === id) {
+      if (parentId) {
+        data.projectFolderMap[projId] = parentId;
+      } else {
+        delete data.projectFolderMap[projId];
+      }
+      promotedProjectsCount++;
+    }
+  }
+
+  // 3. Remove folder itself
+  data.folders = data.folders.filter(f => f.id !== id);
+
   writeConfig(data, configPath);
-  console.log(`✅ Папка "${name}" (${id}) удалена. Проектов возвращено в корень: ${unassignedCount}.`);
+  console.log(`✅ Папка "${name}" (${id}) удалена. Подпапок поднято: ${promotedFoldersCount}, проектов: ${promotedProjectsCount}.`);
   return true;
 }
 
@@ -261,25 +500,49 @@ function unassignProject(projQuery, configPath = DEFAULT_CONFIG_PATH) {
 }
 
 /**
- * Lists all folders and their projects.
+ * Lists all folders hierarchically and their projects.
  */
 function listAll(configPath = DEFAULT_CONFIG_PATH) {
   const data = readConfig(configPath);
   const allProjects = loadAntigravityProjects();
   const projMap = new Map(allProjects.map(p => [p.id, p.name]));
 
+  const childrenMap = new Map();
+  for (const f of data.folders) {
+    const pid = f.parentId || null;
+    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    childrenMap.get(pid).push(f);
+  }
+
+  const projectsInFolder = new Map();
+  for (const [pid, fid] of Object.entries(data.projectFolderMap)) {
+    if (!projectsInFolder.has(fid)) projectsInFolder.set(fid, []);
+    projectsInFolder.get(fid).push({ id: pid, name: projMap.get(pid) || pid });
+  }
+
   console.log('\n📁 Иерархия папок Antigravity 2.0:\n');
-  data.folders.forEach(f => {
-    const projs = Object.entries(data.projectFolderMap)
-      .filter(([_, fid]) => fid === f.id)
-      .map(([pid]) => ({ id: pid, name: projMap.get(pid) || pid }));
-    console.log(`▾ 📁 ${f.name} [ID: ${f.id}] (${projs.length} проектов)`);
-    if (projs.length === 0) {
-      console.log('    (папка пуста)');
-    } else {
-      projs.forEach(p => console.log(`    ↳ 📂 ${p.name}`));
+
+  function printBranch(folder, depth = 0) {
+    const indent = '    '.repeat(depth);
+    const projs = projectsInFolder.get(folder.id) || [];
+    const subs = childrenMap.get(folder.id) || [];
+
+    console.log(`${indent}▾ 📁 ${folder.name} [ID: ${folder.id}] (${projs.length} проектов)`);
+    for (const p of projs) {
+      console.log(`${indent}    ↳ 📂 ${p.name}`);
     }
-  });
+    for (const sub of subs) {
+      printBranch(sub, depth + 1);
+    }
+    if (projs.length === 0 && subs.length === 0) {
+      console.log(`${indent}    (папка пуста)`);
+    }
+  }
+
+  const roots = childrenMap.get(null) || [];
+  for (const r of roots) {
+    printBranch(r, 0);
+  }
 
   const assigned = new Set(Object.keys(data.projectFolderMap));
   const unassigned = allProjects.filter(p => !assigned.has(p.id) && p.id !== 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40');
@@ -296,22 +559,21 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
 function listProjects(configPath = DEFAULT_CONFIG_PATH) {
   const data = readConfig(configPath);
   const allProjects = loadAntigravityProjects();
-  const folderNames = new Map(data.folders.map(f => [f.id, f.name]));
 
   console.log('\n📋 Все проекты Antigravity:\n');
   allProjects
     .filter(p => p.id !== 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40')
     .forEach(p => {
       const fId = data.projectFolderMap[p.id];
-      const folderStr = fId ? `📁 ${folderNames.get(fId) || fId}` : '— (без папки)';
-      console.log(`- ${p.name.padEnd(38)} | Папка: ${folderStr}`);
+      const folderPathStr = fId ? `📁 ${getFolderPath(fId, data.folders)}` : '— (без папки)';
+      console.log(`- ${p.name.padEnd(38)} | Папка: ${folderPathStr}`);
     });
   console.log('');
 }
 
 // CLI handler
 if (require.main === module) {
-  const [,, cmd, arg1, arg2, arg3] = process.argv;
+  const [,, cmd, arg1, arg2, arg3, arg4] = process.argv;
   switch (cmd) {
     case 'list':
       listAll();
@@ -321,10 +583,10 @@ if (require.main === module) {
       break;
     case 'add-folder':
       if (!arg1) {
-        console.error('Использование: node folders-manager.js add-folder <имя_папки> [id] [color]');
+        console.error('Использование: node folders-manager.js add-folder <имя_папки> [parentId] [id] [color]');
         process.exit(1);
       }
-      addFolder(arg1, arg2, arg3);
+      addFolder(arg1, arg2, arg3, arg4);
       break;
     case 'rename-folder':
       if (!arg1 || !arg2) {
@@ -332,6 +594,13 @@ if (require.main === module) {
         process.exit(1);
       }
       renameFolder(arg1, arg2);
+      break;
+    case 'move-folder':
+      if (!arg1) {
+        console.error('Использование: node folders-manager.js move-folder <папка_id_или_имя> <новый_родитель_или_root>');
+        process.exit(1);
+      }
+      moveFolder(arg1, arg2 || null);
       break;
     case 'remove-folder':
       if (!arg1) {
@@ -356,12 +625,13 @@ if (require.main === module) {
       break;
     default:
       console.log(`
-Команды управления папками:
+Команды управления папками (Method 1: Иерархические папки):
   node folders-manager.js list                         - Показать дерево папок и проектов
   node folders-manager.js projects                     - Список всех проектов Antigravity
-  node folders-manager.js add-folder <имя>             - Создать папку
+  node folders-manager.js add-folder <имя> [parent]    - Создать папку (или подпапку в [parent])
   node folders-manager.js rename-folder <папка> <имя>  - Переименовать папку
-  node folders-manager.js remove-folder <папка>        - Удалить папку
+  node folders-manager.js move-folder <папка> <target> - Переместить папку в другого родителя (или root)
+  node folders-manager.js remove-folder <папка>        - Удалить папку (подпапки и проекты поднимаются)
   node folders-manager.js assign <проект> <папка>      - Добавить проект в папку
   node folders-manager.js unassign <проект>            - Удалить проект из папки (вернуть в корень)
 `);
@@ -372,8 +642,12 @@ if (require.main === module) {
 module.exports = {
   readConfig,
   writeConfig,
+  validateTree,
+  getDescendantIds,
+  getFolderPath,
   addFolder,
   renameFolder,
+  moveFolder,
   removeFolder,
   assignProject,
   unassignProject,

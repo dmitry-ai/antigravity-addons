@@ -24,13 +24,20 @@
     {
       "id": "folder-2026",
       "name": "2026",
+      "parentId": "folder-upwork",
+      "color": "#10b981",
+      "isExpanded": true
+    },
+    {
+      "id": "folder-10",
+      "name": "10",
       "parentId": null,
       "color": "#10b981",
       "isExpanded": true
     }
   ],
   "projectFolderMap": {
-    "d464191e-4dc5-4ca8-a7d7-ed412d141f5f": "folder-upwork",
+    "d464191e-4dc5-4ca8-a7d7-ed412d141f5f": "folder-2026",
     "0b25ef38-ecf5-44eb-8cc2-1f8b4611e19e": "folder-upwork",
     "c9d81597-a231-4809-baf0-f4873e50b7c2": "folder-upwork",
     "3b33b970-7f45-42b5-ba3d-a82584d1e07b": "folder-clients",
