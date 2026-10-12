@@ -525,7 +525,7 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
   function printBranch(folder, depth = 0) {
     const indent = '    '.repeat(depth);
     const projs = projectsInFolder.get(folder.id) || [];
-    const subs = childrenMap.get(folder.id) || [];
+    const subs = (childrenMap.get(folder.id) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }));
 
     console.log(`${indent}▾ 📁 ${folder.name} [ID: ${folder.id}] (${projs.length} проектов)`);
     for (const p of projs) {
@@ -539,7 +539,7 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
     }
   }
 
-  const roots = childrenMap.get(null) || [];
+  const roots = (childrenMap.get(null) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }));
   for (const r of roots) {
     printBranch(r, 0);
   }

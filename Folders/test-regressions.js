@@ -941,3 +941,101 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   assert.ok(css.includes("[data-folder-depth='12']"), 'CSS custom property mapping scales up to depth 12');
 });
 
+test('Windows Explorer alphabetical natural sorting: folders at all hierarchy levels, select options, and context menus', () => {
+  const source = fs.readFileSync(path.join(process.env.TEMP, 'antigravity_main.js'), 'utf8');
+
+  // Input folders in deliberately shuffled, non-alphabetical order
+  const shuffledConfig = {
+    folders: [
+      { id: 'f-clients', name: 'Клиенты', parentId: null },
+      { id: 'f-archive', name: '02 Archive', parentId: null },
+      { id: 'f-internal', name: 'Внутренние', parentId: null },
+      { id: 'f-active', name: '01 Active', parentId: null },
+      { id: 'f-ten', name: '10 Reports', parentId: null },
+      { id: 'f-upwork', name: 'Upwork', parentId: null },
+      // Subfolders in f-ten in scrambled numeric order
+      { id: 'sub-19', name: '19', parentId: 'f-ten' },
+      { id: 'sub-09', name: '09', parentId: 'f-ten' },
+      { id: 'sub-2', name: '2', parentId: 'f-ten' },
+      { id: 'sub-10', name: '10', parentId: 'f-ten' },
+      { id: 'sub-1', name: '1', parentId: 'f-ten' }
+    ],
+    projectFolderMap: {
+      'p-active': 'f-active',
+      'p-sub1': 'sub-1'
+    }
+  };
+
+  const { applyFolderPatch } = require('./folders-patch');
+  const patched = applyFolderPatch(source, shuffledConfig);
+
+  const start = patched.indexOf('function VIb(a)');
+  const end = patched.indexOf(';const WIb=', start);
+  const render = vm.runInNewContext('(' + patched.slice(start, end) + ')', { window: { __PROJECT_FOLDERS_DATA__: shuffledConfig } });
+
+  const input = {
+    groups: [
+      { id: 'p-active', label: 'Active Project', items: [] },
+      { id: 'p-sub1', label: 'Sub 1 Project', items: [] }
+    ],
+    groupBy: 'project', collapsedSectionIds: [], collapsedSectionHeaderIds: [], conversationGroupSections: [],
+    sectionHeader: { title: 'Projects', isCollapsed: false }, variant: 'sidebar', onlyShowFirstFewConvos: {},
+    isMobile: false, sortedPinnedIds: [], includePinnedSection: false
+  };
+
+  const rows = render(input);
+
+  // 1. Verify root-level folders are sorted in natural Windows Explorer order:
+  // Numbers (01, 02, 10) -> Latin (Upwork) -> Cyrillic (Внутренние before Клиенты)
+  const rootFolderRows = [...rows.filter(r => r.type === 'section-header' && r.folderDepth === 0)];
+  const rootNames = rootFolderRows.map(r => r.folderName);
+  assert.deepEqual(rootNames, [
+    '01 Active',
+    '02 Archive',
+    '10 Reports',
+    'Upwork',
+    'Внутренние',
+    'Клиенты'
+  ], 'Root folders must follow Windows Explorer natural alphabetical sort');
+
+  // 2. Verify subfolders under "10 Reports" are sorted in natural numeric order:
+  // "1", "2", "09", "10", "19"
+  const subFolderRows = [...rows.filter(r => r.type === 'section-header' && r.folderDepth === 1 && r.id.startsWith('section-folder-sub-'))];
+  const subNames = subFolderRows.map(r => r.folderName);
+  assert.deepEqual(subNames, [
+    '1',
+    '2',
+    '09',
+    '10',
+    '19'
+  ], 'Subfolders must follow Windows Explorer natural numeric sort (1, 2, 09, 10, 19)');
+
+  // 3. Verify client controller buildFolderSelectOptions sorting
+  const clientSource = fs.readFileSync(path.join(__dirname, 'folders-client.js'), 'utf8');
+  const mockWin = { __PROJECT_FOLDERS_DATA__: shuffledConfig, addEventListener() {}, document: { addEventListener() {} } };
+  const ctx = {
+    window: mockWin,
+    document: { documentElement: {}, addEventListener() {}, querySelectorAll: () => [], querySelector: () => null, createElement: () => ({ style: {}, classList: { add() {} } }) },
+    MutationObserver: class { observe() {} disconnect() {} },
+    console: { log() {}, warn() {}, error() {} }
+  };
+  vm.createContext(ctx);
+  vm.runInContext(clientSource, ctx);
+
+  const client = mockWin.__PROJECT_FOLDERS_CLIENT__;
+  assert.ok(client, 'Folders client initialized');
+  const selectHtml = client.buildFolderSelectOptions();
+
+  // Root options order in HTML
+  const rootMatch = [...selectHtml.matchAll(/value="([^"]+)"\s*>📁 ([^<]+)<\/option>/g)].map(m => m[2]);
+  assert.deepEqual(rootMatch, [
+    '01 Active',
+    '02 Archive',
+    '10 Reports',
+    'Upwork',
+    'Внутренние',
+    'Клиенты'
+  ], 'Dropdown options must list root folders in Windows Explorer natural order');
+});
+
+

@@ -241,7 +241,10 @@
       options.push(`<option value="" ${isRootSelected ? 'selected' : ''}>📁 Корень (без родителя)</option>`);
 
       const walk = (parentId, depth) => {
-        const list = childrenMap.get(parentId) || [];
+        const list = (childrenMap.get(parentId) || []).slice().sort((a, b) => {
+          const cmp = (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' });
+          return cmp !== 0 ? cmp : (a?.id || '').localeCompare(b?.id || '');
+        });
         for (const f of list) {
           const isSelected = f.id === selectedParentId;
           const prefix = depth > 0 ? `${'&nbsp;&nbsp;'.repeat(depth)}↳ ` : '';
@@ -490,8 +493,15 @@
       }
     });
 
-    // Valid targets exclude self and any descendant
-    const validTargets = folders.filter(f => f.id !== folderId && !descendants.has(f.id));
+    // Valid targets exclude self and any descendant, sorted in natural alphabetical path order
+    const validTargets = folders
+      .filter(f => f.id !== folderId && !descendants.has(f.id))
+      .sort((a, b) => {
+        const pathA = client.getFolderPath(a.id);
+        const pathB = client.getFolderPath(b.id);
+        const cmp = pathA.localeCompare(pathB, undefined, { numeric: true, sensitivity: 'base' });
+        return cmp !== 0 ? cmp : (a?.id || '').localeCompare(b?.id || '');
+      });
     if (validTargets.length > 0) {
       items.push({ separator: true });
       validTargets.forEach(target => {
@@ -626,7 +636,12 @@
     e.stopPropagation();
 
     const currentFolderId = client.getProjectFolderId(projectId);
-    const folders = client.data?.folders || [];
+    const folders = (client.data?.folders || []).slice().sort((a, b) => {
+      const pathA = client.getFolderPath(a.id);
+      const pathB = client.getFolderPath(b.id);
+      const cmp = pathA.localeCompare(pathB, undefined, { numeric: true, sensitivity: 'base' });
+      return cmp !== 0 ? cmp : (a?.id || '').localeCompare(b?.id || '');
+    });
 
     const items = [];
 

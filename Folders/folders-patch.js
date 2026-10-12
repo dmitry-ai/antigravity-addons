@@ -101,6 +101,14 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
     __childrenMap[__pId].push(__f);
   }
 
+  var __folderSorter=function(a,b){
+    var cmp=(a?.name||"").localeCompare(b?.name||"",undefined,{numeric:!0,sensitivity:"base"});
+    return cmp!==0?cmp:(a?.id||"").localeCompare(b?.id||"");
+  };
+  for(var __k in __childrenMap){
+    __childrenMap[__k].sort(__folderSorter);
+  }
+
   var __renderFolderBranch=function(__parentKey,__depth){
     var __levelFolders=__childrenMap[__parentKey]||[];
     for(var __fi=0;__fi<__levelFolders.length;__fi++){
