@@ -58,6 +58,20 @@ function applyFolderPatch(source, foldersData) {
   const replacement = `
 var __renderItem=v=>{${originalLoopBody}};
 var __allGroups=(h?.isCollapsed?b.filter(v=>v.id==="standalone"):b).filter(v=>v.id!=="cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40"&&v.label!=="project-folders/folders");
+if(typeof window!=="undefined"){
+  window.__PROJECT_FOLDERS_CONVO_MAP__=window.__PROJECT_FOLDERS_CONVO_MAP__||{};
+  for(var __cgi=0;__cgi<__allGroups.length;__cgi++){
+    var __cg=__allGroups[__cgi];
+    if(__cg&&__cg.id&&Array.isArray(__cg.items)){
+      for(var __cii=0;__cii<__cg.items.length;__cii++){
+        var __citem=__cg.items[__cii];
+        if(__citem&&__citem.cascadeId){
+          window.__PROJECT_FOLDERS_CONVO_MAP__[__citem.cascadeId]=__cg.id;
+        }
+      }
+    }
+  }
+}
 var __fd=window.__PROJECT_FOLDERS_DATA__||${serializedData};
 if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folders)&&__fd.folders.length>0){
   var __fldMap=__fd.projectFolderMap||{};
@@ -103,6 +117,7 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
             type:"empty-placeholder",
             id:"empty-folder-"+__f.id,
             groupId:"folder-"+__f.id,
+            folderId:__f.id,
             label:"(папка пуста)",
             isIndented:!0,
             folderDepth:__depth
@@ -158,6 +173,11 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
     'return A.createElement("div",{"data-testid":n,"data-title":a,"data-folder-id":__folderId,"data-folder-depth":__folderDepth,className:Xi("group/section-header');
   patched = patched.replace(PROJECT_DOM_ANCHOR,
     '"data-project-card":!0,"data-project-id":c,"aria-expanded":!a.isCollapsed');
+
+  const VIRTUAL_ROW_ANCHOR = '{key:T.id,"data-index":R.index,';
+  if (patched.includes(VIRTUAL_ROW_ANCHOR)) {
+    patched = patched.replace(VIRTUAL_ROW_ANCHOR, '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,');
+  }
 
   // Verify compiled syntax
   try { new (require('vm').Script)(patched); } catch (error) {

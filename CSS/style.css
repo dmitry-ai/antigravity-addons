@@ -144,7 +144,13 @@ button[data-project-card] svg {
 	background-color: var(--sidebar-secondary, rgba(255, 255, 255, 0.1)) !important;
 }
 
-/* Кнопка опций папки (...) */
+/* Кнопка добавления подпапки (+) и кнопка опций папки (...) */
+.antigravity-folder-actions {
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 2px !important;
+}
+.btn-folder-add,
 .btn-folder-options {
 	cursor: pointer !important;
 	display: inline-flex !important;
@@ -156,17 +162,20 @@ button[data-project-card] svg {
 	border: none !important;
 	background: transparent !important;
 	color: var(--muted-foreground, #8e8e93) !important;
-	font-size: 14px !important;
+	font-size: 12px !important;
 	line-height: 1 !important;
 	padding: 0 !important;
 	opacity: 0 !important;
 	transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease !important;
 }
+[data-testid='section-header']:hover .btn-folder-add,
 [data-testid='section-header']:hover .btn-folder-options,
+[data-testid='section-header']:focus-within .btn-folder-add,
 [data-testid='section-header']:focus-within .btn-folder-options,
 .btn-folder-options.is-active {
 	opacity: 1 !important;
 }
+.btn-folder-add:hover,
 .btn-folder-options:hover {
 	color: var(--foreground, #ffffff) !important;
 	background-color: var(--sidebar-secondary, rgba(255, 255, 255, 0.15)) !important;
@@ -191,9 +200,14 @@ button[data-project-card] svg {
 /* Подсветка папки при Drag & Drop */
 .folder-drop-target {
 	outline: 2px dashed #3b82f6 !important;
-	background-color: rgba(59, 130, 246, 0.2) !important;
+	outline-offset: -1px !important;
+	background-color: rgba(59, 130, 246, 0.25) !important;
 	border-radius: 6px !important;
 	transition: all 120ms ease !important;
+}
+.folder-drop-target > div,
+.folder-drop-target .group\/section-header {
+	background-color: rgba(59, 130, 246, 0.25) !important;
 }
 
 /* Всплывающее контекстное меню */
@@ -285,7 +299,14 @@ button[data-project-card] svg {
 	font-size: 13px !important;
 	font-weight: 600 !important;
 }
-.antigravity-folder-modal input {
+.antigravity-folder-label {
+	font-size: 11px !important;
+	font-weight: 500 !important;
+	color: var(--muted-foreground, #a6adc8) !important;
+	margin-bottom: -6px !important;
+}
+.antigravity-folder-modal input,
+.antigravity-folder-modal select {
 	background: var(--background, #11111b) !important;
 	border: 1px solid var(--border, rgba(255, 255, 255, 0.15)) !important;
 	color: var(--foreground, #ffffff) !important;
@@ -295,7 +316,16 @@ button[data-project-card] svg {
 	outline: none !important;
 	transition: border-color 150ms ease !important;
 }
-.antigravity-folder-modal input:focus {
+.antigravity-folder-modal select {
+	cursor: pointer !important;
+}
+.antigravity-folder-modal select option {
+	background: var(--card, #1e1e2e) !important;
+	color: var(--card-foreground, #cdd6f4) !important;
+	padding: 4px 8px !important;
+}
+.antigravity-folder-modal input:focus,
+.antigravity-folder-modal select:focus {
 	border-color: var(--primary, #3b82f6) !important;
 	box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
 }
