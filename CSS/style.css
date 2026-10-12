@@ -94,29 +94,46 @@ button[data-project-card] svg {
 	width: 20px !important;
 }
 
-/* Сдвиг жёлтых папок влево */
+/* ========================================================
+   Иерархическая система отступов папок и проектов (Method 1)
+   ======================================================== */
+
+:root,
+[data-testid='conversation-list-sidebar'] {
+	--folder-indent-unit: 14px;
+}
+
+/* Заголовки папок */
+[data-testid='section-header'][data-folder-id],
 [data-testid='section-header'][data-title*='📁'],
 [data-testid='section-header'][data-title^='📁'] {
 	cursor: pointer;
-	margin-top: 3px !important;
+	margin-top: 2px !important;
 	opacity: 0.95 !important;
 }
-[data-testid='section-header'][data-title*='📁'] > div,
-[data-testid='section-header'][data-title^='📁'] > div,
-[data-testid='section-header'][data-title*='📁'] .group\/section-header,
-[data-testid='section-header'][data-title^='📁'] .group\/section-header {
-	padding-left: 0 !important;
-	margin-left: -4px !important;
-}
+[data-testid='section-header'][data-folder-id] h2,
 [data-testid='section-header'][data-title*='📁'] h2,
 [data-testid='section-header'][data-title^='📁'] h2 {
 	font-weight: 600 !important;
 	font-size: 11.5px !important;
 }
+[data-testid='section-header'][data-folder-id] button,
 [data-testid='section-header'][data-title*='📁'] button,
 [data-testid='section-header'][data-title^='📁'] button {
-	padding-left: 0 !important;
-	margin-left: 0 !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+/* Стрелка раскрытия папки (chevron): аккуратно видима для понимания состояния дерева */
+[data-testid='section-header'][data-folder-id] button svg,
+[data-testid='section-header'][data-title*='📁'] button svg,
+[data-testid='section-header'][data-title^='📁'] button svg {
+	opacity: 0.45 !important;
+	transition: transform 150ms ease, opacity 150ms ease !important;
+}
+[data-testid='section-header'][data-folder-id]:hover button svg,
+[data-testid='section-header'][data-title*='📁']:hover button svg,
+[data-testid='section-header'][data-title^='📁']:hover button svg {
+	opacity: 0.85 !important;
 }
 
 /* ========================================================
@@ -358,21 +375,138 @@ button[data-project-card] svg {
 	background: var(--secondary, rgba(255, 255, 255, 0.15)) !important;
 }
 
-/* Иерархические отступы для подпапок по глубине (Method 1) */
-[data-testid='section-header'][data-folder-depth='1'] > div,
-[data-testid='section-header'][data-folder-depth='1'] .group\/section-header {
-	padding-left: 12px !important;
+/* ========================================================
+   Иерархические отступы по глубине дерева (Method 1)
+   Систематическая архитектура для папок, проектов, плейсхолдеров
+   ======================================================== */
+
+/* 1. Маппинг глубины в CSS Custom Property (уровни 0 - 12) */
+[data-folder-depth='0'] { --folder-depth: 0; }
+[data-folder-depth='1'] { --folder-depth: 1; }
+[data-folder-depth='2'] { --folder-depth: 2; }
+[data-folder-depth='3'] { --folder-depth: 3; }
+[data-folder-depth='4'] { --folder-depth: 4; }
+[data-folder-depth='5'] { --folder-depth: 5; }
+[data-folder-depth='6'] { --folder-depth: 6; }
+[data-folder-depth='7'] { --folder-depth: 7; }
+[data-folder-depth='8'] { --folder-depth: 8; }
+[data-folder-depth='9'] { --folder-depth: 9; }
+[data-folder-depth='10'] { --folder-depth: 10; }
+[data-folder-depth='11'] { --folder-depth: 11; }
+[data-folder-depth='12'] { --folder-depth: 12; }
+
+/* 2. Динамический расчет через CSS Custom Properties */
+/* Заголовки папок: базовый отступ 8px для идеального совпадения оси эмодзи 📁 с 16px SVG иконкой проектов */
+[data-testid='section-header'][data-folder-id] > .group\/section-header,
+.group\/section-header[data-folder-id],
+[data-testid='section-header'][data-folder-depth] > .group\/section-header,
+.group\/section-header[data-folder-depth] {
+	padding-left: calc(8px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+	margin-left: 0 !important;
 }
-[data-testid='section-header'][data-folder-depth='2'] > div,
-[data-testid='section-header'][data-folder-depth='2'] .group\/section-header {
-	padding-left: 24px !important;
+
+/* Карточки проектов: 4px базовый отступ (pl-1) + центрированная 16px SVG иконка в 24px контейнере (w-6) */
+button[data-project-card][data-folder-depth],
+[data-index][data-folder-depth] button[data-project-card] {
+	padding-left: calc(4px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 }
-[data-testid='section-header'][data-folder-depth='3'] > div,
-[data-testid='section-header'][data-folder-depth='3'] .group\/section-header {
-	padding-left: 36px !important;
+
+/* Плейсхолдеры пустых папок и проектов: идеальное выравнивание по вертикальной оси текста проектов (30px) */
+[data-testid='empty-placeholder'][data-folder-depth],
+[data-index][data-folder-depth] [data-testid='empty-placeholder'] {
+	padding-left: calc(30px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+	font-size: 11.5px !important;
+	font-style: italic !important;
+	opacity: 0.5 !important;
 }
-[data-testid='section-header'][data-folder-depth='4'] > div,
-[data-testid='section-header'][data-folder-depth='4'] .group\/section-header {
-	padding-left: 48px !important;
+
+/* Строки разговоров внутри проектов: 30px базовый отступ (строго совпадает с текстом заголовка проекта) */
+[data-index][data-folder-depth] [data-testid='conversation-row-sidebar'] {
+	padding-left: calc(30px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 }
+
+/* Кнопка "See all / See less" внутри проектов: 22px контейнер + 8px кнопка = 30px базовый отступ */
+[data-index][data-folder-depth] > div.w-full.group {
+	padding-left: calc(22px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
+}
+
+/* 3. Эксплицитные селекторы для гарантированной отрисовки (уровни 0 - 8) */
+/* Заголовки папок: 8px + D * 14px */
+[data-testid='section-header'][data-folder-depth='0'] > .group\/section-header,
+.group\/section-header[data-folder-depth='0'] { padding-left: 8px !important; }
+[data-testid='section-header'][data-folder-depth='1'] > .group\/section-header,
+.group\/section-header[data-folder-depth='1'] { padding-left: 22px !important; }
+[data-testid='section-header'][data-folder-depth='2'] > .group\/section-header,
+.group\/section-header[data-folder-depth='2'] { padding-left: 36px !important; }
+[data-testid='section-header'][data-folder-depth='3'] > .group\/section-header,
+.group\/section-header[data-folder-depth='3'] { padding-left: 50px !important; }
+[data-testid='section-header'][data-folder-depth='4'] > .group\/section-header,
+.group\/section-header[data-folder-depth='4'] { padding-left: 64px !important; }
+[data-testid='section-header'][data-folder-depth='5'] > .group\/section-header,
+.group\/section-header[data-folder-depth='5'] { padding-left: 78px !important; }
+[data-testid='section-header'][data-folder-depth='6'] > .group\/section-header,
+.group\/section-header[data-folder-depth='6'] { padding-left: 92px !important; }
+[data-testid='section-header'][data-folder-depth='7'] > .group\/section-header,
+.group\/section-header[data-folder-depth='7'] { padding-left: 106px !important; }
+[data-testid='section-header'][data-folder-depth='8'] > .group\/section-header,
+.group\/section-header[data-folder-depth='8'] { padding-left: 120px !important; }
+
+/* Карточки проектов: 4px + D * 14px */
+button[data-project-card][data-folder-depth='0'],
+[data-index][data-folder-depth='0'] button[data-project-card] { padding-left: 4px !important; }
+button[data-project-card][data-folder-depth='1'],
+[data-index][data-folder-depth='1'] button[data-project-card] { padding-left: 18px !important; }
+button[data-project-card][data-folder-depth='2'],
+[data-index][data-folder-depth='2'] button[data-project-card] { padding-left: 32px !important; }
+button[data-project-card][data-folder-depth='3'],
+[data-index][data-folder-depth='3'] button[data-project-card] { padding-left: 46px !important; }
+button[data-project-card][data-folder-depth='4'],
+[data-index][data-folder-depth='4'] button[data-project-card] { padding-left: 60px !important; }
+button[data-project-card][data-folder-depth='5'],
+[data-index][data-folder-depth='5'] button[data-project-card] { padding-left: 74px !important; }
+button[data-project-card][data-folder-depth='6'],
+[data-index][data-folder-depth='6'] button[data-project-card] { padding-left: 88px !important; }
+button[data-project-card][data-folder-depth='7'],
+[data-index][data-folder-depth='7'] button[data-project-card] { padding-left: 102px !important; }
+button[data-project-card][data-folder-depth='8'],
+[data-index][data-folder-depth='8'] button[data-project-card] { padding-left: 116px !important; }
+
+/* Плейсхолдеры и строки разговоров: 30px + D * 14px */
+[data-testid='empty-placeholder'][data-folder-depth='0'],
+[data-index][data-folder-depth='0'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='0'] [data-testid='conversation-row-sidebar'] { padding-left: 30px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='1'],
+[data-index][data-folder-depth='1'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='1'] [data-testid='conversation-row-sidebar'] { padding-left: 44px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='2'],
+[data-index][data-folder-depth='2'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='2'] [data-testid='conversation-row-sidebar'] { padding-left: 58px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='3'],
+[data-index][data-folder-depth='3'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='3'] [data-testid='conversation-row-sidebar'] { padding-left: 72px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='4'],
+[data-index][data-folder-depth='4'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='4'] [data-testid='conversation-row-sidebar'] { padding-left: 86px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='5'],
+[data-index][data-folder-depth='5'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='5'] [data-testid='conversation-row-sidebar'] { padding-left: 100px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='6'],
+[data-index][data-folder-depth='6'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='6'] [data-testid='conversation-row-sidebar'] { padding-left: 114px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='7'],
+[data-index][data-folder-depth='7'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='7'] [data-testid='conversation-row-sidebar'] { padding-left: 128px !important; }
+
+[data-testid='empty-placeholder'][data-folder-depth='8'],
+[data-index][data-folder-depth='8'] [data-testid='empty-placeholder'],
+[data-index][data-folder-depth='8'] [data-testid='conversation-row-sidebar'] { padding-left: 142px !important; }
+
+
 

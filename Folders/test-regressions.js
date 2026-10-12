@@ -232,10 +232,22 @@ test('Hierarchical virtual row rendering: depth indents, no empty placeholder if
   assert.equal(rows.some(r => r.id === 'empty-folder-f-root'), false, 'Parent folder with subfolders is not empty');
   assert.equal(rows.some(r => r.id === 'empty-folder-f-sub'), false, 'Sub folder with subfolders is not empty');
 
-  // Deep project is rendered
+  // Deep project is rendered with correct depth (folder depth 2 + 1 = 3)
   assert.ok(rows.some(r => r.id === 'header-p-deep'), 'Deep project rendered inside its folder');
-  // Unassigned project is rendered
+  const deepProject = rows.find(r => r.id === 'header-p-deep');
+  assert.equal(deepProject.folderDepth, 3, 'Deep project has depth 3 (inside folder of depth 2)');
+  assert.equal(deepProject.folderId, 'f-deep', 'Deep project has folderId f-deep');
+
+  // Deep conversation inherits project folder depth
+  const deepConvo = rows.find(r => r.id === 'c-deep');
+  assert.ok(deepConvo, 'Deep conversation is rendered');
+  assert.equal(deepConvo.folderDepth, 3, 'Deep conversation inherits project folder depth 3');
+  assert.equal(deepConvo.folderId, 'f-deep', 'Deep conversation has folderId f-deep');
+
+  // Unassigned project is rendered at root level (depth 0)
   assert.ok(rows.some(r => r.id === 'header-p-unassigned'), 'Unassigned project rendered in root');
+  const unassignedProject = rows.find(r => r.id === 'header-p-unassigned');
+  assert.equal(unassignedProject.folderDepth, 0, 'Unassigned project has depth 0');
 
   // 2. Collapse f-root: NOTHING inside the tree should render, and p-deep MUST NOT leak into root!
   rows = render({ ...input, collapsedSectionHeaderIds: ['folder-f-root'] });
@@ -779,3 +791,145 @@ test('Client controller: active/current folder detection, parent dropdown hierar
   docBody.dispatchEvent({ type: 'keydown', key: 'Escape', target: docBody });
   assert.equal(client.activeModal, null, 'Modal closed via Escape shortcut');
 });
+
+test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversation rows, and placeholders receive exact scalable depth attributes', () => {
+  const source = fs.readFileSync(path.join(process.env.TEMP, 'antigravity_main.js'), 'utf8');
+  const treeConfig = {
+    folders: [
+      { id: 'f-upwork', name: 'Upwork', parentId: null },
+      { id: 'f-2026', name: '2026', parentId: 'f-upwork' },
+      { id: 'f-empty', name: 'Empty Month', parentId: 'f-2026' },
+      { id: 'f-10', name: '10', parentId: 'f-2026' },
+      { id: 'f-clients', name: 'Клиенты', parentId: null },
+      { id: 'f-internal', name: 'Внутренние', parentId: null }
+    ],
+    projectFolderMap: {
+      'p-prop': 'f-upwork',
+      'p-upw': 'f-upwork',
+      'p-up10': 'f-10'
+    }
+  };
+
+  const { applyFolderPatch } = require('./folders-patch');
+  const patched = applyFolderPatch(source, treeConfig);
+
+  // 1. Bundle AST and DOM attribute verification
+  assert.ok(patched.includes('"data-project-card":!0,"data-project-id":c,"data-folder-id":a?.folderId,"data-folder-depth":a?.folderDepth'),
+    'Project card DOM receives data-folder-id and data-folder-depth');
+  assert.ok(patched.includes('"data-testid":"empty-placeholder","data-folder-id":T.folderId,"data-folder-depth":T.folderDepth'),
+    'Empty placeholder DOM receives data-folder-id and data-folder-depth');
+  assert.ok(patched.includes('"data-group-id":T.groupId,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth'),
+    'Virtual row container receives data-folder-depth');
+
+  // 2. Execute VIb row generator with full multi-level input
+  const start = patched.indexOf('function VIb(a)');
+  const end = patched.indexOf(';const WIb=', start);
+  const render = vm.runInNewContext('(' + patched.slice(start, end) + ')', { window: { __PROJECT_FOLDERS_DATA__: treeConfig } });
+
+  const input = {
+    groups: [
+      { id: 'p-prop', label: 'Upwork Proposals', items: [{ cascadeId: 'c-prop-1', summary: {} }] },
+      { id: 'p-upw', label: 'Upwork', items: [] },
+      { id: 'p-up10', label: 'U.P - 2026-10-11 - howa...', items: [{ cascadeId: 'c-up10-1', summary: {} }] },
+      { id: 'p-unassigned', label: 'Standalone Project', items: [] }
+    ],
+    groupBy: 'project', collapsedSectionIds: [], collapsedSectionHeaderIds: [], conversationGroupSections: [],
+    sectionHeader: { title: 'Projects', isCollapsed: false }, variant: 'sidebar', onlyShowFirstFewConvos: {},
+    isMobile: false, sortedPinnedIds: [], includePinnedSection: false
+  };
+
+  const rows = render(input);
+
+  // Verify Root Folder: Upwork (depth 0)
+  const upworkHeader = rows.find(r => r.folderId === 'f-upwork' && r.type === 'section-header');
+  assert.ok(upworkHeader, 'Upwork folder header exists');
+  assert.equal(upworkHeader.folderDepth, 0, 'Upwork folder has depth 0');
+
+  // Verify Direct Projects in Upwork: Upwork Proposals and Upwork (depth 1)
+  const propHeader = rows.find(r => r.id === 'header-p-prop');
+  assert.ok(propHeader, 'Upwork Proposals project exists');
+  assert.equal(propHeader.folderDepth, 1, 'Upwork Proposals has depth 1');
+  assert.equal(propHeader.folderId, 'f-upwork', 'Upwork Proposals belongs to f-upwork');
+
+  const propConvo = rows.find(r => r.id === 'c-prop-1');
+  assert.ok(propConvo, 'Upwork Proposals conversation exists');
+  assert.equal(propConvo.folderDepth, 1, 'Upwork Proposals conversation inherits depth 1');
+
+  const upwHeader = rows.find(r => r.id === 'header-p-upw');
+  assert.ok(upwHeader, 'Upwork project exists');
+  assert.equal(upwHeader.folderDepth, 1, 'Upwork project has depth 1');
+  assert.equal(upwHeader.folderId, 'f-upwork', 'Upwork project belongs to f-upwork');
+
+  // Verify Subfolder Level 1: 2026 (depth 1)
+  const f2026Header = rows.find(r => r.folderId === 'f-2026' && r.type === 'section-header');
+  assert.ok(f2026Header, '2026 subfolder header exists');
+  assert.equal(f2026Header.folderDepth, 1, '2026 subfolder has depth 1');
+
+  // Verify Empty Subfolder inside 2026: Empty Month (depth 2 for header, depth 3 for placeholder)
+  const fEmptyHeader = rows.find(r => r.folderId === 'f-empty' && r.type === 'section-header');
+  assert.ok(fEmptyHeader, 'Empty Month subfolder header exists');
+  assert.equal(fEmptyHeader.folderDepth, 2, 'Empty Month subfolder header has depth 2');
+
+  const emptyPlaceholder = rows.find(r => r.id === 'empty-folder-f-empty');
+  assert.ok(emptyPlaceholder, 'Empty placeholder exists for empty folder');
+  assert.equal(emptyPlaceholder.folderDepth, 3, 'Empty placeholder has depth 3 (indented inside depth 2 folder)');
+  assert.equal(emptyPlaceholder.label, '(папка пуста)');
+
+  // Verify Subfolder Level 2: 10 (depth 2)
+  const f10Header = rows.find(r => r.folderId === 'f-10' && r.type === 'section-header');
+  assert.ok(f10Header, '10 subfolder header exists');
+  assert.equal(f10Header.folderDepth, 2, '10 subfolder has depth 2');
+
+  // Verify Project inside Subfolder 10: U.P - 2026-10-11 - howa... (depth 3!)
+  const up10Header = rows.find(r => r.id === 'header-p-up10');
+  assert.ok(up10Header, 'U.P project exists');
+  assert.equal(up10Header.folderDepth, 3, 'U.P project in folder 10 has depth 3 (NOT flattened to 1)');
+  assert.equal(up10Header.folderId, 'f-10', 'U.P project belongs to folder 10');
+
+  const up10Convo = rows.find(r => r.id === 'c-up10-1');
+  assert.ok(up10Convo, 'U.P conversation exists');
+  assert.equal(up10Convo.folderDepth, 3, 'U.P conversation inherits depth 3');
+  assert.equal(up10Convo.folderId, 'f-10', 'U.P conversation belongs to folder 10');
+
+  // Verify Other Root Folders: Клиенты and Внутренние (depth 0)
+  const clientsHeader = rows.find(r => r.folderId === 'f-clients');
+  assert.ok(clientsHeader, 'Клиенты folder header exists');
+  assert.equal(clientsHeader.folderDepth, 0, 'Клиенты has depth 0');
+
+  const internalHeader = rows.find(r => r.folderId === 'f-internal');
+  assert.ok(internalHeader, 'Внутренние folder header exists');
+  assert.equal(internalHeader.folderDepth, 0, 'Внутренние has depth 0');
+
+  // Verify Unassigned Project at Root (depth 0)
+  const unassignedHeader = rows.find(r => r.id === 'header-p-unassigned');
+  assert.ok(unassignedHeader, 'Unassigned project exists');
+  assert.equal(unassignedHeader.folderDepth, 0, 'Unassigned project has depth 0');
+
+  // 3. Verify CSS rules structure and geometry alignment
+  const css = fs.readFileSync(path.join(__dirname, '../../CSS/code/style.css'), 'utf8');
+  assert.ok(css.includes('--folder-indent-unit: 14px'), 'CSS defines indent unit');
+  assert.ok(css.includes("button[data-project-card][data-folder-depth]"), 'CSS targets project cards by depth');
+  assert.ok(css.includes("[data-testid='empty-placeholder'][data-folder-depth]"), 'CSS targets empty placeholders by depth');
+  assert.ok(css.includes(".group\\/section-header[data-folder-id]"), 'CSS targets folder headers systematically');
+  assert.ok(css.includes("button[data-project-card][data-folder-depth='3']"), 'CSS includes explicit depth 3 rule for nested projects');
+
+  // 4. Geometry and visual hierarchy assertions
+  // Inline CSS custom property injection for infinite tree depth scalability
+  assert.ok(patched.includes('--folder-depth":T.folderDepth'), 'Virtual row container sets --folder-depth in inline style');
+
+  // Chevron expand arrow rules for consistent visibility
+  assert.ok(css.includes("opacity: 0.45 !important"), 'Folder chevron is subtly visible in all states');
+  assert.ok(css.includes("opacity: 0.85 !important"), 'Folder chevron brightens on hover');
+
+  // Exact icon alignment: folder header base 8px matches project icon (4px padding + 4px offset in 24px icon box)
+  assert.ok(css.includes("calc(8px + var(--folder-depth"), 'Folder header base padding 8px matches project icon position');
+  assert.ok(css.includes("calc(4px + var(--folder-depth"), 'Project card base padding 4px');
+
+  // Exact text alignment: conversation rows & placeholders align with project title at 30px base
+  assert.ok(css.includes("calc(30px + var(--folder-depth"), 'Conversation rows and placeholders align with project title (30px base)');
+  assert.ok(css.includes("calc(22px + var(--folder-depth"), 'See all container base 22px + 8px button aligns with 30px text');
+
+  // Depth mapping covers up to depth 12
+  assert.ok(css.includes("[data-folder-depth='12']"), 'CSS custom property mapping scales up to depth 12');
+});
+

@@ -20,6 +20,7 @@ const SECTION_OUTER_ANCHOR = 'A.createElement("div",{"data-testid":"section-head
 const HEADER_PROPS_ANCHOR = 'isActionMenuOpen:m=!1,"data-testid":n})=>{var p=WI();';
 const HEADER_DOM_ANCHOR = 'return A.createElement("div",{"data-testid":n,className:Xi("group/section-header';
 const PROJECT_DOM_ANCHOR = '"data-project-card":!0,"aria-expanded":!a.isCollapsed';
+const EMPTY_PLACEHOLDER_ANCHOR = 'T.type==="empty-placeholder"?A.createElement("span",{className:Xi("pr-2.5 select-none text-sm opacity-30 h-8 flex items-center justify-start",T.isIndented?"pl-[30px]":"pl-2")},T.label)';
 
 /**
  * Applies folder grouping transformation to main.js source code.
@@ -43,7 +44,8 @@ function applyFolderPatch(source, foldersData) {
     SECTION_OUTER_ANCHOR,
     HEADER_PROPS_ANCHOR,
     HEADER_DOM_ANCHOR,
-    PROJECT_DOM_ANCHOR
+    PROJECT_DOM_ANCHOR,
+    EMPTY_PLACEHOLDER_ANCHOR
   ];
   if (startIdx === -1 || endIdx <= startIdx || requiredAnchors.some(anchor => source.split(anchor).length !== 2)) {
     console.warn('[folders-patch] Critical loop anchors not found in main.js. Fallback to unpatched source.');
@@ -56,7 +58,18 @@ function applyFolderPatch(source, foldersData) {
   const serializedData = JSON.stringify(foldersData || { folders: [], projectFolderMap: {} });
 
   const replacement = `
-var __renderItem=v=>{${originalLoopBody}};
+var __renderItem=function(v,__fId,__depth){
+  var __startLen=q.length;
+  ${originalLoopBody};
+  if(__depth!==void 0){
+    for(var __qi=__startLen;__qi<q.length;__qi++){
+      if(q[__qi]){
+        if(__fId!==void 0&&__fId!==null)q[__qi].folderId=__fId;
+        q[__qi].folderDepth=__depth;
+      }
+    }
+  }
+};
 var __allGroups=(h?.isCollapsed?b.filter(v=>v.id==="standalone"):b).filter(v=>v.id!=="cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40"&&v.label!=="project-folders/folders");
 if(typeof window!=="undefined"){
   window.__PROJECT_FOLDERS_CONVO_MAP__=window.__PROJECT_FOLDERS_CONVO_MAP__||{};
@@ -109,7 +122,7 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
       });
       if(!__isCol){
         for(var __pi=0;__pi<__inF.length;__pi++){
-          __renderItem(__inF[__pi]);
+          __renderItem(__inF[__pi],__f.id,__depth+1);
         }
         __renderFolderBranch(__f.id,__depth+1);
         if(__inF.length===0&&__subFolders.length===0){
@@ -120,7 +133,7 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
             folderId:__f.id,
             label:"(папка пуста)",
             isIndented:!0,
-            folderDepth:__depth
+            folderDepth:__depth+1
           });
         }
       }
@@ -132,15 +145,15 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   for(var __pi=0;__pi<__projGroups.length;__pi++){
     var __assignedFid=__fldMap[__projGroups[__pi].id];
     if(!__assignedFid||!__validFolderIds.has(__assignedFid)){
-      __renderItem(__projGroups[__pi]);
+      __renderItem(__projGroups[__pi],null,0);
     }
   }
 
   if(__standalone){
-    __renderItem(__standalone);
+    __renderItem(__standalone,null,0);
   }
 }else{
-  __allGroups.forEach(__renderItem);
+  __allGroups.forEach(function(v){__renderItem(v,null,0);});
 }
 `;
 
@@ -172,11 +185,18 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   patched = patched.replace(HEADER_DOM_ANCHOR,
     'return A.createElement("div",{"data-testid":n,"data-title":a,"data-folder-id":__folderId,"data-folder-depth":__folderDepth,className:Xi("group/section-header');
   patched = patched.replace(PROJECT_DOM_ANCHOR,
-    '"data-project-card":!0,"data-project-id":c,"aria-expanded":!a.isCollapsed');
+    '"data-project-card":!0,"data-project-id":c,"data-folder-id":a?.folderId,"data-folder-depth":a?.folderDepth,"aria-expanded":!a.isCollapsed');
+  patched = patched.replace(EMPTY_PLACEHOLDER_ANCHOR,
+    'T.type==="empty-placeholder"?A.createElement("span",{"data-testid":"empty-placeholder","data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,className:Xi("pr-2.5 select-none text-sm opacity-30 h-8 flex items-center justify-start",T.isIndented?"pl-[30px]":"pl-2")},T.label)');
 
+  const VIRTUAL_ROW_STYLE_ANCHOR = '{key:T.id,"data-index":R.index,ref:ba,style:da,';
   const VIRTUAL_ROW_ANCHOR = '{key:T.id,"data-index":R.index,';
-  if (patched.includes(VIRTUAL_ROW_ANCHOR)) {
-    patched = patched.replace(VIRTUAL_ROW_ANCHOR, '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,');
+  if (patched.includes(VIRTUAL_ROW_STYLE_ANCHOR)) {
+    patched = patched.replace(VIRTUAL_ROW_STYLE_ANCHOR,
+      '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,ref:ba,style:(T.folderDepth!=null?{...da,"--folder-depth":T.folderDepth}:da),');
+  } else if (patched.includes(VIRTUAL_ROW_ANCHOR)) {
+    patched = patched.replace(VIRTUAL_ROW_ANCHOR,
+      '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,');
   }
 
   // Verify compiled syntax
@@ -198,5 +218,6 @@ module.exports = {
   SECTION_OUTER_ANCHOR,
   HEADER_PROPS_ANCHOR,
   HEADER_DOM_ANCHOR,
-  PROJECT_DOM_ANCHOR
+  PROJECT_DOM_ANCHOR,
+  EMPTY_PLACEHOLDER_ANCHOR
 };
