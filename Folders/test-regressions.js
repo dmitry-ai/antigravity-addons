@@ -840,10 +840,11 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
 
   const rows = render(input);
 
-  // Verify Root Folder: Upwork (depth 0)
+  // Verify Root Folder: Upwork (depth 0, clean title without number count)
   const upworkHeader = rows.find(r => r.folderId === 'f-upwork' && r.type === 'section-header');
   assert.ok(upworkHeader, 'Upwork folder header exists');
   assert.equal(upworkHeader.folderDepth, 0, 'Upwork folder has depth 0');
+  assert.equal(upworkHeader.title, '📁 Upwork', 'Upwork folder title is clean without number count');
 
   // Verify Direct Projects in Upwork: Upwork Proposals and Upwork (depth 1)
   const propHeader = rows.find(r => r.id === 'header-p-prop');
@@ -860,25 +861,28 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   assert.equal(upwHeader.folderDepth, 1, 'Upwork project has depth 1');
   assert.equal(upwHeader.folderId, 'f-upwork', 'Upwork project belongs to f-upwork');
 
-  // Verify Subfolder Level 1: 2026 (depth 1)
+  // Verify Subfolder Level 1: 2026 (depth 1, clean title)
   const f2026Header = rows.find(r => r.folderId === 'f-2026' && r.type === 'section-header');
   assert.ok(f2026Header, '2026 subfolder header exists');
   assert.equal(f2026Header.folderDepth, 1, '2026 subfolder has depth 1');
+  assert.equal(f2026Header.title, '📁 2026', '2026 subfolder title is clean without number count');
 
   // Verify Empty Subfolder inside 2026: Empty Month (depth 2 for header, depth 3 for placeholder)
   const fEmptyHeader = rows.find(r => r.folderId === 'f-empty' && r.type === 'section-header');
   assert.ok(fEmptyHeader, 'Empty Month subfolder header exists');
   assert.equal(fEmptyHeader.folderDepth, 2, 'Empty Month subfolder header has depth 2');
+  assert.equal(fEmptyHeader.title, '📁 Empty Month', 'Empty Month subfolder title is clean without number count');
 
   const emptyPlaceholder = rows.find(r => r.id === 'empty-folder-f-empty');
   assert.ok(emptyPlaceholder, 'Empty placeholder exists for empty folder');
   assert.equal(emptyPlaceholder.folderDepth, 3, 'Empty placeholder has depth 3 (indented inside depth 2 folder)');
   assert.equal(emptyPlaceholder.label, '(папка пуста)');
 
-  // Verify Subfolder Level 2: 10 (depth 2)
+  // Verify Subfolder Level 2: 10 (depth 2, clean title)
   const f10Header = rows.find(r => r.folderId === 'f-10' && r.type === 'section-header');
   assert.ok(f10Header, '10 subfolder header exists');
   assert.equal(f10Header.folderDepth, 2, '10 subfolder has depth 2');
+  assert.equal(f10Header.title, '📁 10', '10 subfolder title is clean without number count');
 
   // Verify Project inside Subfolder 10: U.P - 2026-10-11 - howa... (depth 3!)
   const up10Header = rows.find(r => r.id === 'header-p-up10');
@@ -891,14 +895,16 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   assert.equal(up10Convo.folderDepth, 3, 'U.P conversation inherits depth 3');
   assert.equal(up10Convo.folderId, 'f-10', 'U.P conversation belongs to folder 10');
 
-  // Verify Other Root Folders: Клиенты and Внутренние (depth 0)
+  // Verify Other Root Folders: Клиенты and Внутренние (depth 0, clean titles)
   const clientsHeader = rows.find(r => r.folderId === 'f-clients');
   assert.ok(clientsHeader, 'Клиенты folder header exists');
   assert.equal(clientsHeader.folderDepth, 0, 'Клиенты has depth 0');
+  assert.equal(clientsHeader.title, '📁 Клиенты', 'Клиенты folder title is clean without number count');
 
   const internalHeader = rows.find(r => r.folderId === 'f-internal');
   assert.ok(internalHeader, 'Внутренние folder header exists');
   assert.equal(internalHeader.folderDepth, 0, 'Внутренние has depth 0');
+  assert.equal(internalHeader.title, '📁 Внутренние', 'Внутренние folder title is clean without number count');
 
   // Verify Unassigned Project at Root (depth 0)
   const unassignedHeader = rows.find(r => r.id === 'header-p-unassigned');
@@ -908,6 +914,8 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   // 3. Verify CSS rules structure and geometry alignment
   const css = fs.readFileSync(path.join(__dirname, '../../CSS/code/style.css'), 'utf8');
   assert.ok(css.includes('--folder-indent-unit: 14px'), 'CSS defines indent unit');
+  assert.ok(css.includes('> div.w-full.h-full'), 'CSS resets outer conversation container padding');
+  assert.ok(css.includes(':not(.h-full):not(:has([data-testid]))'), 'CSS isolates See All pagination button');
   assert.ok(css.includes("button[data-project-card][data-folder-depth]"), 'CSS targets project cards by depth');
   assert.ok(css.includes("[data-testid='empty-placeholder'][data-folder-depth]"), 'CSS targets empty placeholders by depth');
   assert.ok(css.includes(".group\\/section-header[data-folder-id]"), 'CSS targets folder headers systematically');

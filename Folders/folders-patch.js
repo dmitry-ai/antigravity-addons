@@ -111,7 +111,7 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
       q.push({
         type:"section-header",
         id:"section-folder-"+__f.id,
-        title:"📁 "+__f.name+" ("+__inF.length+")",
+        title:"📁 "+__f.name,
         isCollapsible:!0,
         isCollapsed:__isCol,
         collapseId:"folder-"+__f.id,

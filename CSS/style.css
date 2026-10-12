@@ -425,8 +425,14 @@ button[data-project-card][data-folder-depth],
 	padding-left: calc(30px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 }
 
+/* Обнуляем отступ у внешнего контейнера строки разговоров, чтобы он никогда не дублировал padding-left */
+[data-index][data-folder-depth] > div.w-full.h-full,
+[data-index][data-folder-depth] > div.w-full.group:has([data-testid]) {
+	padding-left: 0 !important;
+}
+
 /* Кнопка "See all / See less" внутри проектов: 22px контейнер + 8px кнопка = 30px базовый отступ */
-[data-index][data-folder-depth] > div.w-full.group {
+[data-index][data-folder-depth] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
 	padding-left: calc(22px + var(--folder-depth, 0) * var(--folder-indent-unit, 14px)) !important;
 }
 
