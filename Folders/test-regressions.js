@@ -1091,4 +1091,33 @@ test('Windows Explorer alphabetical natural sorting: folders at all hierarchy le
   ], 'Dropdown options must list root folders in Windows Explorer natural order');
 });
 
+test('High contrast context menu and modal dialog theming: dynamic CSS variables, no broken dark fallbacks, legible hover state in both light and dark themes', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../../CSS/code/style.css'), 'utf8');
+
+  // 1. Verify absence of non-existent variables and broken dark Catppuccin fallbacks
+  assert.equal(css.includes('--popover'), false, 'CSS must not reference non-existent --popover');
+  assert.equal(css.includes('--popover-foreground'), false, 'CSS must not reference non-existent --popover-foreground');
+  assert.equal(css.includes('#1e1e2e'), false, 'CSS must not contain hardcoded #1e1e2e fallback');
+  assert.equal(css.includes('#cdd6f4'), false, 'CSS must not contain hardcoded #cdd6f4 fallback');
+  assert.equal(css.includes('#11111b'), false, 'CSS must not contain hardcoded #11111b fallback');
+  assert.equal(css.includes('#181825'), false, 'CSS must not contain hardcoded #181825 fallback');
+
+  // 2. Context menu uses native Antigravity theme variables
+  assert.ok(css.includes('.antigravity-folder-menu {'), 'Context menu selector exists');
+  assert.ok(css.includes('background: var(--card, var(--sidebar, #ffffff)) !important;'), 'Context menu background adopts Antigravity card surface');
+  assert.ok(css.includes('color: var(--foreground, #18181b) !important;'), 'Context menu text color adopts Antigravity foreground');
+
+  // 3. Hover state retains high contrast and readable text in all themes
+  assert.ok(css.includes('.antigravity-folder-menu-item:hover,'), 'Menu item hover rule exists');
+  assert.ok(css.includes('background-color: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.15))) !important;'), 'Hover background uses theme secondary surface');
+  assert.ok(css.includes('.antigravity-folder-menu-item.danger {'), 'Danger action selector exists');
+  assert.ok(css.includes('color: #ef4444 !important;'), 'Danger action uses high-visibility red');
+
+  // 4. Modal dialog and controls use theme variables
+  assert.ok(css.includes('.antigravity-folder-modal {'), 'Modal container selector exists');
+  assert.ok(css.includes('.antigravity-folder-modal input,'), 'Modal input/select selector exists');
+  assert.ok(css.includes('.folder-rename-input {'), 'Inline rename input selector exists');
+});
+
+
 

@@ -157,8 +157,8 @@ button[data-project-card] svg {
 	transition: background-color 150ms ease, color 150ms ease !important;
 }
 .btn-create-folder:hover {
-	color: var(--foreground, #ffffff) !important;
-	background-color: var(--sidebar-secondary, rgba(255, 255, 255, 0.1)) !important;
+	color: var(--foreground, currentColor) !important;
+	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.12)) !important;
 }
 
 /* Кнопка добавления подпапки (+) и кнопка опций папки (...) */
@@ -194,14 +194,14 @@ button[data-project-card] svg {
 }
 .btn-folder-add:hover,
 .btn-folder-options:hover {
-	color: var(--foreground, #ffffff) !important;
-	background-color: var(--sidebar-secondary, rgba(255, 255, 255, 0.15)) !important;
+	color: var(--foreground, currentColor) !important;
+	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.15)) !important;
 }
 
 /* Инлайн-поле переименования (F2) */
 .folder-rename-input {
-	background: var(--background, #181825) !important;
-	color: var(--foreground, #cdd6f4) !important;
+	background: var(--background, #ffffff) !important;
+	color: var(--foreground, #18181b) !important;
 	border: 1px solid var(--primary, #3b82f6) !important;
 	border-radius: 4px !important;
 	font-size: 11.5px !important;
@@ -231,16 +231,16 @@ button[data-project-card] svg {
 .antigravity-folder-menu {
 	position: fixed !important;
 	z-index: 100000 !important;
-	background: var(--popover, #1e1e2e) !important;
-	border: 1px solid var(--border, rgba(255, 255, 255, 0.12)) !important;
+	background: var(--card, var(--sidebar, #ffffff)) !important;
+	border: 1px solid var(--border, var(--card-border, rgba(128, 128, 128, 0.2))) !important;
 	border-radius: 8px !important;
-	box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
+	box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15) !important;
 	padding: 4px !important;
-	min-width: 180px !important;
+	min-width: 190px !important;
 	max-width: 280px !important;
 	font-family: inherit !important;
 	font-size: 12px !important;
-	color: var(--popover-foreground, #cdd6f4) !important;
+	color: var(--foreground, #18181b) !important;
 	user-select: none !important;
 	animation: antigravity-menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
@@ -257,27 +257,32 @@ button[data-project-card] svg {
 	padding: 5px 8px !important;
 	border-radius: 5px !important;
 	cursor: pointer !important;
-	color: inherit !important;
+	color: var(--foreground, #18181b) !important;
 	transition: background-color 100ms ease, color 100ms ease !important;
 }
 .antigravity-folder-menu-item:hover,
 .antigravity-folder-menu-item:focus {
-	background-color: var(--accent, rgba(255, 255, 255, 0.1)) !important;
-	color: var(--foreground, #ffffff) !important;
+	background-color: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.15))) !important;
+	color: var(--foreground, #18181b) !important;
 	outline: none !important;
 }
-.antigravity-folder-menu-item.danger:hover {
-	background-color: rgba(239, 68, 68, 0.2) !important;
+.antigravity-folder-menu-item.danger {
 	color: #ef4444 !important;
+}
+.antigravity-folder-menu-item.danger:hover,
+.antigravity-folder-menu-item.danger:focus {
+	background-color: rgba(239, 68, 68, 0.12) !important;
+	color: #dc2626 !important;
 }
 .antigravity-folder-menu-separator {
 	height: 1px !important;
-	background: var(--border, rgba(255, 255, 255, 0.08)) !important;
+	background: var(--border, rgba(128, 128, 128, 0.15)) !important;
 	margin: 4px 2px !important;
 }
 .antigravity-folder-menu-shortcut {
 	font-size: 10px !important;
-	opacity: 0.5 !important;
+	color: var(--muted-foreground, #71717a) !important;
+	opacity: 0.8 !important;
 	margin-left: auto !important;
 }
 
@@ -285,7 +290,7 @@ button[data-project-card] svg {
 .antigravity-folder-modal-overlay {
 	position: fixed !important;
 	inset: 0 !important;
-	background: rgba(0, 0, 0, 0.55) !important;
+	background: rgba(0, 0, 0, 0.5) !important;
 	backdrop-filter: blur(2px) !important;
 	z-index: 100001 !important;
 	display: flex !important;
@@ -299,46 +304,51 @@ button[data-project-card] svg {
 }
 
 .antigravity-folder-modal {
-	background: var(--card, #1e1e2e) !important;
-	border: 1px solid var(--border, rgba(255, 255, 255, 0.15)) !important;
+	background: var(--card, #ffffff) !important;
+	border: 1px solid var(--border, rgba(128, 128, 128, 0.2)) !important;
 	border-radius: 12px !important;
 	padding: 16px !important;
 	width: 320px !important;
-	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
 	display: flex !important;
 	flex-direction: column !important;
 	gap: 12px !important;
-	color: var(--card-foreground, #cdd6f4) !important;
+	color: var(--foreground, #18181b) !important;
 	font-family: inherit !important;
 }
 .antigravity-folder-modal h3 {
 	margin: 0 !important;
 	font-size: 13px !important;
 	font-weight: 600 !important;
+	color: var(--foreground, #18181b) !important;
 }
 .antigravity-folder-label {
 	font-size: 11px !important;
 	font-weight: 500 !important;
-	color: var(--muted-foreground, #a6adc8) !important;
+	color: var(--muted-foreground, #71717a) !important;
 	margin-bottom: -6px !important;
 }
 .antigravity-folder-modal input,
 .antigravity-folder-modal select {
-	background: var(--background, #11111b) !important;
-	border: 1px solid var(--border, rgba(255, 255, 255, 0.15)) !important;
-	color: var(--foreground, #ffffff) !important;
+	background: var(--background, #ffffff) !important;
+	border: 1px solid var(--border, rgba(128, 128, 128, 0.25)) !important;
+	color: var(--foreground, #18181b) !important;
 	border-radius: 6px !important;
 	padding: 6px 10px !important;
 	font-size: 12px !important;
 	outline: none !important;
-	transition: border-color 150ms ease !important;
+	transition: border-color 150ms ease, box-shadow 150ms ease !important;
+}
+.antigravity-folder-modal input::placeholder {
+	color: var(--placeholder, var(--muted-foreground, #94a3b8)) !important;
+	opacity: 0.8 !important;
 }
 .antigravity-folder-modal select {
 	cursor: pointer !important;
 }
 .antigravity-folder-modal select option {
-	background: var(--card, #1e1e2e) !important;
-	color: var(--card-foreground, #cdd6f4) !important;
+	background: var(--card, #ffffff) !important;
+	color: var(--foreground, #18181b) !important;
 	padding: 4px 8px !important;
 }
 .antigravity-folder-modal input:focus,
@@ -358,21 +368,21 @@ button[data-project-card] svg {
 	cursor: pointer !important;
 	border: none !important;
 	font-weight: 500 !important;
-	transition: background-color 150ms ease !important;
+	transition: background-color 150ms ease, opacity 150ms ease, filter 150ms ease !important;
 }
 .antigravity-folder-btn.primary {
-	background: var(--primary, #3b82f6) !important;
+	background: var(--primary, #2563eb) !important;
 	color: #ffffff !important;
 }
 .antigravity-folder-btn.primary:hover {
 	filter: brightness(1.1) !important;
 }
 .antigravity-folder-btn.secondary {
-	background: var(--secondary, rgba(255, 255, 255, 0.1)) !important;
-	color: var(--secondary-foreground, #cdd6f4) !important;
+	background: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.12))) !important;
+	color: var(--foreground, #18181b) !important;
 }
 .antigravity-folder-btn.secondary:hover {
-	background: var(--secondary, rgba(255, 255, 255, 0.15)) !important;
+	background: var(--sidebar-muted, rgba(128, 128, 128, 0.2)) !important;
 }
 
 /* ========================================================
