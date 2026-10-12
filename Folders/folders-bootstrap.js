@@ -7,7 +7,9 @@
 
 const { net } = require('electron');
 const fs = require('fs');
-const { applyFolderPatch } = require('./folders-patch');
+const path = require('path');
+const crypto = require('crypto');
+const patchModulePath = require.resolve('./folders-patch');
 const { addFolder, renameFolder, removeFolder, assignProject, unassignProject, writeConfig } = require('./folders-manager');
 
 const DEFAULT_FOLDERS_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
@@ -76,6 +78,9 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
 
   loadFoldersData(configPath);
   setupWatcher(configPath, win);
+  ses._antigravityFoldersWindows ||= new Set();
+  ses._antigravityFoldersWindows.add(win);
+  win.once?.('closed', () => ses._antigravityFoldersWindows.delete(win));
 
   if (ses._antigravityFoldersHooked) {
     return;
@@ -91,6 +96,8 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
         return net.fetch(request, { bypassCustomProtocolHandlers: true });
       }
 
+      if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') return net.fetch(request, { bypassCustomProtocolHandlers: true });
+
       // 1. Intercept client JavaScript bundle
       if (url.pathname === '/main.js') {
         try {
@@ -102,8 +109,10 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
           const originalText = await response.text();
           const foldersData = loadFoldersData(configPath);
 
-          // Fast cache check
-          if (cachedPatchedBundle && lastSourceHash === originalText.length) {
+          const sourceHash = crypto.createHash('sha256').update(originalText).digest('hex');
+          const cacheKey = sourceHash + JSON.stringify(foldersData) + fs.statSync(patchModulePath).mtimeMs + fs.statSync(path.join(__dirname, 'folders-client.js')).mtimeMs;
+          // Code changes must take effect on the next renderer reload as well.
+          if (cachedPatchedBundle && lastSourceHash === cacheKey) {
             return new Response(cachedPatchedBundle, {
               status: 200,
               headers: {
@@ -114,10 +123,11 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
           }
 
           console.log('[folders-bootstrap] Patching main.js with project folders...');
-          const patchedText = applyFolderPatch(originalText, foldersData);
+          delete require.cache[patchModulePath];
+          const patchedText = require(patchModulePath).applyFolderPatch(originalText, foldersData);
 
           cachedPatchedBundle = patchedText;
-          lastSourceHash = originalText.length;
+          lastSourceHash = cacheKey;
 
           return new Response(patchedText, {
             status: 200,
@@ -164,15 +174,18 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
               unassignProject(body.projectId || body.projectQuery, configPath);
             } else if (action === 'save-config') {
               writeConfig(body.data, configPath);
+            } else {
+              return new Response(JSON.stringify({ success: false, error: 'Unknown folder action' }), { status: 400, headers: { 'content-type': 'application/json' } });
             }
 
             const updated = loadFoldersData(configPath);
             cachedPatchedBundle = null; // Invalidate bundle cache
 
             // Broadcast to window renderer
-            if (win && !win.isDestroyed()) {
+            for (const updateWindow of ses._antigravityFoldersWindows) {
+              if (updateWindow.isDestroyed()) continue;
               try {
-                win.webContents.executeJavaScript(`
+                updateWindow.webContents.executeJavaScript(`
                   window.__PROJECT_FOLDERS_DATA__ = ${JSON.stringify(updated)};
                   if (window.__PROJECT_FOLDERS_CLIENT__ && typeof window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate === 'function') {
                     window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate(${JSON.stringify(updated)});

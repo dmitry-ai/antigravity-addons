@@ -51,15 +51,7 @@
     },
 
     triggerRerender() {
-      // Trigger Antigravity's storageService watcher to force re-render jZb
-      if (window.__STORAGE_SERVICE__) {
-        try {
-          const cur = window.__STORAGE_SERVICE__.get('sidebar_collapsed_section_headers') || [];
-          window.__STORAGE_SERVICE__.store('sidebar_collapsed_section_headers', cur);
-        } catch (e) {
-          console.warn('[folders-client] storageService re-render trigger:', e);
-        }
-      }
+      // The shared React row hook subscribes to this event.
       window.dispatchEvent(new CustomEvent('antigravity-folders-updated', { detail: this.data }));
     },
 
@@ -89,6 +81,7 @@
 
     const menu = document.createElement('div');
     menu.className = 'antigravity-folder-menu';
+    menu.setAttribute('role', 'menu');
 
     items.forEach(item => {
       if (item.separator) {
@@ -101,12 +94,13 @@
       const row = document.createElement('div');
       row.className = `antigravity-folder-menu-item ${item.danger ? 'danger' : ''}`;
       row.setAttribute('tabindex', '0');
+      row.setAttribute('role', 'menuitem');
 
       const labelSpan = document.createElement('span');
       labelSpan.style.display = 'flex';
       labelSpan.style.alignItems = 'center';
       labelSpan.style.gap = '6px';
-      labelSpan.innerHTML = `${item.icon || ''} <span>${item.label}</span>`;
+      labelSpan.textContent = `${item.icon || ''} ${item.label}`;
       row.appendChild(labelSpan);
 
       if (item.shortcut) {
@@ -126,6 +120,11 @@
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           row.click();
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const rows = Array.from(menu.querySelectorAll('[role=menuitem]'));
+          const index = rows.indexOf(row);
+          rows[(index + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length]?.focus();
         }
       });
 
@@ -134,6 +133,7 @@
 
     document.body.appendChild(menu);
     client.activeMenu = menu;
+    menu.querySelector('[role=menuitem]')?.focus();
 
     // Boundary check
     const rect = menu.getBoundingClientRect();
@@ -150,7 +150,7 @@
   }
 
   // --- 3. Modal Dialog for Create Folder ---
-  function showCreateFolderDialog() {
+  function showCreateFolderDialog(projectId = null) {
     closeContextMenu();
     if (client.activeModal) return;
 
@@ -159,6 +159,9 @@
 
     const modal = document.createElement('div');
     modal.className = 'antigravity-folder-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Создать новую папку');
 
     modal.innerHTML = `
       <h3>Создать новую папку</h3>
@@ -182,16 +185,30 @@
     function closeModal() {
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       client.activeModal = null;
+      document.querySelector('.btn-create-folder')?.focus();
     }
 
-    function submit() {
+    async function submit() {
+      if (btnSubmit.disabled) return;
       const val = input.value.trim();
-      if (val) {
-        client.postAction('add-folder', { name: val });
+      if (!val) return;
+      if (client.data.folders.some(folder => folder.name.toLowerCase() === val.toLowerCase())) {
+        input.setCustomValidity('Папка с таким названием уже существует'); input.reportValidity(); return;
       }
-      closeModal();
+      btnSubmit.disabled = true;
+      const result = await client.postAction('add-folder', { name: val });
+      if (result.success) {
+        if (projectId) {
+          const folder = result.data.folders.find(folder => folder.name === val);
+          if (folder) await client.postAction('assign-project', { projectId, folderId: folder.id });
+        }
+        closeModal();
+      }
+      else { btnSubmit.disabled = false; input.setCustomValidity(result.error || 'Не удалось создать папку'); input.reportValidity(); }
+
     }
 
+    input.addEventListener('input', () => input.setCustomValidity(''));
     btnCancel.addEventListener('click', closeModal);
     btnSubmit.addEventListener('click', submit);
 
@@ -247,6 +264,7 @@
       const newName = input.value.trim();
       if (input.parentNode) input.parentNode.removeChild(input);
       textSpan.style.display = '';
+      button.focus?.();
 
       if (save && newName && newName !== baseName) {
         client.postAction('rename-folder', { id: folderId, newName });
@@ -334,7 +352,7 @@
       icon: '➕',
       label: 'В новую папку…',
       onClick: () => {
-        showCreateFolderDialog();
+        showCreateFolderDialog(projectId);
       }
     });
 
@@ -367,13 +385,16 @@
         client.activeModal = null;
       }
     } else if (e.key === 'F2') {
-      if (client.hoveredFolderEl && client.hoveredFolderId) {
+      const focusedHeader = document.activeElement?.closest('[data-folder-id]');
+      const renameHeader = focusedHeader || client.hoveredFolderEl;
+      const renameId = focusedHeader?.getAttribute('data-folder-id') || client.hoveredFolderId;
+      if (renameHeader && renameId) {
         e.preventDefault();
-        const f = client.getFolder(client.hoveredFolderId);
-        startInlineRename(client.hoveredFolderEl, client.hoveredFolderId, f?.name);
+        const f = client.getFolder(renameId);
+        startInlineRename(renameHeader, renameId, f?.name);
       }
     }
-  });
+  }, true);
 
   // --- 8. DOM Enhancement & Mutation Observer ---
   // Helper to extract folderId from header row
@@ -403,7 +424,7 @@
     // Match with projectFolderMap or known projects
     const allProjects = client.data?.projectFolderMap ? Object.keys(client.data.projectFolderMap) : [];
     // Or scan projects data if present
-    return { projectId: cardEl.getAttribute('data-project-id') || label, projectName: label };
+    return { projectId: cardEl.getAttribute('data-project-id'), projectName: label };
   }
 
   function enhanceSidebarElements() {
@@ -474,12 +495,17 @@
           }
         });
         headerEl.addEventListener('contextmenu', (e) => {
-          showFolderContextMenu(e, headerEl, info.folderId, info.folderName);
+          showFolderContextMenu(e, headerEl, info.folderId, client.getFolder(info.folderId)?.name || info.folderName);
         });
       }
 
       // Ensure '...' button exists
-      const actionsContainer = headerEl.querySelector('.group\\/section-header > div:last-child') || headerEl.querySelector('div:last-child');
+      let actionsContainer = headerEl.querySelector('.antigravity-folder-actions') || headerEl.querySelector(':scope > div:last-child');
+      if (!actionsContainer) {
+        actionsContainer = document.createElement('div');
+        actionsContainer.className = 'antigravity-folder-actions';
+        headerEl.appendChild(actionsContainer);
+      }
       if (actionsContainer && !actionsContainer.querySelector('.btn-folder-options')) {
         const optBtn = document.createElement('button');
         optBtn.type = 'button';
@@ -497,7 +523,7 @@
             clientY: rect.bottom + 4,
             preventDefault: () => {},
             stopPropagation: () => {}
-          }, headerEl, info.folderId, info.folderName);
+          }, headerEl, info.folderId, client.getFolder(info.folderId)?.name || info.folderName);
         });
 
         actionsContainer.appendChild(optBtn);
@@ -529,17 +555,22 @@
     const projectCards = document.querySelectorAll('button[data-project-card]');
     projectCards.forEach(card => {
       if (card._foldersProjectHooked) return;
+      const info = extractProjectInfo(card);
+      if (!info.projectId) return;
       card._foldersProjectHooked = true;
 
-      const info = extractProjectInfo(card);
-
+      if (!info.projectId) return;
+      // Keep folder drag separate from Antigravity's pointer-based order drag.
+      // Alt+drag continues to use the original order handler.
+      card.addEventListener('pointerdown', e => { if (!e.altKey && e.button === 0) e.stopPropagation(); });
+      card.addEventListener('dragstart', e => { if (e.altKey) e.preventDefault(); });
       // Make draggable
       card.setAttribute('draggable', 'true');
 
       card.addEventListener('dragstart', (e) => {
         const curInfo = extractProjectInfo(card);
-        e.dataTransfer.setData('application/antigravity-project-id', curInfo.projectName); // Name or ID
-        e.dataTransfer.setData('text/plain', curInfo.projectName);
+        e.dataTransfer.setData('application/antigravity-project-id', curInfo.projectId);
+        e.dataTransfer.setData('text/plain', curInfo.projectId);
         e.dataTransfer.effectAllowed = 'move';
         card.style.opacity = '0.5';
       });
@@ -552,7 +583,7 @@
       // Context menu on right click
       card.addEventListener('contextmenu', (e) => {
         const curInfo = extractProjectInfo(card);
-        showProjectContextMenu(e, card, curInfo.projectName, curInfo.projectName);
+        showProjectContextMenu(e, card, curInfo.projectId, curInfo.projectName);
       });
     });
   }
@@ -562,7 +593,7 @@
     enhanceSidebarElements();
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 
   // Initial scan
   if (document.readyState === 'loading') {
@@ -572,7 +603,7 @@
   }
 
   // Periodic safeguard for virtualized scroll repaints
-  setInterval(enhanceSidebarElements, 600);
+  // MutationObserver covers virtualized rows without periodic DOM polling.
 
   console.log('[folders-client] Project Folders UI Controller successfully loaded and active.');
 })();
