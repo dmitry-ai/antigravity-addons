@@ -867,6 +867,13 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
   assert.equal(f2026Header.folderDepth, 1, '2026 subfolder has depth 1');
   assert.equal(f2026Header.title, '📁 2026', '2026 subfolder title is clean without number count');
 
+  // Verify ordering: Subfolders are rendered strictly higher (before) projects within the same folder
+  const f2026Index = rows.indexOf(f2026Header);
+  const propIndex = rows.indexOf(propHeader);
+  const upwIndex = rows.indexOf(upwHeader);
+  assert.ok(f2026Index < propIndex, 'Subfolder 2026 is rendered higher (before) project Upwork Proposals');
+  assert.ok(f2026Index < upwIndex, 'Subfolder 2026 is rendered higher (before) project Upwork');
+
   // Verify Empty Subfolder inside 2026: Empty Month (depth 2 for header, depth 3 for placeholder)
   const fEmptyHeader = rows.find(r => r.folderId === 'f-empty' && r.type === 'section-header');
   assert.ok(fEmptyHeader, 'Empty Month subfolder header exists');
@@ -973,7 +980,9 @@ test('Windows Explorer alphabetical natural sorting: folders at all hierarchy le
     ],
     projectFolderMap: {
       'p-active': 'f-active',
-      'p-sub1': 'sub-1'
+      'p-sub1': 'sub-1',
+      'p-prop': 'f-upwork',
+      'p-under': 'f-upwork'
     }
   };
 
@@ -987,7 +996,19 @@ test('Windows Explorer alphabetical natural sorting: folders at all hierarchy le
   const input = {
     groups: [
       { id: 'p-active', label: 'Active Project', items: [] },
-      { id: 'p-sub1', label: 'Sub 1 Project', items: [] }
+      { id: 'p-sub1', label: 'Sub 1 Project', items: [] },
+      // Deliberately shuffled projects inside f-upwork
+      { id: 'p-prop', label: 'Proposals', items: [] },
+      { id: 'p-under', label: '_', items: [] },
+      // Deliberately shuffled unassigned root projects (matching user screenshot)
+      { id: 'p-anti', label: 'Antigravity', items: [] },
+      { id: 'p-soft', label: 'Software', items: [] },
+      { id: 'p-codex', label: 'Codex', items: [] },
+      { id: 'p-prov', label: 'Provision', items: [] },
+      { id: 'p-nastya', label: 'Настя', items: [] },
+      { id: 'p-vm', label: 'vm', items: [] },
+      { id: 'p-katie', label: '1 - Katie Lewis', items: [] },
+      { id: 'p-rdp', label: 'remote-debugging-port', items: [] }
     ],
     groupBy: 'project', collapsedSectionIds: [], collapsedSectionHeaderIds: [], conversationGroupSections: [],
     sectionHeader: { title: 'Projects', isCollapsed: false }, variant: 'sidebar', onlyShowFirstFewConvos: {},
@@ -1021,7 +1042,28 @@ test('Windows Explorer alphabetical natural sorting: folders at all hierarchy le
     '19'
   ], 'Subfolders must follow Windows Explorer natural numeric sort (1, 2, 09, 10, 19)');
 
-  // 3. Verify client controller buildFolderSelectOptions sorting
+  // 3. Verify projects inside a folder follow Windows Explorer natural sort: "_" before "Proposals"
+  const upworkProjectRows = [...rows.filter(r => r.folderId === 'f-upwork' && r.type === 'header')];
+  assert.deepEqual(upworkProjectRows.map(r => r.id), [
+    'header-p-under',
+    'header-p-prop'
+  ], 'Projects inside folder must follow natural sort ("_" before "Proposals")');
+
+  // 4. Verify root-level unassigned projects follow Windows Explorer natural sort:
+  // Numbers (1 - Katie Lewis) -> Latin (Antigravity .. vm) -> Cyrillic (Настя)
+  const rootProjectRows = [...rows.filter(r => !r.folderId && r.type === 'header')];
+  assert.deepEqual(rootProjectRows.map(r => r.id), [
+    'header-p-katie',
+    'header-p-anti',
+    'header-p-codex',
+    'header-p-prov',
+    'header-p-rdp',
+    'header-p-soft',
+    'header-p-vm',
+    'header-p-nastya'
+  ], 'Root unassigned projects must follow Windows Explorer natural sort');
+
+  // 5. Verify client controller buildFolderSelectOptions sorting
   const clientSource = fs.readFileSync(path.join(__dirname, 'folders-client.js'), 'utf8');
   const mockWin = { __PROJECT_FOLDERS_DATA__: shuffledConfig, addEventListener() {}, document: { addEventListener() {} } };
   const ctx = {

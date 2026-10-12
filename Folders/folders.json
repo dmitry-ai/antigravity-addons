@@ -15,16 +15,9 @@
       "isExpanded": true
     },
     {
-      "id": "folder-internal",
-      "name": "Внутренние",
-      "parentId": null,
-      "color": "#8b5cf6",
-      "isExpanded": true
-    },
-    {
       "id": "folder-2026",
       "name": "2026",
-      "parentId": "folder-upwork",
+      "parentId": "folder-proposals",
       "color": "#10b981",
       "isExpanded": true
     },
@@ -48,6 +41,13 @@
       "parentId": "folder-09",
       "color": "#10b981",
       "isExpanded": true
+    },
+    {
+      "id": "folder-proposals",
+      "name": "Proposals",
+      "parentId": "folder-upwork",
+      "color": "#10b981",
+      "isExpanded": true
     }
   ],
   "projectFolderMap": {
@@ -55,10 +55,6 @@
     "0b25ef38-ecf5-44eb-8cc2-1f8b4611e19e": "folder-upwork",
     "c9d81597-a231-4809-baf0-f4873e50b7c2": "folder-upwork",
     "3b33b970-7f45-42b5-ba3d-a82584d1e07b": "folder-clients",
-    "35a3532c-a530-4eb4-820b-46461ce86e4e": "folder-internal",
-    "a1632d2e-185c-4456-87ce-49d0de5ebab7": "folder-internal",
-    "9c3529dd-3238-4418-a9e5-43fff7ff80ee": "folder-internal",
-    "cd16380f-c085-4876-a083-62bf924eda55": "folder-internal",
     "de92be65-db72-43f0-8c78-7d7c2ebf825d": "folder-19"
   },
   "collapsedFolders": []

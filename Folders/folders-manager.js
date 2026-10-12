@@ -524,15 +524,15 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
 
   function printBranch(folder, depth = 0) {
     const indent = '    '.repeat(depth);
-    const projs = projectsInFolder.get(folder.id) || [];
+    const projs = (projectsInFolder.get(folder.id) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }));
     const subs = (childrenMap.get(folder.id) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }));
 
     console.log(`${indent}▾ 📁 ${folder.name} [ID: ${folder.id}] (${projs.length} проектов)`);
-    for (const p of projs) {
-      console.log(`${indent}    ↳ 📂 ${p.name}`);
-    }
     for (const sub of subs) {
       printBranch(sub, depth + 1);
+    }
+    for (const p of projs) {
+      console.log(`${indent}    ↳ 📂 ${p.name}`);
     }
     if (projs.length === 0 && subs.length === 0) {
       console.log(`${indent}    (папка пуста)`);
@@ -545,7 +545,8 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
   }
 
   const assigned = new Set(Object.keys(data.projectFolderMap));
-  const unassigned = allProjects.filter(p => !assigned.has(p.id) && p.id !== 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40');
+  const unassigned = allProjects.filter(p => !assigned.has(p.id) && p.id !== 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40')
+    .sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }));
   if (unassigned.length > 0) {
     console.log(`\n📂 Проекты без папки (в корне списка, ${unassigned.length} шт.):`);
     unassigned.forEach(p => console.log(`    ↳ ${p.name}`));
@@ -563,6 +564,7 @@ function listProjects(configPath = DEFAULT_CONFIG_PATH) {
   console.log('\n📋 Все проекты Antigravity:\n');
   allProjects
     .filter(p => p.id !== 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40')
+    .sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' }))
     .forEach(p => {
       const fId = data.projectFolderMap[p.id];
       const folderPathStr = fId ? `📁 ${getFolderPath(fId, data.folders)}` : '— (без папки)';
