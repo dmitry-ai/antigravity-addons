@@ -1,0 +1,9 @@
+{
+	"schemaVersion": 1,
+	"id": "css",
+	"name": "Компактный интерфейс",
+	"enabled": true,
+	"order": 10,
+	"entry": "bootstrap.js",
+	"prepare": "build.js"
+}

@@ -1,0 +1,9 @@
+{
+	"schemaVersion": 1,
+	"id": "folders",
+	"name": "Иерархические папки",
+	"enabled": true,
+	"order": 20,
+	"entry": "folders-bootstrap.js",
+	"validate": "verify.js"
+}

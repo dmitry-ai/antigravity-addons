@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { applyLayout, collectLayout } = require('./folders-layout');
 
 const LOOP_ANCHOR = '(h?.isCollapsed?b.filter(v=>v.id==="standalone"):b).forEach(v=>{';
 const LOOP_END = 'B&&q.push({type:"show-more",id:`show-more-${v.id}`,label:x?`See all (${v.items.length})`:"See less",groupId:v.id,isIndented:w})))}});';
@@ -28,39 +29,27 @@ const EMPTY_PLACEHOLDER_ANCHOR = 'T.type==="empty-placeholder"?A.createElement("
  * @param {object} foldersData - Parsed folders.json { folders: [], projectFolderMap: {} }.
  * @returns {string} Patched main.js source.
  */
-function applyFolderPatch(source, foldersData) {
+function applyFolderPatch(source, foldersData, { strict = false } = {}) {
   if (!source || typeof source !== 'string') {
     return source;
   }
 
-  const startIdx = source.indexOf(LOOP_ANCHOR);
-  const endIdx = source.indexOf(LOOP_END);
-
-  const requiredAnchors = [
-    LOOP_ANCHOR,
-    LOOP_END,
-    ROW_HOOK_ANCHOR,
-    ROW_MEMO_ANCHOR,
-    SECTION_OUTER_ANCHOR,
-    HEADER_PROPS_ANCHOR,
-    HEADER_DOM_ANCHOR,
-    PROJECT_DOM_ANCHOR,
-    EMPTY_PLACEHOLDER_ANCHOR
-  ];
-  if (startIdx === -1 || endIdx <= startIdx || requiredAnchors.some(anchor => source.split(anchor).length !== 2)) {
-    console.warn('[folders-patch] Critical loop anchors not found in main.js. Fallback to unpatched source.');
+  let layout;
+  try {
+    layout = collectLayout(source);
+  } catch (error) {
+    if (strict) throw error;
+    console.warn('[folders-patch] Unsupported application bundle:', error.message);
     return source;
   }
-
   // Extract original loop body for each item
-  const originalLoopBody = source.slice(startIdx + LOOP_ANCHOR.length, endIdx + LOOP_END.length - 3);
 
   const serializedData = JSON.stringify(foldersData || { folders: [], projectFolderMap: {} });
 
   const replacement = `
 var __renderItem=function(v,__fId,__depth){
   var __startLen=q.length;
-  ${originalLoopBody};
+  __ORIGINAL_LOOP_BODY__;
   if(__depth!==void 0){
     for(var __qi=__startLen;__qi<q.length;__qi++){
       if(q[__qi]){
@@ -184,38 +173,13 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   }
 
   const headerPrefix = `window.__PROJECT_FOLDERS_DATA__ = ${serializedData};\n${clientScript}\n`;
-  let patched = headerPrefix + source.slice(0, startIdx) + replacement + source.slice(endIdx + LOOP_END.length);
-
   // Subscribe inside the shared row hook and include the revision in its memo.
-  patched = patched.replace(ROW_HOOK_ANCHOR,
-    'includePinnedSection:v=!1}){var [__folderRevision,__setFolderRevision]=(0,A.useState)(0);(0,A.useEffect)(()=>{var __listener=()=>__setFolderRevision(__v=>__v+1);window.addEventListener("antigravity-folders-updated",__listener);return()=>window.removeEventListener("antigravity-folders-updated",__listener)},[]);var w=YIb()');
-  patched = patched.replace(ROW_MEMO_ANCHOR, '[ba,b,h,m,X,k,l,n,E,D,v,w,__folderRevision]');
-
   // Inject folderId and folderDepth into outer div and inner CRb component
-  patched = patched.replace(SECTION_OUTER_ANCHOR,
-    'A.createElement("div",{"data-testid":"section-header","data-title":T.title,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,"data-collapsed":!!T.isCollapsed},A.createElement(CRb,{title:T.title,headerActions:T.headerActions,surface:c,folderId:T.folderId,folderDepth:T.folderDepth,');
-
-  patched = patched.replace(HEADER_PROPS_ANCHOR,
-    'isActionMenuOpen:m=!1,"data-testid":n,folderId:__folderId,folderDepth:__folderDepth})=>{var p=WI();');
-  patched = patched.replace(HEADER_DOM_ANCHOR,
-    'return A.createElement("div",{"data-testid":n,"data-title":a,"data-folder-id":__folderId,"data-folder-depth":__folderDepth,className:Xi("group/section-header');
-  patched = patched.replace(PROJECT_DOM_ANCHOR,
-    '"data-project-card":!0,"data-project-id":c,"data-folder-id":a?.folderId,"data-folder-depth":a?.folderDepth,"aria-expanded":!a.isCollapsed');
-  patched = patched.replace(EMPTY_PLACEHOLDER_ANCHOR,
-    'T.type==="empty-placeholder"?A.createElement("span",{"data-testid":"empty-placeholder","data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,className:Xi("pr-2.5 select-none text-sm opacity-30 h-8 flex items-center justify-start",T.isIndented?"pl-[30px]":"pl-2")},T.label)');
-
-  const VIRTUAL_ROW_STYLE_ANCHOR = '{key:T.id,"data-index":R.index,ref:ba,style:da,';
-  const VIRTUAL_ROW_ANCHOR = '{key:T.id,"data-index":R.index,';
-  if (patched.includes(VIRTUAL_ROW_STYLE_ANCHOR)) {
-    patched = patched.replace(VIRTUAL_ROW_STYLE_ANCHOR,
-      '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,ref:ba,style:(T.folderDepth!=null?{...da,"--folder-depth":T.folderDepth}:da),');
-  } else if (patched.includes(VIRTUAL_ROW_ANCHOR)) {
-    patched = patched.replace(VIRTUAL_ROW_ANCHOR,
-      '{key:T.id,"data-index":R.index,"data-group-id":T.groupId,"data-folder-id":T.folderId,"data-folder-depth":T.folderDepth,');
-  }
+  const patched = applyLayout(source, layout, replacement, headerPrefix);
 
   // Verify compiled syntax
   try { new (require('vm').Script)(patched); } catch (error) {
+    if (strict) throw error;
     console.error('[folders-patch] Invalid transformed JavaScript; returning original bundle:', error.message);
     return source;
   }
