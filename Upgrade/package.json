@@ -1,0 +1,20 @@
+{
+	"name": "antigravity-upgrade-tools",
+	"version": "1.0.0",
+	"private": true,
+	"engines": {
+		"node": ">=22.12.0"
+	},
+	"scripts": {
+		"check": "node upgrade.js --check",
+		"restore": "node upgrade.js --restore",
+		"start": "node upgrade.js",
+		"test": "node --test test-upgrade.js"
+	},
+	"dependencies": {
+		"@electron/asar": "4.3.1",
+		"acorn": "8.15.0",
+		"acorn-walk": "8.3.4",
+		"less": "4.4.2"
+	}
+}
