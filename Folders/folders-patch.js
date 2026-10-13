@@ -1,6 +1,6 @@
 /**
  * folders-patch.js
- * Implements Method 1 from res/16.md: Parent References tree model with DFS traversal.
+ * Groups projects using parent references and DFS traversal.
  * Transforms Antigravity 2.0 client bundle (main.js)
  * to group projects under hierarchical collapsible folder section headers in the left sidebar virtual list,
  * support arbitrary nesting depths via parentId, prevent hidden projects leaking on collapse,
@@ -40,7 +40,7 @@ function applyFolderPatch(source, foldersData, { strict = false } = {}) {
     console.warn('[folders-patch] Unsupported application bundle:', error.message);
     { r = source; break result; }
   }
-  // Extract original loop body for each item
+  // Use the original loop body located by the structural adapter.
   const serializedData = JSON.stringify(foldersData || { folders: [], projectFolderMap: {} });
   const replacement = `
 var __renderItem=function(v,__fId,__depth){
@@ -162,7 +162,7 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   }
   const headerPrefix = `window.__PROJECT_FOLDERS_DATA__ = ${serializedData};\n${clientScript}\n`;
   // Subscribe inside the shared row hook and include the revision in its memo.
-  // Inject folderId and folderDepth into outer div and inner CRb component
+  // Inject folderId and folderDepth into the outer div and inner header component.
   const patched = applyLayout(source, layout, replacement, headerPrefix);
   // Verify compiled syntax
   try { new (require('vm').Script)(patched); } catch (error) {

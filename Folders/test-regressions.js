@@ -757,7 +757,7 @@ test('Comprehensive multi-level tree hierarchy: projects, subfolders, conversati
     'Empty placeholder DOM receives data-folder-id and data-folder-depth');
   assert.match(patched, /'data-group-id':\w+\.groupId,'data-folder-id':\w+\.folderId,'data-folder-depth':\w+\.folderDepth/,
     'Virtual row container receives data-folder-depth');
-  // 2. Execute VIb row generator with full multi-level input
+  // 2. Execute the discovered row generator with full multi-level input.
   const {start, end} = findRowRange(patched, source);
   const render = vm.runInNewContext('(' + patched.slice(start, end) + ')', { window: { __PROJECT_FOLDERS_DATA__: treeConfig } });
   const input = {

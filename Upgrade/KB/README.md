@@ -2,6 +2,8 @@
 
 После обновления Antigravity запустите ярлык **Antigravity - Upgrade** на Рабочем столе. Он возвращает подключение всех включённых модулей из `primary/tools`: сейчас это CSS и Folders. Новые модули регистрируются через `code/tool.json`; менять Upgrade для их добавления не нужно.
 
+Руководства модулей: [правка Less и управление CSS](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/KB/README.md), [управление папками](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/KB/README.md), [архитектура Folders](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/KB/METHOD_1_SIDEBAR_FOLDERS.md).
+
 ## После каждого обновления
 
 1. Сохраните работу и полностью выйдите из Antigravity: `Ctrl+Q` или `Quit` в трее. Закройте экземпляры всех пользователей Windows. Закрытия одного окна может быть недостаточно.
@@ -42,6 +44,8 @@ node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/too
 ```powershell
 node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/code/upgrade.js' --dry-run
 ```
+
+Временная сборка архива выполняется, если хук нужно установить или изменить. Если он уже совпадает с требуемым, режим сообщает о готовом подключении после проверок модулей. `--check` проверяет Less без записи; обычное восстановление собирает готовый CSS, даже если архив уже имеет нужный хук.
 
 Вернуть точную копию архива до установки Upgrade:
 
@@ -94,7 +98,7 @@ node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/too
 }
 ```
 
-`entry` экспортирует функцию, принимающую `BrowserWindow`. Загрузчик вызывает её один раз на окно; возвращаемый Promise поддерживается. Подписки и наблюдатели следует освобождать при закрытии окна.
+`entry` — модуль CommonJS, который через `module.exports` экспортирует функцию, принимающую `BrowserWindow`. Загрузчик вызывает её один раз на окно; возвращаемый Promise поддерживается. Подписки и наблюдатели следует освобождать при закрытии окна.
 
 Необязательный `prepare` указывает JavaScript-файл, экспортирующий функцию подготовки. Она получает `{dryRun, version, bundlePath}` и должна соблюдать `dryRun`: выполнять проверки без записи. Необязательный `validate` экспортирует функцию проверки с тем же аргументом; ошибка останавливает установку. Функции могут возвращать Promise. `validate` может вернуть `{message: 'описание проверки'}` для вывода в консоль.
 
@@ -116,7 +120,7 @@ node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/too
 
 В `style.less` находятся `@folder-indent`, `@folder-depth-limit` и `@explicit-depth-limit`. Исходные комментарии сохранены. `style.css` — результат компиляции; правки в нём будут заменены при следующей сборке.
 
-При открытом Antigravity изменения Less отслеживаются через `fs.watch`, собираются и применяются автоматически. Ошибка Less оставляет последнюю успешно собранную версию CSS. При закрытом приложении можно собрать вручную:
+При открытом Antigravity и включённом CSS изменения `style.less` и файлов непосредственно в `CSS/code/less/` отслеживаются через `fs.watch`, собираются и применяются автоматически. Вложенные каталоги отдельно не наблюдаются. Ошибка Less оставляет последнюю успешно собранную версию CSS. Изменение JavaScript сборщика или CSS bootstrap требует полного перезапуска приложения. При закрытом приложении можно собрать вручную:
 
 ```powershell
 node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/build.js'

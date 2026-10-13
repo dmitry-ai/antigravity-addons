@@ -1,7 +1,7 @@
 /**
  * install-folders.js
- * Safely wires folders-bootstrap.js into bootstrap.js.
- * Preserves backups and verifies code integrity before writing.
+ * Enables Folders in its Upgrade tool.json manifest.
+ * Preserves the previous manifest in tool.json.bak; does not patch app.asar.
  */
 const fs = require('fs');
 const path = require('path');

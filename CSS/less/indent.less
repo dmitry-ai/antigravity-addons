@@ -2,14 +2,14 @@
    Иерархические отступы по глубине дерева (Method 1)
    Систематическая архитектура для папок, проектов, плейсхолдеров
    ======================================================== */
-/* 1. Маппинг глубины в CSS Custom Property (уровни 0 - 12) */
+/* 1. Маппинг глубины в CSS Custom Property (по умолчанию уровни 0 - 12) */
 each(range(0, @folder-depth-limit), {
 	[data-folder-depth='@{value}'] {
 		--folder-depth: @value;
 	}
 });
 /* 2. Динамический расчет через CSS Custom Properties */
-/* Заголовки папок: базовый отступ 8px для идеального совпадения оси эмодзи 📁 с 16px SVG иконкой проектов */
+/* Заголовки папок: базовый отступ внутреннего контейнера 8px */
 [data-testid='section-header'][data-folder-id] > .group\/section-header,
 .group\/section-header[data-folder-id],
 [data-testid='section-header'][data-folder-depth] > .group\/section-header,
@@ -17,12 +17,12 @@ each(range(0, @folder-depth-limit), {
 	padding-left: calc(8px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 	margin-left: 0 !important;
 }
-/* Карточки проектов: 4px базовый отступ (pl-1) + центрированная 16px SVG иконка в 24px контейнере (w-6) */
+/* Карточки проектов: базовый отступ 4px; размеры иконок задаются в compact.less */
 button[data-project-card][data-folder-depth],
 [data-index][data-folder-depth] button[data-project-card] {
 	padding-left: calc(4px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 }
-/* Плейсхолдеры пустых папок и проектов: идеальное выравнивание по вертикальной оси текста проектов (30px) */
+/* Плейсхолдеры пустых папок и проектов: отступ внутри виртуального контейнера строки */
 /* Плейсхолдеры пустых папок и проектов: компактный отступ (16px база + D * 14px) */
 [data-testid='empty-placeholder'][data-folder-depth],
 [data-index][data-folder-depth] [data-testid='empty-placeholder'] {
@@ -131,7 +131,7 @@ button[data-project-card][data-folder-depth],
 	position: relative !important;
 	z-index: 30 !important;
 }
-/* 3. Эксплицитные селекторы для гарантированной отрисовки (уровни 0 - 8) */
+/* 3. Эксплицитные селекторы с числовыми отступами (по умолчанию уровни 0 - 8) */
 /* Заголовки папок: 8px + D * 14px */
 each(range(0, @explicit-depth-limit), {
 	[data-testid='section-header'][data-folder-depth='@{value}'] > .group\/section-header,

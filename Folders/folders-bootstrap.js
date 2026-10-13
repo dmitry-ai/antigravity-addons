@@ -1,7 +1,7 @@
 /**
  * folders-bootstrap.js
  * Electron main process hook for Antigravity 2.0.
- * Intercepts https://127.0.0.1:<port>/main.js to dynamically inject folder grouping
+ * Intercepts /main.js on local HTTPS origins to dynamically inject folder grouping
  * directly into the left sidebar virtualized TanStack list.
  */
 const { net } = require('electron');

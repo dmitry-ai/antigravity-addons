@@ -1,6 +1,6 @@
 /**
  * uninstall-folders.js
- * Safely removes folders hook from bootstrap.js.
+ * Disables Folders in tool.json; configuration is preserved and a restart is required.
  */
 const { setEnabled } = require('./install-folders');
 function uninstall() {

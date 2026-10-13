@@ -1,103 +1,113 @@
-> Обновлено 13 октября 2026 года: после обновления используйте ярлык **Antigravity - Upgrade**. Актуальные установка, откат, резервные копии и расширение реестра описаны в [руководстве Upgrade](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/KB/README.md). Исходники оформления теперь находятся в `CSS/code/style.less` и `CSS/code/less/`; `style.css` генерируется автоматически. Ниже сохранено прежнее описание; при расхождениях следуйте руководству Upgrade.
+# CSS — оформление Antigravity через Less
 
-# Antigravity: свой CSS для интерфейса — инструкция
+Модуль добавляет компактное оформление сайдбара и стили иерархических папок. Исходники находятся в [style.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.less) и папке `CSS/code/less/`. Файл `style.css` генерируется из них и затем вставляется в каждое окно Antigravity.
 
-## 1. Как это устроено
+## Правка оформления
 
-1. В `resources\app.asar` (файл `dist/utils.js`, функция `createWindow`) добавлена **одна строка**, которая вызывает `bootstrap.js` из папки `code/`.
-2. [`bootstrap.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/bootstrap.js) на каждой загрузке страницы окна (событие `dom-ready`) читает `style.css` и вставляет его через `webContents.insertCSS()`.
-3. [`style.css`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.css) — ваши стили. Это единственный файл, который нужно редактировать в обычной работе.
-4. [`patch.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/patch.js) — добавляет эту строку в `app.asar` и делает резервную копию `app.asar.original`.
-5. [`restore.js`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/restore.js) — возвращает оригинальный `app.asar` из копии и удаляет копию.
+1. Откройте нужный исходник Less из таблицы ниже.
+2. Измените правила и сохраните файл.
+3. Если Antigravity открыт и модуль CSS включён, сборка и применение стилей выполнятся автоматически.
+4. Если после изменения размеров виртуальный список не пересчитал высоты, нажмите `Ctrl+R`.
 
-Вне папки `code/` есть только:
-- изменённый `C:\Users\dfedi\AppData\Local\Programs\antigravity\resources\app.asar`;
-- его копия `app.asar.original` рядом;
-- кэш `npx` (`%LOCALAPPDATA%\npm-cache\_npx`).
+| Файл | Что редактировать |
+|---|---|
+| [style.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.less) | Общие параметры и список импортов. |
+| [compact.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/less/compact.less) | Размеры и интервалы элементов сайдбара. |
+| [folders.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/less/folders.less) | Заголовки, кнопки, контекстные меню и диалоги папок. |
+| [indent.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/less/indent.less) | Отступы по глубине дерева, строки разговоров и их кнопки. |
+| [style.css](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.css) | Результат сборки, который читает Electron. Его изменения будут заменены следующей сборкой. |
 
-> [!IMPORTANT]
-> Папка программы одна на всех пользователей Windows (`dfedi`, `A1`, `A2`). Поэтому патч действует на **все** профили Antigravity сразу. Перед `patch.js` и `restore.js` должны быть закрыты все экземпляры у всех пользователей. Сами скрипты это проверяют и откажутся работать, если найдут хотя бы один процесс `Antigravity.exe`.
+Настройки в `style.less`:
 
----
+| Переменная | Значение по умолчанию | Назначение |
+|---|---|---|
+| `@folder-indent` | `14px` | Шаг отступа дерева; используется также в CSS-переменной `--folder-indent-unit`. |
+| `@folder-depth-limit` | `12` | Последний уровень генерации правил `[data-folder-depth]` для CSS-переменной глубины. |
+| `@explicit-depth-limit` | `8` | Последний уровень генерации дополнительных правил с вычисленным числовым отступом. |
 
-## 2. «Скрипт постоянно долбит файловую систему?» — нет
+Уровни в этих правилах начинаются с нуля. Это диапазоны дополнительных CSS-правил, а не ограничения глубины дерева: Folders передаёт `--folder-depth` также через стиль виртуальной строки.
 
-`bootstrap.js` **ничего не опрашивает и не сканирует**. Он один раз подписывается у Windows на уведомления об изменениях в папке `code/` (`fs.watch`). Потом он спит, пока Windows сама не сообщит, что в папке что-то изменилось.
+Дополнительные исходники помещайте непосредственно в `CSS/code/less/` и добавляйте их импорт в `style.less`. Наблюдатели отслеживают сам `style.less` и события в этой папке; вложенные каталоги отдельно не наблюдаются.
 
-Доказательства — документация Node.js:
-- [fs.watch → Availability](https://nodejs.org/api/fs.html#availability):
-  > *"On Windows systems, this feature depends on `ReadDirectoryChangesW`."*
+## Сборка при закрытом Antigravity
 
-  Это системный механизм уведомлений Windows: событие присылает ядро, никакого цикла проверки нет.
-- [fs.watchFile](https://nodejs.org/api/fs.html#fswatchfilefilename-options-listener) — вот это как раз опрос по таймеру (`stat` раз в N мс). Он **не используется**. Документация прямо говорит:
-  > *"Using `fs.watch()` is more efficient than `fs.watchFile()` and `fs.unwatchFile()`."*
+Из любой папки выполните:
 
-Цена в простое: один дескриптор каталога на окно и ноль процессорного времени. Наблюдатель закрывается при закрытии окна (`win.on('closed', …)`).
+```powershell
+node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/build.js'
+```
 
----
+Сообщение `Less → style.css: обновлено.` означает, что CSS записан. Сообщение `Less → style.css: без изменений.` означает, что уже сохранён тот же результат. Для изменения Less и ручной сборки не нужно переустанавливать подключение внутри `app.asar`.
 
-## 3. Активация и перепатчивание
+При ошибке компиляции новый CSS не записывается: остаётся последняя успешно собранная версия. Исправьте указанный исходник и сохраните его снова либо повторите команду сборки. Компилятор Less установлен среди зависимостей `Upgrade/code/node_modules`; общая установка зависимостей описана в [руководстве Upgrade](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/KB/README.md).
 
-Когда Antigravity закрыт (у всех пользователей Windows):
+## Как модуль подключается
 
-1. Полностью выйдите из Antigravity во всех профилях: `Ctrl+Q` в окне или «Quit» в значке трея.
-2. Проверьте, что процессов не осталось:
-   ```powershell
-   tasklist /FI "IMAGENAME eq Antigravity.exe" /NH | Select-String Antigravity
-   ```
-3. Выполните:
-   ```powershell
-   Set-Location 'C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\CSS\code'
-   node restore.js
-   node patch.js
-   ```
-   Ожидаемый вывод: `Restored.`, затем `Patched. Unpacked dirs preserved: node_modules/chrome-devtools-mcp`.
-4. Запустите Antigravity как обычно. Стили из `style.css` применятся автоматически.
+Подключение принадлежит общему инструменту Upgrade:
 
----
+```text
+app.asar: создание основного окна перед loadURL
+	Upgrade/code/bootstrap.js
+		Upgrade/code/registry.js → CSS/code/tool.json
+			CSS/code/bootstrap.js
+				CSS/code/build.js → style.less + less/*.less → style.css
+				dom-ready / изменение style.css → webContents.insertCSS()
+```
 
-## 4. Повседневная работа: правка стилей
+[tool.json](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/tool.json) регистрирует модуль `css`: `entry` указывает на `bootstrap.js`, а `prepare` — на `build.js`. При восстановлении Upgrade сначала проверяет сборку без записи, затем при применении выполняет обычную сборку. Сам загрузчик вызывает модуль CSS один раз для каждого нового окна.
 
-1. Откройте [`style.css`](file:///C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.css) в любом редакторе.
-2. Измените правила и нажмите **`Ctrl+S`**.
-3. **Всё.** Примерно через 0,1 с стили применятся во всех открытых окнах Antigravity. Ничего запускать и перезапускать не нужно.
+[bootstrap.js](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/bootstrap.js) запускает сборку при подключении окна, вставляет CSS на `dom-ready` и последовательно заменяет ранее вставленную версию после изменений файла. Он создаёт два наблюдателя `fs.watch`: для `CSS/code/` и для `CSS/code/less/`. Проверки по периодическому таймеру не используются; таймер в 100 мс объединяет события изменения готового CSS. Оба наблюдателя закрываются вместе с окном.
 
-Если изменение не видно:
-- Нажмите **`Ctrl+R`** в окне Antigravity (перезагрузка интерфейса). Виртуальный список (TanStack Virtual) пересчитает высоту строк.
-- Ошибки самого `bootstrap.js` пишутся с меткой `[custom-ui]` в `C:\Users\dfedi\AppData\Roaming\Antigravity\logs\main.log`.
+Folders имеет собственный манифест и собственную точку входа. CSS содержит оформление его элементов, поэтому манифест Folders объявляет зависимость от `css`; ручной строки подключения Folders в CSS bootstrap нет.
 
----
+## Установка и восстановление после обновления
 
-## 5. После автообновления Antigravity
+1. Сохраните работу и полностью выйдите из Antigravity во всех профилях Windows: `Ctrl+Q` либо `Quit` в трее.
+2. Запустите ярлык **Antigravity - Upgrade** на Рабочем столе.
+3. Дождитесь сообщения об успешном восстановлении или уже подключённых модулях.
+4. Запустите Antigravity обычным способом.
 
-Признак: после обновления ваши стили пропали. Обновление ставит новый `app.asar` без хука.
+Общая установка возвращает **все включённые модули**, а не только оформление. Её проверки процессов, резервные копии и защита от отката на другую версию описаны в [руководстве Upgrade](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/KB/README.md).
 
-1. Полностью выйдите из Antigravity во всех профилях (`Ctrl+Q` / Quit в трее).
-2. Выполните **только** `patch.js`:
-   ```powershell
-   Set-Location 'C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\CSS\code'
-   node patch.js
-   ```
-   Он сделает свежую копию **новой** версии и встроит хук.
-3. Запустите Antigravity.
+Ручной запуск восстановления:
 
----
+```powershell
+node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/code/upgrade.js'
+```
 
-## 6. Полный откат
+Проверка подключения без изменения установленного архива:
 
-1. Полностью выйдите из Antigravity во всех профилях (`Ctrl+Q` / Quit в трее).
-2. Выполните:
-   ```powershell
-   Set-Location 'C:\work\research\provision\code\Software\Google\AI\Antigravity\primary\tools\CSS\code'
-   node restore.js
-   ```
-3. Запустите Antigravity — он будет полностью оригинальным, а копия `app.asar.original` удалится.
+```powershell
+node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/code/upgrade.js' --check
+```
 
----
+Установка и откат требуют отсутствия всех процессов `Antigravity.exe`. Правки Less, ручная сборка и `--check` этого не требуют. Если несколько профилей используют одну и ту же установку приложения и эту папку инструментов, изменение общего оформления затрагивает их окна.
 
-## 7. Краткая памятка
+## Прежние команды `patch.js` и `restore.js`
 
-- Поменять стили: правка `style.css` → `Ctrl+S`. Если не пересчиталась высота виртуального списка — `Ctrl+R`.
-- Пропали стили после обновления: выйти из всех экземпляров → `node patch.js` → запустить.
-- Убрать всё: выйти из всех экземпляров → `node restore.js` → запустить.
-- `patch.js` и `restore.js` — только при **полностью** закрытом Antigravity у **всех** пользователей Windows.
+| Команда | Текущее действие |
+|---|---|
+| `node CSS/code/patch.js` | Делегирует установку общему `Upgrade/code/upgrade.js`; подключает все включённые модули. |
+| `node CSS/code/restore.js` | Делегирует общий откат архива режиму `--restore`; затрагивает подключение всех модулей в этом архиве. |
+
+В таблице пути относительно `primary/tools`; из другой папки используйте полный путь к файлу. Эти обёртки не принимают параметры командной строки Upgrade. Для `--check`, `--app-dir` и других параметров запускайте непосредственно `upgrade.js`.
+
+Резервные копии создаёт Upgrade в `Upgrade/code/state/<идентификатор установки>/`: имя архива — его исходный SHA-256, рядом хранится JSON с версией и хешами. Копии сохраняются после отката. Файлы Less, готовый CSS, манифесты и конфигурация Folders при откате архива сохраняются. Откат восстанавливает архив до установки конкретного хука Upgrade; такой архив мог уже содержать прежние доработки. Для обратного подключения после отката снова запустите Upgrade при закрытом приложении.
+
+## Отключение оформления
+
+Чтобы отключить весь модуль CSS, задайте `"enabled": false` в его `tool.json` и в `Folders/code/tool.json`, затем полностью перезапустите Antigravity. Folders требует CSS, поэтому оставить Folders включённым при отключённом `css` нельзя: проверка реестра завершится ошибкой зависимости.
+
+Чтобы отключить только отдельные правила, измените соответствующий исходник Less. Чтобы отключить только папки, следуйте [руководству Folders](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/KB/README.md); компактное оформление CSS можно оставить включённым.
+
+## Диагностика
+
+| Симптом | Что проверить |
+|---|---|
+| Сохранение Less не меняет интерфейс | Включён ли `css`, установлен ли общий хук; затем выполнить сборку вручную и проверить её вывод. |
+| Компиляция завершается ошибкой | Указанный исходник Less и наличие зависимостей Upgrade. |
+| Стили пропали после обновления | Выполнить восстановление через ярлык Upgrade при закрытом приложении. |
+| Размеры строк после правки выглядят неверно | Перезагрузить интерфейс через `Ctrl+R`. |
+| Ошибка применения CSS | Журнал `%APPDATA%/Antigravity/logs/main.log`, метки `[custom-ui]` и `[antigravity-tools:css]`. |
+
+Изменения JavaScript в `bootstrap.js` и `build.js` требуют полного перезапуска Antigravity: модули уже загружены в основном процессе. Изменения Less подхватываются наблюдателями.

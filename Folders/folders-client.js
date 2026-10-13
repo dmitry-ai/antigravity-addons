@@ -1,7 +1,7 @@
 /**
  * folders-client.js
  * Client-side Controller for Hierarchical Project Folders in Antigravity 2.0.
- * Implements Method 1 from res/16.md (Parent References tree model):
+ * Uses a parent references tree model:
  * 1. "Create Folder" button in Projects header + modal dialog.
  * 2. Hierarchical folder operations: "Создать подпапку", "Переместить папку…", Inline rename, Delete with promotion.
  * 3. Cycle prevention & validation in UI.

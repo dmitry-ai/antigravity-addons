@@ -1,7 +1,7 @@
 /**
  * folders-manager.js
  * CLI and API tool to manage hierarchical folders and project assignments in Antigravity 2.0.
- * Implements Method 1 from res/16.md: Parent References tree model.
+ * Uses a parent references tree model backed by folders.json.
  *
  * Supports:
  * - Arbitrary nesting depths via `parentId`
@@ -228,8 +228,8 @@ function slugify(name) {
 /**
  * Creates or updates a folder.
  * Supports:
- * - addFolder(name, [parentId], [customId], [color], [configPath])
- * - addFolder(id, name, [color], [configPath]) (legacy signature)
+ * - addFolder(name, [parentId], [customIdOrColor], [configPath])
+ * - addFolder(id, name, color, configPath) (legacy signature; explicit configPath required)
  */
 function addFolder(arg1, arg2 = null, arg3 = null, arg4 = '#10b981', configPath = DEFAULT_CONFIG_PATH) {
 	let r;
@@ -556,7 +556,7 @@ if (require.main === module) {
       break;
     case 'add-folder':
       if (!arg1) {
-        console.error('Использование: node folders-manager.js add-folder <имя_папки> [parentId] [id] [color]');
+        console.error('Использование: node folders-manager.js add-folder <имя_папки> [parentId] [id-или-color] [configPath]');
         process.exit(1);
       }
       addFolder(arg1, arg2, arg3, arg4);
