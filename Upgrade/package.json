@@ -16,5 +16,8 @@
 		"acorn": "8.15.0",
 		"acorn-walk": "8.3.4",
 		"less": "4.4.2"
+	},
+	"devDependencies": {
+		"eslint-scope": "8.4.0"
 	}
 }

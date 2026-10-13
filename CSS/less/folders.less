@@ -1,0 +1,279 @@
+/* ========================================================
+   Иерархическая система отступов папок и проектов (Method 1)
+   ======================================================== */
+:root,
+[data-testid='conversation-list-sidebar'] {
+	--folder-indent-unit: @folder-indent;
+}
+/* Заголовки папок */
+[data-testid='section-header'][data-folder-id],
+[data-testid='section-header'][data-title*='📁'],
+[data-testid='section-header'][data-title^='📁'] {
+	cursor: pointer;
+	margin-top: 2px !important;
+	opacity: 0.95 !important;
+}
+[data-testid='section-header'][data-folder-id] h2,
+[data-testid='section-header'][data-title*='📁'] h2,
+[data-testid='section-header'][data-title^='📁'] h2 {
+	font-weight: 600 !important;
+	font-size: 11.5px !important;
+}
+[data-testid='section-header'][data-folder-id] button,
+[data-testid='section-header'][data-title*='📁'] button,
+[data-testid='section-header'][data-title^='📁'] button {
+	padding: 0 !important;
+	margin: 0 !important;
+}
+/* Стрелка раскрытия папки (chevron): аккуратно видима для понимания состояния дерева */
+[data-testid='section-header'][data-folder-id] button svg,
+[data-testid='section-header'][data-title*='📁'] button svg,
+[data-testid='section-header'][data-title^='📁'] button svg {
+	opacity: 0.45 !important;
+	transition: transform 150ms ease, opacity 150ms ease !important;
+}
+[data-testid='section-header'][data-folder-id]:hover button svg,
+[data-testid='section-header'][data-title*='📁']:hover button svg,
+[data-testid='section-header'][data-title^='📁']:hover button svg {
+	opacity: 0.85 !important;
+}
+/* ========================================================
+   Project Folders UI (Способ 1 и 2 из ответа 13)
+   ======================================================== */
+/* Кнопка создания папки в заголовке Projects */
+.btn-create-folder {
+	cursor: pointer !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	width: 20px !important;
+	height: 20px !important;
+	border-radius: 4px !important;
+	border: none !important;
+	background: transparent !important;
+	color: var(--muted-foreground, #8e8e93) !important;
+	font-size: 13px !important;
+	padding: 0 !important;
+	transition: background-color 150ms ease, color 150ms ease !important;
+}
+.btn-create-folder:hover {
+	color: var(--foreground, currentColor) !important;
+	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.12)) !important;
+}
+/* Кнопка добавления подпапки (+) и кнопка опций папки (...) */
+.antigravity-folder-actions {
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 2px !important;
+}
+.btn-folder-add,
+.btn-folder-options {
+	cursor: pointer !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	width: 18px !important;
+	height: 18px !important;
+	border-radius: 4px !important;
+	border: none !important;
+	background: transparent !important;
+	color: var(--muted-foreground, #8e8e93) !important;
+	font-size: 12px !important;
+	line-height: 1 !important;
+	padding: 0 !important;
+	opacity: 0 !important;
+	transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease !important;
+}
+[data-testid='section-header']:hover .btn-folder-add,
+[data-testid='section-header']:hover .btn-folder-options,
+[data-testid='section-header']:focus-within .btn-folder-add,
+[data-testid='section-header']:focus-within .btn-folder-options,
+.btn-folder-options.is-active {
+	opacity: 1 !important;
+}
+.btn-folder-add:hover,
+.btn-folder-options:hover {
+	color: var(--foreground, currentColor) !important;
+	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.15)) !important;
+}
+/* Инлайн-поле переименования (F2) */
+.folder-rename-input {
+	background: var(--background, #ffffff) !important;
+	color: var(--foreground, #18181b) !important;
+	border: 1px solid var(--primary, #3b82f6) !important;
+	border-radius: 4px !important;
+	font-size: 11.5px !important;
+	font-weight: 500 !important;
+	padding: 1px 4px !important;
+	margin: 0 !important;
+	outline: none !important;
+	width: calc(100% - 24px) !important;
+	height: 18px !important;
+	box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3) !important;
+}
+/* Подсветка папки при Drag & Drop */
+.folder-drop-target {
+	outline: 2px dashed #3b82f6 !important;
+	outline-offset: -1px !important;
+	background-color: rgba(59, 130, 246, 0.25) !important;
+	border-radius: 6px !important;
+	transition: all 120ms ease !important;
+}
+.folder-drop-target > div,
+.folder-drop-target .group\/section-header {
+	background-color: rgba(59, 130, 246, 0.25) !important;
+}
+/* Всплывающее контекстное меню */
+.antigravity-folder-menu {
+	position: fixed !important;
+	z-index: 100000 !important;
+	background: var(--card, var(--sidebar, #ffffff)) !important;
+	border: 1px solid var(--border, var(--card-border, rgba(128, 128, 128, 0.2))) !important;
+	border-radius: 8px !important;
+	box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15) !important;
+	padding: 4px !important;
+	min-width: 190px !important;
+	max-width: 280px !important;
+	font-family: inherit !important;
+	font-size: 12px !important;
+	color: var(--foreground, #18181b) !important;
+	user-select: none !important;
+	animation: antigravity-menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+@keyframes antigravity-menu-in {
+	from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+	to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.antigravity-folder-menu-item {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: space-between !important;
+	gap: 8px !important;
+	padding: 5px 8px !important;
+	border-radius: 5px !important;
+	cursor: pointer !important;
+	color: var(--foreground, #18181b) !important;
+	transition: background-color 100ms ease, color 100ms ease !important;
+}
+.antigravity-folder-menu-item:hover,
+.antigravity-folder-menu-item:focus {
+	background-color: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.15))) !important;
+	color: var(--foreground, #18181b) !important;
+	outline: none !important;
+}
+.antigravity-folder-menu-item.danger {
+	color: #ef4444 !important;
+}
+.antigravity-folder-menu-item.danger:hover,
+.antigravity-folder-menu-item.danger:focus {
+	background-color: rgba(239, 68, 68, 0.12) !important;
+	color: #dc2626 !important;
+}
+.antigravity-folder-menu-separator {
+	height: 1px !important;
+	background: var(--border, rgba(128, 128, 128, 0.15)) !important;
+	margin: 4px 2px !important;
+}
+.antigravity-folder-menu-shortcut {
+	font-size: 10px !important;
+	color: var(--muted-foreground, #71717a) !important;
+	opacity: 0.8 !important;
+	margin-left: auto !important;
+}
+/* Модальное окно создания папки */
+.antigravity-folder-modal-overlay {
+	position: fixed !important;
+	inset: 0 !important;
+	background: rgba(0, 0, 0, 0.5) !important;
+	backdrop-filter: blur(2px) !important;
+	z-index: 100001 !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	animation: antigravity-fade-in 120ms ease !important;
+}
+@keyframes antigravity-fade-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+.antigravity-folder-modal {
+	background: var(--card, #ffffff) !important;
+	border: 1px solid var(--border, rgba(128, 128, 128, 0.2)) !important;
+	border-radius: 12px !important;
+	padding: 16px !important;
+	width: 320px !important;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 12px !important;
+	color: var(--foreground, #18181b) !important;
+	font-family: inherit !important;
+}
+.antigravity-folder-modal h3 {
+	margin: 0 !important;
+	font-size: 13px !important;
+	font-weight: 600 !important;
+	color: var(--foreground, #18181b) !important;
+}
+.antigravity-folder-label {
+	font-size: 11px !important;
+	font-weight: 500 !important;
+	color: var(--muted-foreground, #71717a) !important;
+	margin-bottom: -6px !important;
+}
+.antigravity-folder-modal input,
+.antigravity-folder-modal select {
+	background: var(--background, #ffffff) !important;
+	border: 1px solid var(--border, rgba(128, 128, 128, 0.25)) !important;
+	color: var(--foreground, #18181b) !important;
+	border-radius: 6px !important;
+	padding: 6px 10px !important;
+	font-size: 12px !important;
+	outline: none !important;
+	transition: border-color 150ms ease, box-shadow 150ms ease !important;
+}
+.antigravity-folder-modal input::placeholder {
+	color: var(--placeholder, var(--muted-foreground, #94a3b8)) !important;
+	opacity: 0.8 !important;
+}
+.antigravity-folder-modal select {
+	cursor: pointer !important;
+}
+.antigravity-folder-modal select option {
+	background: var(--card, #ffffff) !important;
+	color: var(--foreground, #18181b) !important;
+	padding: 4px 8px !important;
+}
+.antigravity-folder-modal input:focus,
+.antigravity-folder-modal select:focus {
+	border-color: var(--primary, #3b82f6) !important;
+	box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+}
+.antigravity-folder-modal-buttons {
+	display: flex !important;
+	justify-content: flex-end !important;
+	gap: 8px !important;
+}
+.antigravity-folder-btn {
+	padding: 5px 12px !important;
+	border-radius: 6px !important;
+	font-size: 12px !important;
+	cursor: pointer !important;
+	border: none !important;
+	font-weight: 500 !important;
+	transition: background-color 150ms ease, opacity 150ms ease, filter 150ms ease !important;
+}
+.antigravity-folder-btn.primary {
+	background: var(--primary, #2563eb) !important;
+	color: #ffffff !important;
+}
+.antigravity-folder-btn.primary:hover {
+	filter: brightness(1.1) !important;
+}
+.antigravity-folder-btn.secondary {
+	background: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.12))) !important;
+	color: var(--foreground, #18181b) !important;
+}
+.antigravity-folder-btn.secondary:hover {
+	background: var(--sidebar-muted, rgba(128, 128, 128, 0.2)) !important;
+}

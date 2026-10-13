@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const build = require('./build');
 const cssFile = 'style.css';
 const cssPath = path.join(__dirname, cssFile);
 module.exports = win => {
-	try { require('C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/code/folders-bootstrap.js')(win); } catch (e) { console.error('[folders-bootstrap]', e); }
 	const wc = win.webContents;
 	let key = '';
 	let queue = Promise.resolve();
@@ -18,6 +18,9 @@ module.exports = win => {
 	const log = e => {
 		console.error('[custom-ui]', e);
 	};
+	const rebuild = () => {
+		build().catch(log);
+	};
 	const replace = async () => {
 		if (false === wc.isDestroyed() && true === fs.existsSync(cssPath)) {
 			const css = fs.readFileSync(cssPath, 'utf8');
@@ -31,8 +34,13 @@ module.exports = win => {
 		if (cssFile === f) {
 			debounce();
 		}
+		if ('style.less' === f || null === f) {
+			rebuild();
+		}
 	});
 	watcher.on('error', log);
+	const lessWatcher = fs.watch(path.join(__dirname, 'less'), rebuild);
+	lessWatcher.on('error', log);
 	wc.on('dom-ready', () => {
 		queue = queue.then(() => {
 			key = '';
@@ -42,5 +50,7 @@ module.exports = win => {
 	win.on('closed', () => {
 		clearTimeout(timer);
 		watcher.close();
+		lessWatcher.close();
 	});
+	rebuild();
 };

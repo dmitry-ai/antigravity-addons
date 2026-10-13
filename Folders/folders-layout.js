@@ -51,7 +51,9 @@ const collectLayout = source => {
 			}
 		}
 		if ('CallExpression' === node.type) {
-			calls.push({node, ancestors: [...ancestors]});
+			if ('Identifier' === node.callee.type) {
+				calls.push({node, ancestors: [...ancestors]});
+			}
 			if ('createElement' === getMember(node.callee)) {
 				const options = node.arguments[1];
 				const firstClass = getProperty(options, 'className')?.arguments?.[0]?.value;

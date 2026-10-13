@@ -8,12 +8,20 @@ const discover = (root = toolsRoot) => {
 	for (const folder of fs.readdirSync(root, {withFileTypes: true}).filter(item => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
 		const code = path.join(root, folder.name, 'code');
 		const manifest = path.join(code, 'tool.json');
-		if (fs.existsSync(manifest)) {
+		if (!fs.existsSync(manifest)) {
+			if ('Upgrade' !== folder.name && fs.existsSync(code) && fs.readdirSync(code).some(file => /\.[cm]?js$/.test(file))) {
+				throw new Error(`Добавьте code/tool.json для инструмента ${folder.name}: ${code}`);
+			}
+		}
+		else {
 			const tool = JSON.parse(fs.readFileSync(manifest, 'utf8').replace(/^\uFEFF/, ''));
 			if (1 !== tool.schemaVersion || 'string' !== typeof tool.id || !/^[a-z][a-z0-9-]*$/.test(tool.id) || ids.has(tool.id)) {
 				throw new Error(`Некорректный или повторяющийся id модуля: ${manifest}`);
 			}
 			ids.add(tool.id);
+			if (tool.dependsOn && (!Array.isArray(tool.dependsOn) || tool.dependsOn.some(id => 'string' !== typeof id)) || undefined !== tool.order && !Number.isFinite(tool.order) || undefined !== tool.enabled && 'boolean' !== typeof tool.enabled) {
+				throw new Error(`Некорректные enabled, order или dependsOn: ${manifest}`);
+			}
 			if (false !== tool.enabled) {
 				for (const field of ['entry', 'prepare', 'validate']) {
 					if (tool[field]) {
@@ -26,9 +34,6 @@ const discover = (root = toolsRoot) => {
 				}
 				r.push({...tool, code, manifest, order: tool.order ?? 100, dependsOn: tool.dependsOn ?? []});
 			}
-		}
-		else if ('Upgrade' !== folder.name && fs.existsSync(code) && fs.readdirSync(code).some(file => /\.[cm]?js$/.test(file))) {
-			throw new Error(`Добавьте code/tool.json для инструмента ${folder.name}: ${code}`);
 		}
 	}
 	const pending = r.splice(0).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));

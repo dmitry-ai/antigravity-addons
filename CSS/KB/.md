@@ -1,3 +1,5 @@
+> Обновлено 13 октября 2026 года: после обновления используйте ярлык **Antigravity - Upgrade**. Актуальные установка, откат, резервные копии и расширение реестра описаны в [руководстве Upgrade](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Upgrade/KB/README.md). Исходники оформления теперь находятся в `CSS/code/style.less` и `CSS/code/less/`; `style.css` генерируется автоматически. Ниже сохранено прежнее описание; при расхождениях следуйте руководству Upgrade.
+
 # Antigravity: свой CSS для интерфейса — инструкция
 
 ## 1. Как это устроено

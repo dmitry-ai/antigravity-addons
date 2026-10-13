@@ -4,6 +4,7 @@
 	"name": "Иерархические папки",
 	"enabled": true,
 	"order": 20,
+	"dependsOn": ["css"],
 	"entry": "folders-bootstrap.js",
 	"validate": "verify.js"
 }

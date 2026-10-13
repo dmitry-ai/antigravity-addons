@@ -7,11 +7,9 @@
  * subscribe React to configuration changes,
  * and bundle the interactive Folders client controller.
  */
-
 const fs = require('fs');
 const path = require('path');
 const { applyLayout, collectLayout } = require('./folders-layout');
-
 const LOOP_ANCHOR = '(h?.isCollapsed?b.filter(v=>v.id==="standalone"):b).forEach(v=>{';
 const LOOP_END = 'B&&q.push({type:"show-more",id:`show-more-${v.id}`,label:x?`See all (${v.items.length})`:"See less",groupId:v.id,isIndented:w})))}});';
 const HR_ANCHOR = 'function hR(a,b,c,e){var {core:f}=Lc(),g=f.storageService,'; // retained for source compatibility
@@ -22,7 +20,6 @@ const HEADER_PROPS_ANCHOR = 'isActionMenuOpen:m=!1,"data-testid":n})=>{var p=WI(
 const HEADER_DOM_ANCHOR = 'return A.createElement("div",{"data-testid":n,className:Xi("group/section-header';
 const PROJECT_DOM_ANCHOR = '"data-project-card":!0,"aria-expanded":!a.isCollapsed';
 const EMPTY_PLACEHOLDER_ANCHOR = 'T.type==="empty-placeholder"?A.createElement("span",{className:Xi("pr-2.5 select-none text-sm opacity-30 h-8 flex items-center justify-start",T.isIndented?"pl-[30px]":"pl-2")},T.label)';
-
 /**
  * Applies folder grouping transformation to main.js source code.
  * @param {string} source - Original main.js source.
@@ -30,22 +27,21 @@ const EMPTY_PLACEHOLDER_ANCHOR = 'T.type==="empty-placeholder"?A.createElement("
  * @returns {string} Patched main.js source.
  */
 function applyFolderPatch(source, foldersData, { strict = false } = {}) {
-  if (!source || typeof source !== 'string') {
-    return source;
+	let r;
+	result: {
+  if (!source || 'string' !== typeof source) {
+    { r = source; break result; }
   }
-
   let layout;
   try {
     layout = collectLayout(source);
   } catch (error) {
     if (strict) throw error;
     console.warn('[folders-patch] Unsupported application bundle:', error.message);
-    return source;
+    { r = source; break result; }
   }
   // Extract original loop body for each item
-
   const serializedData = JSON.stringify(foldersData || { folders: [], projectFolderMap: {} });
-
   const replacement = `
 var __renderItem=function(v,__fId,__depth){
   var __startLen=q.length;
@@ -86,7 +82,6 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   };
   __projGroups.sort(__projectSorter);
   var __standalone=__allGroups.find(v=>v.id==="standalone");
-
   var __childrenMap={};
   var __validFolderIds=new Set();
   for(var __i=0;__i<__fd.folders.length;__i++){
@@ -96,7 +91,6 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
     if(!__childrenMap[__pId])__childrenMap[__pId]=[];
     __childrenMap[__pId].push(__f);
   }
-
   var __folderSorter=function(a,b){
     var cmp=(a?.name||"").localeCompare(b?.name||"",undefined,{numeric:!0,sensitivity:"base"});
     return cmp!==0?cmp:(a?.id||"").localeCompare(b?.id||"");
@@ -104,7 +98,6 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   for(var __k in __childrenMap){
     __childrenMap[__k].sort(__folderSorter);
   }
-
   var __renderFolderBranch=function(__parentKey,__depth){
     var __levelFolders=__childrenMap[__parentKey]||[];
     for(var __fi=0;__fi<__levelFolders.length;__fi++){
@@ -143,16 +136,13 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
       }
     }
   };
-
   __renderFolderBranch("__root__",0);
-
   for(var __pi=0;__pi<__projGroups.length;__pi++){
     var __assignedFid=__fldMap[__projGroups[__pi].id];
     if(!__assignedFid||!__validFolderIds.has(__assignedFid)){
       __renderItem(__projGroups[__pi],null,0);
     }
   }
-
   if(__standalone){
     __renderItem(__standalone,null,0);
   }
@@ -160,7 +150,6 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   __allGroups.forEach(function(v){__renderItem(v,null,0);});
 }
 `;
-
   // Read client script
   let clientScript = '';
   const clientScriptPath = path.join(__dirname, 'folders-client.js');
@@ -171,22 +160,20 @@ if(c==="project"&&l==="sidebar"&&!h?.isCollapsed&&__fd&&Array.isArray(__fd.folde
   } catch (e) {
     console.warn('[folders-patch] Could not read folders-client.js:', e);
   }
-
   const headerPrefix = `window.__PROJECT_FOLDERS_DATA__ = ${serializedData};\n${clientScript}\n`;
   // Subscribe inside the shared row hook and include the revision in its memo.
   // Inject folderId and folderDepth into outer div and inner CRb component
   const patched = applyLayout(source, layout, replacement, headerPrefix);
-
   // Verify compiled syntax
   try { new (require('vm').Script)(patched); } catch (error) {
     if (strict) throw error;
     console.error('[folders-patch] Invalid transformed JavaScript; returning original bundle:', error.message);
-    return source;
+    { r = source; break result; }
   }
-
-  return patched;
+  { r = patched; break result; }
+	}
+	return r;
 }
-
 module.exports = {
   applyFolderPatch,
   LOOP_ANCHOR,
