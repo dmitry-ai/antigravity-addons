@@ -15,7 +15,7 @@ const DEFAULT_FOLDERS_PATH = path.join(__dirname, 'folders.json').replace(/\\/g,
 let cachedFoldersData = null;
 let cachedPatchedBundle = null;
 let lastSourceHash = null;
-function loadFoldersData(configPath = DEFAULT_FOLDERS_PATH) {
+function loadFoldersData(configPath = DEFAULT_FOLDERS_PATH, strict = false) {
 	let r;
 	result: {
   try {
@@ -26,12 +26,25 @@ function loadFoldersData(configPath = DEFAULT_FOLDERS_PATH) {
 			cachedFoldersData = data;
       { r = cachedFoldersData; break result; }
     }
+    if (strict) throw new Error('Folders configuration is missing');
   } catch (err) {
+    if (strict) throw err;
     console.error('[folders-bootstrap] Failed to read folders.json:', err);
   }
   { r = cachedFoldersData || { folders: [], projectFolderMap: {}, collapsedFolders: [] }; break result; }
 	}
 	return r;
+}
+function notifyWindow(win, data) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.executeJavaScript(`
+      window.__PROJECT_FOLDERS_DATA__ = ${JSON.stringify(data)};
+      window.__PROJECT_FOLDERS_CLIENT__?.notifyUpdate(window.__PROJECT_FOLDERS_DATA__);
+    `).catch(error => console.warn('[folders-bootstrap] Renderer update failed:', error.message));
+  } catch (error) {
+    console.warn('[folders-bootstrap] Renderer update failed:', error.message);
+  }
 }
 function setupWatcher(configPath = DEFAULT_FOLDERS_PATH, win) {
   try {
@@ -39,24 +52,22 @@ function setupWatcher(configPath = DEFAULT_FOLDERS_PATH, win) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    let timer;
     const watcher = fs.watch(dir, (eventType, filename) => {
-      if (filename === path.basename(configPath)) {
-        console.log('[folders-bootstrap] folders.json changed, invalidating bundle cache...');
-        loadFoldersData(configPath);
-        cachedPatchedBundle = null; // Forces re-patch on next request
-        if (win && !win.isDestroyed()) {
-          try {
-            win.webContents.executeJavaScript(`
-              if (window.__PROJECT_FOLDERS_DATA__) {
-                console.log("[folders-client] Config reloaded from disk.");
-              }
-            `).catch(() => {});
-          } catch (_) {}
+      if (filename !== null && String(filename) !== path.basename(configPath)) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        try {
+          const data = loadFoldersData(configPath, true);
+          cachedPatchedBundle = null;
+          notifyWindow(win, data);
+        } catch (error) {
+          console.warn('[folders-bootstrap] Keeping last valid tree:', error.message);
         }
-      }
+      }, 75);
     });
 		watcher.on?.('error', error => console.warn('[folders-bootstrap]', error.message));
-		win?.once?.('closed', () => watcher.close());
+		win?.once?.('closed', () => { clearTimeout(timer); watcher.close(); });
   } catch (e) {
     console.warn('[folders-bootstrap] Could not set up watcher for folders.json:', e);
   }
@@ -185,14 +196,7 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
             // Broadcast to window renderer
             for (const updateWindow of ses._antigravityFoldersWindows) {
               if (updateWindow.isDestroyed()) continue;
-              try {
-                updateWindow.webContents.executeJavaScript(`
-                  window.__PROJECT_FOLDERS_DATA__ = ${JSON.stringify(updated)};
-                  if (window.__PROJECT_FOLDERS_CLIENT__ && typeof window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate === 'function') {
-                    window.__PROJECT_FOLDERS_CLIENT__.notifyUpdate(${JSON.stringify(updated)});
-                  }
-                `).catch(() => {});
-              } catch (_) {}
+              notifyWindow(updateWindow, updated);
             }
             { r = new Response(JSON.stringify({ success: true, data: updated }), {
               status: 200,

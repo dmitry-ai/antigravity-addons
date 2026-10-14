@@ -16,13 +16,12 @@ function findRowRange(patched, source) {
 	const node = parseExpressionAt(patched, start, {ecmaVersion: 'latest'});
 	return {start, end: node.end};
 }
-function loadBootstrap(source = fs.readFileSync(bootstrapPath, 'utf8')) {
-  const watchers = [];
+function loadBootstrap(source = fs.readFileSync(bootstrapPath, 'utf8'), watchers = []) {
   const requireMock = name => {
 		let r;
 		result: {
     if ('electron' === name) { r = { net: { fetch: async () => { throw new Error('Unexpected network request'); } } }; break result; }
-    if ('fs' === name) { r = { ...fs, watch: () => { const r = { close() {}, on() {} }; watchers.push(r); return r; } }; break result; }
+    if ('fs' === name) { r = { ...fs, watch: (directory, callback) => { const r = { callback, close() {}, on() {} }; watchers.push(r); return r; } }; break result; }
     { r = actualRequire(name); break result; }
 		}
 		return r;
@@ -30,13 +29,52 @@ function loadBootstrap(source = fs.readFileSync(bootstrapPath, 'utf8')) {
   requireMock.resolve = actualRequire.resolve;
   requireMock.cache = require.cache;
   const module = { exports: {} };
-  const run = vm.compileFunction(source, ['require', 'module', '__dirname', 'console', 'Response'], { filename: bootstrapPath });
-  run(requireMock, module, codeRoot, { log() {}, warn() {}, error() {} }, Response);
+  const run = vm.compileFunction(source, ['require', 'module', '__dirname', 'console', 'Response', 'setTimeout', 'clearTimeout'], { filename: bootstrapPath });
+  run(requireMock, module, codeRoot, { log() {}, warn() {}, error() {} }, Response, setTimeout, clearTimeout);
   return module.exports;
 }
 function mockWindow(session) {
   return { isDestroyed: () => false, once() {}, webContents: { session, executeJavaScript: async source => { session.updates.push(source); } } };
 }
+
+test('External atomic folder writes update every open renderer without reloading', async () => {
+  const os = require('node:os');
+  const watchers = [];
+  const init = loadBootstrap(undefined, watchers);
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'folders-live-update-'));
+  const configPath = path.join(scratch, 'folders.json');
+  const initial = { folders: [{ id: 'day', name: '14', parentId: null }], projectFolderMap: {} };
+  fs.writeFileSync(configPath, JSON.stringify(initial));
+  const session = { updates: [], protocol: { handle() {} } };
+  try {
+    init(mockWindow(session), configPath);
+    init(mockWindow(session), configPath);
+    const next = {...initial, projectFolderMap: { fungi: 'day' }};
+    const temporary = path.join(scratch, 'next.json');
+    fs.writeFileSync(temporary, JSON.stringify(next));
+    fs.renameSync(temporary, configPath);
+    for (const watcher of watchers) {
+      watcher.callback('rename', 'folders.json');
+      watcher.callback('change', 'folders.json');
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(session.updates.length, 2, 'One debounced update for each open renderer');
+    for (const source of session.updates) {
+      let notified;
+      const window = { __PROJECT_FOLDERS_CLIENT__: { notifyUpdate(data) { notified = data; } } };
+      vm.runInNewContext(source, { window });
+      assert.equal(window.__PROJECT_FOLDERS_DATA__.projectFolderMap.fungi, 'day');
+      assert.equal(notified, window.__PROJECT_FOLDERS_DATA__);
+    }
+    fs.writeFileSync(configPath, '{');
+    for (const watcher of watchers) watcher.callback('change', 'folders.json');
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(session.updates.length, 2, 'Partial JSON must not clear the visible tree');
+  } finally {
+    assert.ok(path.resolve(scratch).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(scratch, {recursive: true, force: true});
+  }
+});
 test('Electron bootstrap loads and installs its real protocol handler', async () => {
   const init = loadBootstrap(); // The missing path import fails here, before any UI can load.
   assert.equal(typeof init, 'function');

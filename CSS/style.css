@@ -76,6 +76,24 @@ button[data-project-card] svg {
 	height: 16px !important;
 	width: 16px !important;
 }
+/* Project names use the row width; reserve space for actions only while visible. */
+[data-testid='conversation-list-sidebar'] button[data-project-card] {
+	padding-right: 6px !important;
+}
+[data-testid='conversation-list-sidebar'] button[data-project-card] > div,
+[data-testid='conversation-list-sidebar'] button[data-project-card] > div > div,
+[data-testid='conversation-list-sidebar'] button[data-project-card] div:has(> span.truncate) {
+	flex: 1 1 0% !important;
+	min-width: 0 !important;
+}
+[data-testid='conversation-list-sidebar'] button[data-project-card] span.truncate {
+	flex: 1 1 0% !important;
+	min-width: 0 !important;
+	max-width: none !important;
+}
+[data-testid='conversation-list-sidebar'] .group\/header:has(button[data-project-card]):is(:hover, :focus-within) button[data-project-card] {
+	padding-right: 64px !important;
+}
 [data-testid='conversation-row-sidebar'] {
 	font-size: 12px !important;
 	height: 22px !important;
