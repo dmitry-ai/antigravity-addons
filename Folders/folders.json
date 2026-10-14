@@ -48,15 +48,32 @@
       "parentId": "folder-upwork",
       "color": "#10b981",
       "isExpanded": true
+    },
+    {
+      "id": "folder-11",
+      "name": "11",
+      "parentId": "folder-10",
+      "color": "#10b981",
+      "isExpanded": true
+    },
+    {
+      "id": "folder-14",
+      "name": "14",
+      "parentId": "folder-10",
+      "color": "#10b981",
+      "isExpanded": true
     }
   ],
   "projectFolderMap": {
-    "d464191e-4dc5-4ca8-a7d7-ed412d141f5f": "folder-10",
+    "d464191e-4dc5-4ca8-a7d7-ed412d141f5f": "folder-11",
     "0b25ef38-ecf5-44eb-8cc2-1f8b4611e19e": "folder-upwork",
     "c9d81597-a231-4809-baf0-f4873e50b7c2": "folder-proposals",
     "3b33b970-7f45-42b5-ba3d-a82584d1e07b": "folder-clients",
     "de92be65-db72-43f0-8c78-7d7c2ebf825d": "folder-19",
-    "7aa4307d-acbb-41e2-a69e-8c4480e80ebf": "folder-clients"
+    "7aa4307d-acbb-41e2-a69e-8c4480e80ebf": "folder-clients",
+    "666408e8-b2cc-4582-a65c-31e4528935a0": "folder-14",
+    "0fb44f37-c07a-4011-aeb0-77d2e77d32d3": "folder-14",
+    "14d749d5-db2e-49ea-9ff9-eaa70e1bda62": "folder-upwork"
   },
   "collapsedFolders": []
 }
