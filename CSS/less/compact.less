@@ -44,32 +44,44 @@
 	mask-image: none !important;
 }
 [data-testid='conversation-list-sidebar'] [data-index] {
-	padding-bottom: 1px !important;
+	padding-bottom: 0 !important;
 	padding-top: 0 !important;
 }
 [data-testid='section-header'] {
-	height: 20px !important;
-	min-height: 20px !important;
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+}
+[data-testid='section-header'] > .group\/section-header {
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+	padding-bottom: 0 !important;
+	padding-top: 0 !important;
 }
 [data-testid='section-header'] h2 {
 	font-size: 11px !important;
+	line-height: @tree-line-height !important;
 	margin: 0 !important;
+}
+[data-testid='section-header'] h2 button {
+	line-height: @tree-line-height !important;
 }
 button[data-project-card] {
 	font-size: 12px !important;
-	height: 22px !important;
-	min-height: 22px !important;
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+	line-height: @tree-line-height !important;
 	padding-bottom: 0 !important;
 	padding-top: 0 !important;
 }
 button[data-project-card] span {
 	font-size: 12px !important;
+	line-height: @tree-line-height !important;
 }
 button[data-project-card] div {
 	height: 100% !important;
 }
 button[data-project-card] .w-6.h-6 {
-	height: 18px !important;
+	height: @tree-row-height !important;
 	width: 18px !important;
 }
 button[data-project-card] svg {
@@ -94,20 +106,34 @@ button[data-project-card] svg {
 [data-testid='conversation-list-sidebar'] .group\/header:has(button[data-project-card]):is(:hover, :focus-within) button[data-project-card] {
 	padding-right: 64px !important;
 }
+[data-testid='conversation-list-sidebar'] .group\/header:has(button[data-project-card]) button:not([data-project-card]) {
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+	padding-bottom: 0 !important;
+	padding-top: 0 !important;
+}
 [data-testid='conversation-row-sidebar'] {
 	font-size: 12px !important;
-	height: 22px !important;
-	min-height: 22px !important;
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
 	padding-bottom: 0 !important;
 	padding-top: 0 !important;
 }
 [data-testid='conversation-row-sidebar'] span {
 	font-size: 12px !important;
-	line-height: 20px !important;
+	line-height: @tree-line-height !important;
 }
 [data-testid='conversation-row-sidebar'] button {
-	height: 20px !important;
-	min-height: 20px !important;
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
 	padding: 0 !important;
 	width: 20px !important;
+}
+[data-testid='conversation-list-sidebar'] [data-testid='empty-placeholder'],
+[data-testid='conversation-list-sidebar'] [data-index] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+	line-height: @tree-line-height !important;
+	padding-bottom: 0 !important;
+	padding-top: 0 !important;
 }

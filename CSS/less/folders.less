@@ -10,7 +10,7 @@
 [data-testid='section-header'][data-title*='📁'],
 [data-testid='section-header'][data-title^='📁'] {
 	cursor: pointer;
-	margin-top: 2px !important;
+	margin-top: 0 !important;
 	opacity: 0.95 !important;
 }
 [data-testid='section-header'][data-folder-id] h2,
@@ -47,7 +47,7 @@
 	align-items: center !important;
 	justify-content: center !important;
 	width: 20px !important;
-	height: 20px !important;
+	height: @tree-row-height !important;
 	border-radius: 4px !important;
 	border: none !important;
 	background: transparent !important;
@@ -73,7 +73,7 @@
 	align-items: center !important;
 	justify-content: center !important;
 	width: 18px !important;
-	height: 18px !important;
+	height: @tree-row-height !important;
 	border-radius: 4px !important;
 	border: none !important;
 	background: transparent !important;
@@ -104,11 +104,11 @@
 	border-radius: 4px !important;
 	font-size: 11.5px !important;
 	font-weight: 500 !important;
-	padding: 1px 4px !important;
+	padding: 0 4px !important;
 	margin: 0 !important;
 	outline: none !important;
 	width: calc(100% - 24px) !important;
-	height: 18px !important;
+	height: @tree-row-height !important;
 	box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3) !important;
 }
 /* Подсветка папки при Drag & Drop */
