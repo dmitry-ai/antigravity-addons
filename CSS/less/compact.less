@@ -130,7 +130,8 @@ button[data-project-card] svg {
 	width: 20px !important;
 }
 [data-testid='conversation-list-sidebar'] [data-testid='empty-placeholder'],
-[data-testid='conversation-list-sidebar'] [data-index] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
+[data-testid='conversation-list-sidebar'] [data-index] > div.w-full.group:not(.h-full):not(:has([data-testid])),
+[data-testid='conversation-list-sidebar'] [data-index] > div.w-full.group:not(.h-full):not(:has([data-testid])) > button {
 	height: @tree-row-height !important;
 	min-height: @tree-row-height !important;
 	line-height: @tree-line-height !important;
