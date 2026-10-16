@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -6,7 +7,7 @@ const vm = require('node:vm');
 const archive = require('./archive');
 const host = require('./host');
 const {discover} = require('./registry');
-const {assertCompatibleExecutable, run} = require('./upgrade');
+const {assertCompatibleExecutable, assertStopped, isNodeProcess, run} = require('./upgrade');
 const workRoot = path.join(__dirname, 'work');
 const fixture = async (context, version = '2.23.0', filename = 'window.js') => {
 	fs.mkdirSync(workRoot, {recursive: true});
@@ -167,4 +168,51 @@ test('Native Electron integrity checks stop unsupported modification before any 
 	fs.writeFileSync(executable, Buffer.from('unknown format'));
 	assert.throws(() => assertCompatibleExecutable(location), /Требуется адаптация/);
 	assert.equal(archive.digest(fs.readFileSync(options.archivePath)), before);
+});
+const nodeSidecar = context => {
+	fs.mkdirSync(workRoot, {recursive: true});
+	const directory = fs.mkdtempSync(path.join(workRoot, 'процессы-тест-'));
+	context.after(() => {
+		const resolved = path.resolve(directory);
+		assert.ok(resolved.startsWith(`${path.resolve(workRoot)}${path.sep}`));
+		fs.rmSync(resolved, {force: true, recursive: true});
+	});
+	const wrapper = path.join(directory, 'Antigravity/bin/agy-node.cmd');
+	fs.mkdirSync(path.dirname(wrapper), {recursive: true});
+	const executable = 'C:\\Users\\Имя пользователя\\Programs\\antigravity\\Antigravity.exe';
+	fs.writeFileSync(wrapper, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${executable}" %*\r\n`);
+	const args = '--import=file:///C:/Users/user/.gemini/antigravity/lib/node_modules/sidecar_sdk/register_loader.js dist/server.cjs';
+	const info = {ProcessId: 34068, CommandLine: `"${executable}"  ${args}`, ParentName: 'cmd.exe', ParentCommandLine: `C:\\Windows\\system32\\cmd.exe /c "${wrapper}" ${args}`};
+	return {wrapper, executable, info};
+};
+test('The official Node wrapper identifies a sidecar without treating windowless Electron as stopped', {skip: 'win32' !== process.platform}, context => {
+	const {wrapper, executable, info} = nodeSidecar(context);
+	assert.equal(isNodeProcess(info), true);
+	assert.equal(isNodeProcess({...info, ParentCommandLine: info.ParentCommandLine.replace(`"${wrapper}"`, wrapper)}), true);
+	assert.equal(isNodeProcess({...info, CommandLine: `"${executable}"`}), false);
+	assert.equal(isNodeProcess({...info, CommandLine: `"${executable}" --type=utility`}), false);
+	assert.equal(isNodeProcess({...info, ParentName: 'Antigravity.exe'}), false);
+	assert.equal(isNodeProcess({...info, ParentCommandLine: null}), false);
+	assert.equal(isNodeProcess({...info, CommandLine: null}), false);
+	assert.equal(isNodeProcess({...info, ParentCommandLine: info.ParentCommandLine + ' --extra'}), false);
+	fs.writeFileSync(wrapper, `@echo off\n"${executable}" %*\n`);
+	assert.equal(isNodeProcess(info), false);
+	fs.writeFileSync(wrapper, '@echo off\nset ELECTRON_RUN_AS_NODE=1\n"C:\\Other\\Antigravity.exe" %*\n');
+	assert.equal(isNodeProcess(info), false);
+	fs.rmSync(wrapper);
+	assert.equal(isNodeProcess(info), false);
+});
+test('Process checks allow the Node sidecar and still block GUI or inaccessible processes with their PIDs', {skip: 'win32' !== process.platform}, context => {
+	const {info} = nodeSidecar(context);
+	let processes = [info];
+	context.mock.method(childProcess, 'execFileSync', () => JSON.stringify(processes));
+	assert.doesNotThrow(() => assertStopped());
+	processes = [];
+	assert.doesNotThrow(() => assertStopped());
+	processes = [info, {ProcessId: 456, CommandLine: '"C:\\Programs\\Antigravity.exe"', ParentName: 'explorer.exe'}];
+	assert.throws(() => assertStopped(), /Antigravity работает \(PID: 456\)/);
+	processes = [{ProcessId: 789, CommandLine: null}];
+	assert.throws(() => assertStopped(), /PID: 789/);
+	processes = {};
+	assert.throws(() => assertStopped(), /неверный ответ Windows/);
 });

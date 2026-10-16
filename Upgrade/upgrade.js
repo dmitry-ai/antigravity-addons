@@ -49,13 +49,48 @@ const assertCompatibleExecutable = archivePath => {
 		}
 	}
 };
+const isNodeProcess = info => {
+	let r = false;
+	if ('cmd.exe' === info.ParentName?.toLowerCase() && info.CommandLine && info.ParentCommandLine) {
+		const parent = info.ParentCommandLine.match(/^(?:"[^"]*\\cmd\.exe"|[^\s"]*\\cmd\.exe)\s+\/c\s+(?:"([^"]*\\Antigravity\\bin\\agy-node\.cmd)"|([^\s"]*\\Antigravity\\bin\\agy-node\.cmd))\s+([\s\S]+)$/i);
+		const child = info.CommandLine.match(/^(?:"([^"]*\\Antigravity\.exe)"|([^\s"]*\\Antigravity\.exe))\s+([\s\S]+)$/i);
+		if (parent && child && parent[3].trim() === child[3].trim()) {
+			try {
+				const lines = fs.readFileSync(parent[1] || parent[2], 'utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+				const executable = lines[2]?.match(/^"([^"]+)"\s+%\*$/);
+				// Only the known Node wrapper proves that this EXE is not loading the Electron app.
+				r = 3 === lines.length && /^@echo off$/i.test(lines[0]) && /^set (?:ELECTRON_RUN_AS_NODE=1|"ELECTRON_RUN_AS_NODE=1")$/i.test(lines[1]) && !!executable && path.win32.normalize(executable[1]).toLowerCase() === path.win32.normalize(child[1] || child[2]).toLowerCase();
+			}
+			catch {
+				// An unreadable or changed wrapper leaves this process blocking the upgrade.
+			}
+		}
+	}
+	return r;
+};
+const listProcesses = () => {
+	const script = `$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$items = @(Get-CimInstance Win32_Process -Filter "Name = 'Antigravity.exe'" | ForEach-Object {
+	$parent = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $_.ParentProcessId)
+	[pscustomobject]@{ProcessId = $_.ProcessId; CommandLine = $_.CommandLine; ParentName = $parent.Name; ParentCommandLine = $parent.CommandLine}
+})
+ConvertTo-Json -InputObject $items -Compress`;
+	const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+	const output = childProcess.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true, timeout: 15000});
+	const r = JSON.parse(output.replace(/^\uFEFF/, ''));
+	if (!Array.isArray(r) || r.some(info => !Number.isInteger(info.ProcessId) || 0 >= info.ProcessId)) {
+		throw new Error('Не удалось проверить процессы Antigravity: неверный ответ Windows');
+	}
+	return r;
+};
 const assertStopped = () => {
 	if ('win32' !== process.platform) {
 		throw new Error('Эта установка предназначена для Windows');
 	}
-	const output = childProcess.execFileSync('tasklist.exe', ['/FI', 'IMAGENAME eq Antigravity.exe', '/FO', 'CSV', '/NH'], {encoding: 'utf8', windowsHide: true, timeout: 15000});
-	if (/^"Antigravity\.exe"/im.test(output)) {
-		throw new Error('Antigravity работает. Сохраните работу и полностью выйдите через Ctrl+Q / Quit в трее во всех профилях Windows, затем запустите ярлык повторно.');
+	const processes = listProcesses().filter(info => !isNodeProcess(info));
+	if (processes.length) {
+		throw new Error(`Antigravity работает (PID: ${processes.map(info => info.ProcessId).join(', ')}). Сохраните работу и полностью выйдите через Ctrl+Q / Quit в трее во всех профилях Windows, затем запустите ярлык повторно.`);
 	}
 };
 const findArchive = appDirectory => {
@@ -265,4 +300,4 @@ if (require.main === module) {
 		process.exitCode = 1;
 	});
 }
-module.exports = {assertCompatibleExecutable, assertStopped, findArchive, parseArguments, run};
+module.exports = {assertCompatibleExecutable, assertStopped, findArchive, isNodeProcess, parseArguments, run};

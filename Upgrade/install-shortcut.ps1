@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $desktopPath = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktopPath 'Antigravity - Upgrade.lnk'
+$shortcutPath = Join-Path $desktopPath 'Upg.lnk'
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'run-upgrade.ps1') + '"'
