@@ -1,5 +1,7 @@
 # CSS — оформление Antigravity через Less
 
+С 18 октября 2026 года блок New Conversation / Conversation History / Automations / Customizations в сайдбаре скрыт вместе с разделителем. Дерево Projects/Folders начинается сразу под панелью навигации. Верхнее меню занимает 24 px, панель навигации и её место в сайдбаре — 26 px. Настройки и штатные верхние кнопки доступны.
+
 Модуль добавляет компактное оформление сайдбара и стили иерархических папок. Исходники находятся в [style.less](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/code/style.less) и папке `CSS/code/less/`. Файл `style.css` генерируется из них и затем вставляется в каждое окно Antigravity.
 
 ## Правка оформления
@@ -115,3 +117,5 @@ node 'C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/too
 | Ошибка применения CSS | Журнал `%APPDATA%/Antigravity/logs/main.log`, метки `[custom-ui]` и `[antigravity-tools:css]`. |
 
 Изменения JavaScript в `bootstrap.js` и `build.js` требуют полного перезапуска Antigravity: модули уже загружены в основном процессе. Изменения Less подхватываются наблюдателями.
+
+При позднем подключении к уже загруженному окну CSS применяется сразу; ожидать следующего `dom-ready` не требуется. Повторное подключение освобождает прежние наблюдатели и вставленный CSS. Тест: `node --test primary/tools/CSS/code/bootstrap.test.js` из корня Antigravity.

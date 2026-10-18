@@ -21,6 +21,20 @@ const applyLayout = (source, layout, replacement, prefix) => {
 	const row = getProperty(section.node.arguments[1], 'data-title').object.name;
 	addProperties(edits, section.node.arguments[1], `'data-folder-id':${row}.folderId,'data-folder-depth':${row}.folderDepth`);
 	addProperties(edits, section.node.arguments[2].arguments[1], `folderId:${row}.folderId,folderDepth:${row}.folderDepth`);
+	const actions = getProperty(section.node.arguments[2].arguments[1], 'headerActions');
+	const create = layout.createProject;
+	edits.push({start: actions.start, end: actions.end, text: `${row}.folderId?${react}.createElement(${create.name},{folderId:${row}.folderId,ariaLabel:'Создать проект в «'+${row}.folderName+'»'}):(${source.slice(actions.start, actions.end)})`});
+	addProperties(edits, create.func.params[0], 'folderId:__createFolderId');
+	addProperties(edits, create.node.arguments[1], `'data-folder-create-project':__createFolderId`);
+	const onClick = getProperty(create.menu.arguments[1], 'onClick');
+	edits.push({start: onClick.start, end: onClick.end, text: `(...__args)=>window.__PROJECT_FOLDERS_CLIENT__.runProjectCreation(__createFolderId,()=>(${source.slice(onClick.start, onClick.end)})(...__args))`});
+	const save = layout.saveProject;
+	edits.push({start: save.func.body.start + 1, end: save.func.body.start + 1, text: 'const __folderCreation=window.__PROJECT_FOLDERS_CLIENT__.captureProjectCreation();'});
+	for (const call of save.calls) {
+		const original = source.slice(call.start, call.end);
+		const project = source.slice(call.arguments[0].start, call.arguments[0].end);
+		edits.push({start: call.start, end: call.end, text: `window.__PROJECT_FOLDERS_CLIENT__.saveCreatedProject(()=>${original},${project}.id,__folderCreation)`});
+	}
 	addProperties(edits, header.func.params[0], 'folderId:__folderId,folderDepth:__folderDepth');
 	const title = getValue(getProperty(header.func.params[0], 'title'));
 	addProperties(edits, header.node.arguments[1], `'data-title':${title},'data-folder-id':__folderId,'data-folder-depth':__folderDepth`);
@@ -41,6 +55,7 @@ const collectLayout = source => {
 	const rows = [];
 	const sites = {section: [], header: [], project: [], empty: [], virtual: []};
 	const calls = [];
+	const createButtons = [], projectSaves = new Map();
 	walk.fullAncestor(ast, (node, state, ancestors) => {
 		if ('FunctionDeclaration' === node.type) {
 			const declarations = node.body.body.filter(statement => 'VariableDeclaration' === statement.type).flatMap(statement => statement.declarations);
@@ -51,6 +66,13 @@ const collectLayout = source => {
 			}
 		}
 		if ('CallExpression' === node.type) {
+			if ('createProject' === getMember(node.callee)) {
+				const func = getFunction(ancestors);
+				if (func?.async && 'Identifier' === node.arguments[0]?.type) {
+					const save = projectSaves.get(func) || {func, calls: []};
+					save.calls.push(node); projectSaves.set(func, save);
+				}
+			}
 			if ('Identifier' === node.callee.type) {
 				calls.push({node, ancestors: [...ancestors]});
 			}
@@ -58,6 +80,10 @@ const collectLayout = source => {
 				const options = node.arguments[1];
 				const firstClass = getProperty(options, 'className')?.arguments?.[0]?.value;
 				const site = {node, func: getFunction(ancestors)};
+				if ('sidebar-add-project-button' === getProperty(options, 'data-testid')?.value) {
+					const declaration = [...ancestors].reverse().find(n => 'VariableDeclarator' === n.type && n.init === site.func);
+					createButtons.push({...site, name: declaration?.id.name});
+				}
 				if (getProperty(options, 'data-project-card')) {
 					sites.project.push(site);
 				}
@@ -77,6 +103,14 @@ const collectLayout = source => {
 		}
 	});
 	const row = requireOne(rows, 'генератор строк');
+	const createProject = requireOne(createButtons, 'кнопка создания проекта');
+	const menuItems = [];
+	walk.simple(createProject.func.body, {CallExpression: node => {
+		if ('createElement' === getMember(node.callee) && getProperty(node.arguments[1], 'onClick') && getProperty(node.arguments[1], 'tooltipText')) menuItems.push(node);
+	}});
+	createProject.menu = requireOne(menuItems, 'пункт создания проекта');
+	if (!createProject.name) throw new Error('Не найден компонент создания проекта');
+	const saveProject = requireOne([...projectSaves.values()].filter(save => save.calls.length === 3), 'сохранение нового проекта');
 	const loopCandidates = [];
 	walk.simple(row.node.body, {CallExpression: node => {
 		if ('forEach' === getMember(node.callee) && 'ConditionalExpression' === node.callee.object?.type && source.slice(node.callee.object.test.start, node.callee.object.test.end).includes(`${row.fields.get('sectionHeader')}?.isCollapsed`)) {
@@ -99,7 +133,8 @@ const collectLayout = source => {
 			loop,
 			body: source.slice(loop.arguments[0].body.start + 1, loop.arguments[0].body.end - 1),
 			names: {b: row.fields.get('groups'), c: row.fields.get('groupBy'), h: row.fields.get('sectionHeader'), l: row.fields.get('variant'), q: row.returned.name, t: requireOne(collapse, 'состояние раскрытия папок').id.name, v: loop.arguments[0].params[0].name}
-		}
+		},
+		createProject, saveProject
 	};
 	if (!react || 'ArrayExpression' !== r.memo?.type || 'ObjectPattern' !== r.header.func.params[0]?.type || 'ObjectPattern' !== r.project.func.params[0]?.type) {
 		throw new Error('Изменилась структура React-компонентов Antigravity');

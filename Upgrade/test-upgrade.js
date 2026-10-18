@@ -4,11 +4,44 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const {EventEmitter} = require('node:events');
 const archive = require('./archive');
 const host = require('./host');
 const {discover} = require('./registry');
 const {assertCompatibleExecutable, assertStopped, isNodeProcess, run} = require('./upgrade');
 const workRoot = path.join(__dirname, 'work');
+
+test('all later windows, including fourth and sixth, receive modules once through native creation events', () => {
+	const app = new EventEmitter(), module = {exports: {}}, existing = [];
+	const make = (url = '') => {
+		const win = new EventEmitter();win.loaded = [];win.isDestroyed = () => false;
+		win.webContents = new EventEmitter();win.webContents.getURL = () => url;
+		win.navigate = value => {url = value;win.webContents.emit('did-start-navigation', {}, url, false, true);win.webContents.emit('dom-ready');};
+		return win;
+	};
+	const main = make('https://127.0.0.1:54321/');existing.push(main);
+	const loader = vm.compileFunction(fs.readFileSync(path.join(__dirname, 'bootstrap.js'), 'utf8'), ['require', 'module', 'console']);
+	loader(name => 'electron' === name ? {app, BrowserWindow: {getAllWindows: () => existing}} : './registry' === name ? {discover: () => [{id: 'css', entry: 'css'}, {id: 'folders', entry: 'folders'}]} : win => win.loaded.push(name), module, console);
+	module.exports(main);
+	for (let index = 2; index <= 6; index++) {
+		const win = make();app.emit('browser-window-created', {}, win);
+		win.navigate('https://127.0.0.1:54321/');module.exports(win);
+		assert.deepEqual(win.loaded, ['css', 'folders'], `Window ${index}`);
+		win.emit('closed');assert.equal(win.webContents.listenerCount('dom-ready'), 0);
+	}
+	assert.deepEqual(main.loaded, ['css', 'folders']);assert.equal(app.listenerCount('browser-window-created'), 1);
+	const external = make();app.emit('browser-window-created', {}, external);external.navigate('https://example.com/');assert.deepEqual(external.loaded, []);
+});
+
+test('a failed module is retried on ready without duplicating successful modules', () => {
+	const app = new EventEmitter(), module = {exports: {}}, win = new EventEmitter();
+	win.isDestroyed = () => false;win.webContents = new EventEmitter();win.webContents.getURL = () => 'https://localhost:54321/';
+	let attempts = 0, applied = 0;
+	const loader = vm.compileFunction(fs.readFileSync(path.join(__dirname, 'bootstrap.js'), 'utf8'), ['require', 'module', 'console']);
+	loader(name => 'electron' === name ? {app, BrowserWindow: {getAllWindows: () => [win]}} : './registry' === name ? {discover: () => [{id: 'css', entry: 'css'}, {id: 'folders', entry: 'folders'}]} : 'css' === name ? () => applied++ : () => {if (++attempts === 1) throw Error('temporary');}, module, {error() {}});
+	module.exports(win);win.webContents.emit('dom-ready');
+	assert.equal(attempts, 2);assert.equal(applied, 1);
+});
 const fixture = async (context, version = '2.23.0', filename = 'window.js') => {
 	fs.mkdirSync(workRoot, {recursive: true});
 	const directory = fs.mkdtempSync(path.join(workRoot, 'upgrade-тест-'));
@@ -101,7 +134,7 @@ test('New modules are discovered automatically, ordered by dependencies, and run
 	assert.deepEqual(discover(options.toolsRoot).map(tool => tool.id), ['alpha', 'beta']);
 	const module = {exports: {}};
 	const loader = vm.compileFunction(fs.readFileSync(path.join(__dirname, 'bootstrap.js'), 'utf8'), ['require', 'module', 'console']);
-	loader(name => './registry' === name ? {discover: () => discover(options.toolsRoot)} : require(name), module, console);
+	loader(name => './registry' === name ? {discover: () => discover(options.toolsRoot)} : 'electron' === name ? {} : require(name), module, console);
 	const win = {loaded: [], isDestroyed: () => false};
 	module.exports(win);
 	module.exports(win);

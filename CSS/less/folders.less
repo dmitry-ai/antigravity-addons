@@ -62,9 +62,16 @@
 }
 /* Кнопка добавления подпапки (+) и кнопка опций папки (...) */
 .antigravity-folder-actions {
-	display: inline-flex !important;
-	align-items: center !important;
-	gap: 2px !important;
+	display: none !important;
+}
+[data-folder-create-project] {
+	width: 18px !important;
+	height: @tree-row-height !important;
+	min-height: @tree-row-height !important;
+	// Keep the native menu anchor for the right-click action, without hover controls.
+	visibility: hidden !important;
+	pointer-events: none !important;
+	opacity: 0 !important;
 }
 .btn-folder-add,
 .btn-folder-options {
@@ -134,6 +141,9 @@
 	padding: 4px !important;
 	min-width: 190px !important;
 	max-width: 280px !important;
+	max-height: calc(100dvh - 16px) !important;
+	overflow-y: auto !important;
+	box-sizing: border-box !important;
 	font-family: inherit !important;
 	font-size: 12px !important;
 	color: var(--foreground, #18181b) !important;
@@ -149,11 +159,87 @@
 	align-items: center !important;
 	justify-content: space-between !important;
 	gap: 8px !important;
+	flex-shrink: 0 !important;
+	white-space: nowrap !important;
 	padding: 5px 8px !important;
 	border-radius: 5px !important;
 	cursor: pointer !important;
 	color: var(--foreground, #18181b) !important;
 	transition: background-color 100ms ease, color 100ms ease !important;
+}
+.antigravity-folder-menu-item > span:first-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.antigravity-folder-picker {
+	display: flex;
+	flex-direction: column;
+	width: 250px;
+	min-width: 0 !important;
+	max-width: calc(100dvw - 16px) !important;
+	animation: none !important;
+}
+.antigravity-folder-menu-title {
+	flex-shrink: 0;
+	padding: 4px 8px 6px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--muted-foreground, #71717a);
+}
+.antigravity-folder-targets {
+	min-height: 24px;
+	max-height: min(260px, calc(100dvh - 130px));
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.antigravity-folder-target {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 24px;
+	padding-right: 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	white-space: nowrap;
+	font-size: 12px;
+	line-height: 1;
+	outline: none;
+}
+.antigravity-folder-target:is(:hover, :focus),
+.antigravity-folder-target[aria-selected='true'] {
+	background: var(--sidebar-secondary, var(--secondary, rgba(128, 128, 128, 0.12)));
+}
+.antigravity-folder-target-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 16px;
+	width: 16px;
+	height: 20px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted-foreground, #71717a);
+	cursor: pointer;
+}
+.antigravity-folder-target-icon {
+	display: inline-flex;
+	flex: 0 0 14px;
+	width: 14px;
+	height: 14px;
+	color: var(--muted-foreground, #71717a);
+	svg { width: 14px; height: 14px; }
+}
+.antigravity-folder-target-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.antigravity-folder-target-check {
+	flex: 0 0 12px;
+	font-size: 11px;
 }
 .antigravity-folder-menu-item:hover,
 .antigravity-folder-menu-item:focus {

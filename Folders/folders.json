@@ -104,6 +104,13 @@
       "parentId": "folder-10",
       "color": "#10b981",
       "isExpanded": true
+    },
+    {
+      "id": "folder-3323a38079e040ee",
+      "name": "18",
+      "parentId": "folder-10",
+      "color": "#10b981",
+      "isExpanded": true
     }
   ],
   "projectFolderMap": {
@@ -147,7 +154,9 @@
     "7469b7c8-b77e-4136-b5e6-c5134606cfd4": "folder-3700ed5bc35a4ebf",
     "7f55f43d-1c38-4421-b2a7-5d60a549ff28": "folder-3700ed5bc35a4ebf",
     "b9c9f72d-ee81-416a-ae3a-006a3a1cafb2": "folder-3700ed5bc35a4ebf",
-    "e8e28bce-e23f-45a1-bc1e-402f9af2e8c3": "folder-upwork"
+    "e8e28bce-e23f-45a1-bc1e-402f9af2e8c3": "folder-upwork",
+    "eb90a8ca-dc8f-42f3-81ed-bdd3d4bedcfb": "folder-10-1",
+    "385e5916-72cc-4ac8-ae77-6845ffbe5f49": "folder-3323a38079e040ee"
   },
   "collapsedFolders": []
 }

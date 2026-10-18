@@ -1,5 +1,7 @@
 # Upgrade — восстановление инструментов Antigravity
 
+С 18 октября 2026 года загрузчик дополнительно наблюдает `browser-window-created`, начало навигации и готовность страницы каждого окна. CSS и Folders подключаются ко всем местным окнам приложения, в том числе при обходе первоначальной фабрики окна. Числового ограничения количества окон нет. Успешные модули не дублируются, неудачное подключение допускает повторную попытку. В работе Antigravity 2.24.0 через CDP проверены шесть окон, созданных штатным обработчиком `Ctrl+Shift+N`; тестовые окна затем закрыты.
+
 После обновления Antigravity запустите ярлык **Upg** на Рабочем столе. Он возвращает подключение всех включённых модулей из `primary/tools`: сейчас это CSS и Folders. Новые модули регистрируются через `code/tool.json`; менять Upgrade для их добавления не нужно.
 
 Руководства модулей: [правка Less и управление CSS](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/CSS/KB/README.md), [управление папками](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/KB/README.md), [архитектура Folders](C:/work/research/provision/code/Software/Google/AI/Antigravity/primary/tools/Folders/KB/METHOD_1_SIDEBAR_FOLDERS.md).

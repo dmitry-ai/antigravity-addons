@@ -89,9 +89,10 @@ function initFoldersHook(win, configPath = DEFAULT_FOLDERS_PATH) {
     console.warn('[folders-bootstrap] No session found on webContents.');
     { r = undefined; break result; }
   }
+  ses._antigravityFoldersWindows ||= new Set();
+  if (ses._antigravityFoldersWindows.has(win)) return;
   loadFoldersData(configPath);
   setupWatcher(configPath, win);
-  ses._antigravityFoldersWindows ||= new Set();
   ses._antigravityFoldersWindows.add(win);
   win.once?.('closed', () => ses._antigravityFoldersWindows.delete(win));
   if (ses._antigravityFoldersHooked) {

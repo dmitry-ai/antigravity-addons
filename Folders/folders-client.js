@@ -5,7 +5,7 @@
  * 1. "Create Folder" button in Projects header + modal dialog.
  * 2. Hierarchical folder operations: "Создать подпапку", "Переместить папку…", Inline rename, Delete with promotion.
  * 3. Cycle prevention & validation in UI.
- * 4. Project context menu with hierarchical folder paths ("Upwork / 2026").
+ * 4. Compact folder tree for moving projects and folders.
  * 5. Drag & Drop for projects and folders (into folders, re-parenting, and unassigning to root).
  * 6. Immediate reactive updates via window custom events without page reload.
  */
@@ -60,6 +60,51 @@
     draggedFolderId: null,
     draggedProjectId: null,
     isDragging: false,
+    pendingCreation: null,
+    async runProjectCreation(folderId, action) {
+      const context = folderId && this.getFolder(folderId)
+        ? { folderId, running: true, dialog: null } : null;
+      this.pendingCreation = context;
+      const previous = new Set(document.querySelectorAll('[role="dialog"]'));
+      try { return await action(); }
+      finally {
+        if (context) {
+          context.running = false;
+          requestAnimationFrame(() => {
+            if (this.pendingCreation !== context) return;
+            context.dialog = [...document.querySelectorAll('[role="dialog"]')].find(el => !previous.has(el)) || null;
+            if (!context.dialog) this.pendingCreation = null;
+          });
+        }
+      }
+    },
+    captureProjectCreation() {
+      const context = this.pendingCreation;
+      return context && (context.running || context.dialog?.isConnected) ? context : null;
+    },
+    async saveCreatedProject(save, projectId, context) {
+      const result = await save();
+      if (context && this.getFolder(context.folderId)) {
+        const assignment = await this.postAction('assign-project', { projectId, folderId: context.folderId });
+        if (assignment.success) this.revealCreatedProject(projectId, context.folderId);
+        else alert('Проект создан, но не удалось поместить его в папку: ' + (assignment.error || 'неизвестная ошибка'));
+      }
+      if (this.pendingCreation === context) this.pendingCreation = null;
+      return result;
+    },
+    revealCreatedProject(projectId, folderId) {
+      // Opening a folder's own action does not require moving or scrolling to the root toolbar.
+      let folder = this.getFolder(folderId);
+      while (folder) {
+        const header = document.querySelector(`[data-testid="section-header"][data-folder-id="${CSS.escape(folder.id)}"]`);
+        if (header?.getAttribute('data-collapsed') === 'true') header.querySelector('h2 button')?.click();
+        folder = this.getFolder(folder.parentId);
+      }
+      requestAnimationFrame(() => {
+        const card = document.querySelector(`button[data-project-id="${CSS.escape(projectId)}"]`);
+        card?.scrollIntoView({block: 'nearest'});
+      });
+    },
     async postAction(action, payload = {}) {
 			let r;
 			result: {
@@ -272,12 +317,131 @@
     client.activeMenu = null;
     document.querySelectorAll('.btn-folder-options.is-active').forEach(b => b.classList.remove('is-active'));
   }
-  function showContextMenu(x, y, items) {
+  function folderPickerModel(selectedId, excludedIds = new Set()) {
+    const folders = (client.data?.folders || []).filter(folder => !excludedIds.has(folder.id));
+    const byId = new Map(folders.map(folder => [folder.id, folder]));
+    const children = new Map();
+    for (const folder of folders) {
+      const parentId = byId.has(folder.parentId) ? folder.parentId : null;
+      if (!children.has(parentId)) children.set(parentId, []);
+      children.get(parentId).push(folder);
+    }
+    for (const siblings of children.values()) siblings.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}) || a.id.localeCompare(b.id));
+    const expanded = new Set();
+    let folder = byId.get(selectedId);
+    while (folder && !expanded.has(folder.id)) {
+      expanded.add(folder.id);
+      folder = byId.get(folder.parentId);
+    }
+    return {byId, children, expanded};
+  }
+  function appendFolderTree(menu, {selectedId, excludedIds, onSelect}) {
+    const {byId, children, expanded} = folderPickerModel(selectedId, excludedIds);
+    const tree = document.createElement('div');
+    tree.className = 'antigravity-folder-targets';
+    tree.setAttribute('role', 'tree');
+    tree.setAttribute('aria-label', 'Папки');
+    const render = (focusId = null) => {
+      tree.replaceChildren();
+      const rows = new Map();
+      const visit = (parentId, depth, seen = new Set()) => {
+        for (const folder of children.get(parentId) || []) {
+          if (seen.has(folder.id)) continue;
+          const branch = new Set(seen).add(folder.id);
+          const hasChildren = !!children.get(folder.id)?.length;
+          const row = document.createElement('div');
+          row.className = 'antigravity-folder-target';
+          row.dataset.folderTarget = folder.id;
+          row.setAttribute('role', 'treeitem');
+          row.setAttribute('aria-level', depth + 1);
+          row.setAttribute('aria-selected', folder.id === selectedId);
+          if (hasChildren) row.setAttribute('aria-expanded', expanded.has(folder.id));
+          row.tabIndex = -1;
+          row.style.paddingInlineStart = `${4 + depth * 14}px`;
+          row.title = client.getFolderPath(folder.id);
+          const toggle = document.createElement(hasChildren ? 'button' : 'span');
+          toggle.className = 'antigravity-folder-target-toggle';
+          if (hasChildren) {
+            toggle.type = 'button';
+            toggle.tabIndex = -1;
+            toggle.textContent = expanded.has(folder.id) ? '▾' : '▸';
+            toggle.setAttribute('aria-label', `${expanded.has(folder.id) ? 'Свернуть' : 'Развернуть'} ${folder.name}`);
+            toggle.addEventListener('click', e => {
+              e.stopPropagation();
+              expanded.has(folder.id) ? expanded.delete(folder.id) : expanded.add(folder.id);
+              render(folder.id);
+            });
+          }
+          const icon = document.createElement('span');
+          icon.className = 'antigravity-folder-target-icon';
+          icon.setAttribute('aria-hidden', 'true');
+          icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v11H3Z"/></svg>';
+          const label = document.createElement('span');
+          label.className = 'antigravity-folder-target-label';
+          label.textContent = folder.name;
+          const check = document.createElement('span');
+          check.className = 'antigravity-folder-target-check';
+          check.textContent = folder.id === selectedId ? '✓' : '';
+          row.append(toggle, icon, label, check);
+          row.addEventListener('click', e => {
+            e.stopPropagation();
+            closeContextMenu();
+            if (folder.id !== selectedId) onSelect(folder.id);
+          });
+          row.addEventListener('keydown', e => {
+            const visible = [...tree.querySelectorAll('[role=treeitem]')];
+            const index = visible.indexOf(row);
+            let target;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); row.click(); return; }
+            if (e.key === 'ArrowDown') target = visible[index + 1];
+            else if (e.key === 'ArrowUp') target = visible[index - 1];
+            else if (e.key === 'Home') target = visible[0];
+            else if (e.key === 'End') target = visible.at(-1);
+            else if (e.key === 'ArrowRight' && hasChildren) {
+              if (expanded.has(folder.id)) target = visible[index + 1];
+              else { expanded.add(folder.id); render(folder.id); }
+            } else if (e.key === 'ArrowLeft') {
+              if (expanded.has(folder.id) && hasChildren) { expanded.delete(folder.id); render(folder.id); }
+              else target = rows.get(folder.parentId);
+            } else return;
+            e.preventDefault(); e.stopPropagation();
+            target?.focus();
+          });
+          rows.set(folder.id, row);
+          tree.appendChild(row);
+          if (expanded.has(folder.id)) visit(folder.id, depth + 1, branch);
+        }
+      };
+      visit(null, 0);
+      const active = rows.get(focusId) || rows.get(selectedId) || rows.values().next().value;
+      if (active) { active.tabIndex = 0; if (focusId) active.focus({preventScroll: true}); }
+      if (menu.isConnected) positionContextMenu(menu);
+    };
+    render();
+    menu.appendChild(tree);
+  }
+  function positionContextMenu(menu) {
+    const {x, y} = menu._folderAnchor;
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
+  }
+  function showContextMenu(x, y, items, title = '') {
     closeContextMenu();
     const menu = document.createElement('div');
-    menu.className = 'antigravity-folder-menu';
-    menu.setAttribute('role', 'menu');
+    menu._folderAnchor = {x, y};
+    const hasTree = items.some(item => item.folderTree);
+    menu.className = `antigravity-folder-menu${hasTree ? ' antigravity-folder-picker' : ''}`;
+    menu.setAttribute('role', hasTree ? 'dialog' : 'menu');
+    if (title) {
+      menu.setAttribute('aria-label', title);
+      const heading = document.createElement('div');
+      heading.className = 'antigravity-folder-menu-title';
+      heading.textContent = title;
+      menu.appendChild(heading);
+    }
     items.forEach(item => {
+      if (item.folderTree) { appendFolderTree(menu, item.folderTree); return; }
       if (item.separator) {
         const sep = document.createElement('div');
         sep.className = 'antigravity-folder-menu-separator';
@@ -287,7 +451,7 @@
       const row = document.createElement('div');
       row.className = `antigravity-folder-menu-item ${item.danger ? 'danger' : ''}`;
       row.setAttribute('tabindex', '0');
-      row.setAttribute('role', 'menuitem');
+      row.setAttribute('role', hasTree ? 'button' : 'menuitem');
       const labelSpan = document.createElement('span');
       labelSpan.style.display = 'flex';
       labelSpan.style.alignItems = 'center';
@@ -311,7 +475,7 @@
           row.click();
         } else if ('ArrowDown' === e.key || 'ArrowUp' === e.key) {
           e.preventDefault();
-          const rows = Array.from(menu.querySelectorAll('[role=menuitem]'));
+          const rows = Array.from(menu.querySelectorAll('[role=treeitem], [role=menuitem], [role=button]'));
           const index = rows.indexOf(row);
           rows[(index + ('ArrowDown' === e.key ? 1 : -1) + rows.length) % rows.length]?.focus();
         }
@@ -320,19 +484,10 @@
     });
     document.body.appendChild(menu);
     client.activeMenu = menu;
-    menu.querySelector('[role=menuitem]')?.focus();
-    // Boundary check
-    const rect = menu.getBoundingClientRect();
-    let left = x;
-    let top = y;
-    if (left + rect.width > window.innerWidth - 8) {
-      left = window.innerWidth - rect.width - 8;
-    }
-    if (top + rect.height > window.innerHeight - 8) {
-      top = window.innerHeight - rect.height - 8;
-    }
-    menu.style.left = `${Math.max(8, left)}px`;
-    menu.style.top = `${Math.max(8, top)}px`;
+    positionContextMenu(menu);
+    const focus = menu.querySelector('[role=treeitem][aria-selected=true]') || menu.querySelector('[role=treeitem], [role=menuitem], [role=button]');
+    focus?.focus({preventScroll: true});
+    if (hasTree) focus?.scrollIntoView({block: 'nearest'});
   }
   // --- 3. Modal Dialog for Create Folder / Subfolder ---
   function showCreateFolderDialog(projectId = null, explicitParentId = undefined) {
@@ -455,45 +610,20 @@
   function showMoveFolderMenu(coords, folderId) {
     const folder = client.getFolder(folderId);
     if (!folder) return;
-    const descendants = client.getDescendantIds(folderId);
-    const folders = client.data?.folders || [];
-    const items = [];
+    const excludedIds = client.getDescendantIds(folderId);
+    excludedIds.add(folderId);
     const isRoot = null === folder.parentId;
-    items.push({
-      icon: isRoot ? '✓ 📁' : '📁',
-      label: 'В корень (без родителя)',
-      onClick: () => {
-        if (!isRoot) {
-          client.postAction('move-folder', { id: folderId, newParentId: null });
-        }
-      }
-    });
-    // Valid targets exclude self and any descendant, sorted in natural alphabetical path order
-    const validTargets = folders
-      .filter(f => f.id !== folderId && !descendants.has(f.id))
-      .sort((a, b) => {
-        const pathA = client.getFolderPath(a.id);
-        const pathB = client.getFolderPath(b.id);
-        const cmp = pathA.localeCompare(pathB, undefined, { numeric: true, sensitivity: 'base' });
-        return 0 !== cmp ? cmp : (a?.id || '').localeCompare(b?.id || '');
-      });
-    if (0 < validTargets.length) {
-      items.push({ separator: true });
-      validTargets.forEach(target => {
-        const isCurrentParent = folder.parentId === target.id;
-        const targetPath = client.getFolderPath(target.id);
-        items.push({
-          icon: isCurrentParent ? '✓ 📁' : '📁',
-          label: `В «${targetPath}»`,
-          onClick: () => {
-            if (!isCurrentParent) {
-              client.postAction('move-folder', { id: folderId, newParentId: target.id });
-            }
-          }
-        });
-      });
-    }
-    showContextMenu(coords.clientX, coords.clientY, items);
+    showContextMenu(coords.clientX, coords.clientY, [
+      {folderTree: {
+        selectedId: folder.parentId,
+        excludedIds,
+        onSelect: newParentId => client.postAction('move-folder', {id: folderId, newParentId})
+      }},
+      {separator: true},
+      {icon: isRoot ? '✓' : '↥', label: 'На верхний уровень', onClick: () => {
+        if (!isRoot) client.postAction('move-folder', {id: folderId, newParentId: null});
+      }}
+    ], 'Переместить папку');
   }
   // --- 5. Inline Rename (F2 / Menu) ---
   function startInlineRename(folderHeaderEl, folderId, currentName) {
@@ -556,6 +686,15 @@
     e.stopPropagation();
     showContextMenu(e.clientX, e.clientY, [
       {
+        icon: '➕',
+        label: 'Создать проект в этой папке…',
+        onClick: () => {
+          const button = folderHeaderEl.querySelector('[data-folder-create-project]');
+          button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+          button?.click();
+        }
+      },
+      {
         icon: '📁➕',
         label: 'Создать подпапку…',
         onClick: () => showCreateFolderDialog(null, folderId)
@@ -597,47 +736,27 @@
     e.preventDefault();
     e.stopPropagation();
     const currentFolderId = client.getProjectFolderId(projectId);
-    const folders = (client.data?.folders || []).slice().sort((a, b) => {
-      const pathA = client.getFolderPath(a.id);
-      const pathB = client.getFolderPath(b.id);
-      const cmp = pathA.localeCompare(pathB, undefined, { numeric: true, sensitivity: 'base' });
-      return 0 !== cmp ? cmp : (a?.id || '').localeCompare(b?.id || '');
-    });
-    const items = [];
-    // List folders with hierarchical breadcrumb paths
-    if (0 < folders.length) {
-      folders.forEach(f => {
-        const isCurrent = f.id === currentFolderId;
-        const folderPath = client.getFolderPath(f.id);
-        items.push({
-          icon: isCurrent ? '✓ 📁' : '📁',
-          label: `В папку "${folderPath}"`,
-          onClick: () => {
-            if (!isCurrent) {
-              client.postAction('assign-project', { projectId, folderId: f.id });
-            }
-          }
-        });
-      });
-    }
+    const items = [{folderTree: {
+      selectedId: currentFolderId,
+      onSelect: folderId => client.postAction('assign-project', {projectId, folderId})
+    }}, {separator: true}];
     items.push({
       icon: '➕',
-      label: 'В новую папку…',
+      label: 'Создать папку…',
       onClick: () => {
         showCreateFolderDialog(projectId);
       }
     });
     if (currentFolderId) {
-      items.push({ separator: true });
       items.push({
-        icon: '📤',
-        label: 'Убрать из папки (вернуть в корень)',
+        icon: '↥',
+        label: 'Убрать из папки',
         onClick: () => {
           client.postAction('unassign-project', { projectId });
         }
       });
     }
-    showContextMenu(e.clientX, e.clientY, items);
+    showContextMenu(e.clientX, e.clientY, items, 'Переместить проект');
   }
   // --- 8. Global Event Listeners (Keyboard, Outside Click) ---
   window.addEventListener('click', (e) => {
@@ -696,6 +815,8 @@
     return { projectId: cardEl.getAttribute('data-project-id'), projectName: label };
   }
   function enhanceSidebarElements() {
+    const creation = client.pendingCreation;
+    if (creation?.dialog && !creation.dialog.isConnected) client.pendingCreation = null;
     // A. Main Projects Header: 'Create Folder' button + Drop target to unassign/re-parent
     const mainHeader = document.querySelector("[data-testid='section-header'][data-title='Projects'], [data-testid='section-header'][data-title='Workspaces'], [data-testid='section-header'][data-title*='Project']");
     if (mainHeader) {

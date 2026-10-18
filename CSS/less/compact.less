@@ -1,9 +1,13 @@
 [role='navigation'][aria-label='Sidebar'] {
 	padding-bottom: 2px !important;
 	> div:first-child {
-		height: 30px !important;
-		margin-bottom: 2px !important;
-		min-height: 30px !important;
+		height: 26px !important;
+		margin-bottom: 0 !important;
+		min-height: 26px !important;
+	}
+	> div:has([data-testid='new-conversation-button']),
+	> div:has([data-testid='new-conversation-button']) + div {
+		display: none !important;
 	}
 	> div:nth-child(2) > div {
 		gap: 1px !important;
@@ -38,6 +42,25 @@
 		padding-bottom: 0 !important;
 		padding-top: 2px !important;
 	}
+}
+/* Compact the real menu and overlay toolbar together with the sidebar spacer. */
+div:has(> [data-testid='title-menu-bar']) {
+	height: 24px !important;
+	min-height: 24px !important;
+}
+[data-testid='title-menu-bar'] {
+	gap: 0 !important;
+	padding-inline: 4px !important;
+	[data-testid='title-menu-bar-item'] {
+		height: 22px !important;
+		font-size: 12px !important;
+		padding: 0 7px !important;
+	}
+}
+#root .absolute.top-0:has([data-testid='sidebar-toggle']),
+#root .absolute.top-0:has([data-testid='toggle-aux-sidebar']) {
+	height: 26px !important;
+	button { max-height: 24px !important; }
 }
 [data-testid='conversation-list-sidebar'] {
 	-webkit-mask-image: none !important;
