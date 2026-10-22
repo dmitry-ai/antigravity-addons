@@ -25,7 +25,13 @@ const applyLayout = (source, layout, replacement, prefix) => {
 	const create = layout.createProject;
 	edits.push({start: actions.start, end: actions.end, text: `${row}.folderId?${react}.createElement(${create.name},{folderId:${row}.folderId,ariaLabel:'Создать проект в «'+${row}.folderName+'»'}):(${source.slice(actions.start, actions.end)})`});
 	addProperties(edits, create.func.params[0], 'folderId:__createFolderId');
-	addProperties(edits, create.node.arguments[1], `'data-folder-create-project':__createFolderId`);
+	for (const node of (create.nodes || [create.node])) {
+		addProperties(edits, node.arguments[1], `'data-folder-create-project':__createFolderId`);
+		const directClick = getProperty(node.arguments[1], 'onClick');
+		if (directClick) {
+			edits.push({start: directClick.start, end: directClick.end, text: `(...__args)=>window.__PROJECT_FOLDERS_CLIENT__.runProjectCreation(__createFolderId,()=>(${source.slice(directClick.start, directClick.end)})(...__args))`});
+		}
+	}
 	const onClick = getProperty(create.menu.arguments[1], 'onClick');
 	edits.push({start: onClick.start, end: onClick.end, text: `(...__args)=>window.__PROJECT_FOLDERS_CLIENT__.runProjectCreation(__createFolderId,()=>(${source.slice(onClick.start, onClick.end)})(...__args))`});
 	const save = layout.saveProject;
@@ -103,7 +109,16 @@ const collectLayout = source => {
 		}
 	});
 	const row = requireOne(rows, 'генератор строк');
-	const createProject = requireOne(createButtons, 'кнопка создания проекта');
+	const createComponents = [];
+	for (const btn of createButtons) {
+		let comp = createComponents.find(c => c.func === btn.func);
+		if (!comp) {
+			comp = {...btn, nodes: []};
+			createComponents.push(comp);
+		}
+		comp.nodes.push(btn.node);
+	}
+	const createProject = requireOne(createComponents, 'кнопка создания проекта');
 	const menuItems = [];
 	walk.simple(createProject.func.body, {CallExpression: node => {
 		if ('createElement' === getMember(node.callee) && getProperty(node.arguments[1], 'onClick') && getProperty(node.arguments[1], 'tooltipText')) menuItems.push(node);
