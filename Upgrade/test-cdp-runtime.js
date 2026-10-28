@@ -63,7 +63,7 @@ test('Only the verified main execution context can call a module storage channel
 	assert.match(cdp.expressions[1], /Unknown Tools storage channel/);
 	assert.ok(bridgeSource.includes('15000'));
 });
-test('The runtime rereads the dynamic CDP port and never connects to a different application', async context => {
+test('The runtime rereads the dynamic CDP port and reports a foreign application without attaching', async context => {
 	const root = fixture(context), roaming = path.join(root, 'roaming'); fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
 	const previous = process.env.APPDATA; process.env.APPDATA = roaming; context.after(() => {process.env.APPDATA = previous;});
 	const filename = path.join(roaming, 'Antigravity/DevToolsActivePort');
@@ -73,7 +73,7 @@ test('The runtime rereads the dynamic CDP port and never connects to a different
 	fs.writeFileSync(filename, '10002\nunused'); await runtime.tick();
 	assert.ok(requests.some(url => url.includes(':10001/'))); assert.ok(requests.some(url => url.includes(':10002/')));
 	globalThis.fetch = async () => Response.json({'User-Agent': 'Codex/1.0'});
-	await assert.rejects(runtime.tick(), /not Antigravity/);
+	await runtime.tick(); assert.match(runtime.errors.A0, /not Antigravity/); assert.equal(runtime.connections.size, 0);
 });
 
 test('A deferred source is retried after a user dialog closes and failed attachments release their sockets', async context => {
@@ -98,10 +98,27 @@ test('Opening a native conversation route keeps the same CDP binding and storage
 	const roaming=path.join(runtime.root,'roaming');fs.mkdirSync(path.join(roaming,'Antigravity'),{recursive:true});fs.writeFileSync(path.join(roaming,'Antigravity/DevToolsActivePort'),'10001');
 	const previous=process.env.APPDATA;process.env.APPDATA=roaming;context.after(()=>{process.env.APPDATA=previous;});
 	context.mock.method(CDP,'open',async()=>cdp);
-	context.mock.method(globalThis,'fetch',async endpoint=>Response.json(endpoint.endsWith('/json/version')?{'User-Agent':'Antigravity/2.27.0',webSocketDebuggerUrl:'ws://fixture/browser'}:[{id:'main',type:'page',url,webSocketDebuggerUrl:'ws://fixture/main'}]));
+	context.mock.method(globalThis,'fetch',async endpoint=>Response.json(endpoint.endsWith('/json/version')?{'User-Agent':'Antigravity/2.27.0',webSocketDebuggerUrl:'ws://127.0.0.1:10001/browser'}:[{id:'main',type:'page',url,webSocketDebuggerUrl:'ws://127.0.0.1:10001/main'}]));
 	runtime.modules.set('folders',{source:()=> 'window.testFolders=true'});
-	await runtime.tick();const connection=runtime.connections.get('main');assert.ok(connection?.shell);
+	await runtime.tick();const connection=runtime.connections.get('A0:main');assert.ok(connection?.shell);
 	url='https://127.0.0.1:12345/c/existing-conversation?section=project';await runtime.tick();
-	assert.equal(runtime.connections.get('main'),connection);assert.equal(cdp.closed,false);assert.equal(cdp.calls.filter(call=>call.method==='Runtime.addBinding').length,1);
+	assert.equal(runtime.connections.get('A0:main'),connection);assert.equal(cdp.closed,false);assert.equal(cdp.calls.filter(call=>call.method==='Runtime.addBinding').length,1);
 	await runtime.dispose();
+});
+
+test('Profiles with identical target IDs remain independent when one endpoint disappears or restarts', async context => {
+	const root=fixture(context),roaming=path.join(root,'roaming');
+	for(const [name,port] of [['Antigravity','10001'],['Antigravity-A6','10006']]){fs.mkdirSync(path.join(roaming,name),{recursive:true});fs.writeFileSync(path.join(roaming,name,'DevToolsActivePort'),port);}
+	const previous=process.env.APPDATA;process.env.APPDATA=roaming;context.after(()=>{process.env.APPDATA=previous;});
+	let offline=false,generation=1;
+	context.mock.method(CDP,'open',async()=>new FakeCDP());
+	context.mock.method(globalThis,'fetch',async endpoint=>{
+		const port=new URL(endpoint).port;if(port==='10006'&&offline)throw Error('closed');
+		return Response.json(endpoint.endsWith('/json/version')?{'User-Agent':'Antigravity/2.27.0',webSocketDebuggerUrl:`ws://127.0.0.1:${port}/browser/${generation}`}:[{id:'same',type:'page',url:'https://127.0.0.1:12345/',webSocketDebuggerUrl:`ws://127.0.0.1:${port}/same`}]);
+	});
+	const runtime=new Companion({root});await runtime.tick();
+	assert.equal(runtime.connections.size,2);const primary=runtime.connections.get('A0:same'),secondary=runtime.connections.get('A6:same');
+	offline=true;await runtime.tick();assert.equal(runtime.connections.size,1);assert.equal(runtime.connections.get('A0:same'),primary);assert.equal(primary.cdp.closed,false);assert.equal(secondary.cdp.closed,true);
+	offline=false;await runtime.tick();assert.equal(runtime.connections.size,2);assert.notEqual(runtime.connections.get('A6:same'),secondary);
+	generation++;await runtime.tick();assert.equal(primary.cdp.closed,true);assert.equal(runtime.connections.size,2);await runtime.dispose();
 });

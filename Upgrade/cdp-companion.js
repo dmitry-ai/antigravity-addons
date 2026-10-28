@@ -4,10 +4,11 @@ const crypto = require('node:crypto');
 const {CDP} = require('./cdp-client');
 const registry = require('./registry');
 const {isCandidateTarget, shellProbe, isShell} = require('./antigravity-shell');
+const {discoverEndpoints} = require('./profile-endpoints');
 const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
 const binding = '__antigravityToolsCall';
 const runtimeVersion = () => {
-	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js'].map(filename => path.join(__dirname, filename));
+	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../../../Multi-Account/code/profiles.js', '../../../Multi-Account/code/profiles.json'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
@@ -23,7 +24,7 @@ class Companion {
 		this.root = root; this.connections = new Map(); this.modules = new Map(); this.errors = {}; this.instance = crypto.randomUUID(); this.version = runtimeVersion(); this.stopped = false;
 	}
 	writeState(state, extra = {}) {
-		const record = {schemaVersion: 1, instance: this.instance, version: this.version, pid: process.pid, runtimePath: __filename, state, updated: new Date().toISOString(), windows: this.connections.size, tools: [...this.modules.keys()], errors: this.errors, ...extra};
+		const record = {schemaVersion: 1, instance: this.instance, version: this.version, pid: process.pid, runtimePath: __filename, state, updated: new Date().toISOString(), windows: this.connections.size, profiles: this.profileStates || [], tools: [...this.modules.keys()], errors: this.errors, ...extra};
 		const filename = path.join(this.root, 'runtime.json'), temporary = filename + '.tmp';
 		fs.writeFileSync(temporary, JSON.stringify(record, null, 2)); fs.renameSync(temporary, filename);
 	}
@@ -37,20 +38,21 @@ class Companion {
 	}
 	async attach(target) {
 		const cdp = await CDP.open(target.webSocketDebuggerUrl);
-		const connection = {cdp, id: target.id, sources: new Map(), sheets: new Map(), shell: false, booting: false};
-		this.connections.set(target.id, connection);
+		const key = target.key || target.id;
+		const connection = {cdp, id: key, profileId: target.profileId || 'A0', endpoint: target.endpoint, email: target.email, sources: new Map(), sheets: new Map(), shell: false, booting: false};
+		this.connections.set(key, connection);
 		try {
 		const frame = await cdp.call('Page.getFrameTree'); connection.frameId = frame.frameTree.frame.id;
-		cdp.on('close', () => { if (this.connections.get(target.id) === connection) this.connections.delete(target.id); delete this.errors[target.id]; });
+		cdp.on('close', () => { if (this.connections.get(key) === connection) this.connections.delete(key); delete this.errors[key]; });
 		cdp.on('Runtime.executionContextCreated', ({context}) => { if (context.auxData?.isDefault && context.auxData?.frameId === connection.frameId) connection.contextId = context.id; });
 		cdp.on('Runtime.executionContextsCleared', () => {connection.contextId = null; connection.sources.clear(); connection.sheets.clear(); connection.shell = false;});
 		cdp.on('Page.frameNavigated', ({frame}) => { if (!frame.parentId) {connection.frameId = frame.id; connection.sources.clear(); connection.sheets.clear();} });
-		cdp.on('Page.domContentEventFired', () => { void this.bootstrap(connection).catch(error => {this.errors[target.id] = error.message;}); });
-		cdp.on('Runtime.bindingCalled', event => { void this.handleRequest(connection, event).catch(error => {this.errors[target.id] = error.message;}); });
+		cdp.on('Page.domContentEventFired', () => { void this.bootstrap(connection).catch(error => {this.errors[key] = error.message;}); });
+		cdp.on('Runtime.bindingCalled', event => { void this.handleRequest(connection, event).catch(error => {this.errors[key] = error.message;}); });
 		await cdp.call('Runtime.enable'); await cdp.call('Page.enable'); await cdp.call('DOM.enable'); await cdp.call('CSS.enable'); await cdp.call('Runtime.addBinding', {name: binding});
 		await this.bootstrap(connection);
 		return connection;
-		} catch (error) {cdp.close(); if (this.connections.get(target.id) === connection) this.connections.delete(target.id); throw error;}
+		} catch (error) {cdp.close(); if (this.connections.get(key) === connection) this.connections.delete(key); throw error;}
 	}
 	async handleRequest(connection, event) {
 		if (event.name !== binding || event.executionContextId !== connection.contextId || !connection.shell) return;
@@ -68,6 +70,7 @@ class Companion {
 			const info = await connection.cdp.evaluate(shellProbe);
 			if (!isShell(info)) return;
 			connection.shell = true;
+			await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_PROFILE__=${JSON.stringify({id: connection.profileId, email: connection.email})}`);
 			await connection.cdp.evaluate(bridgeSource);
 			if (!this.modules.has('folders')) await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;');
 			const styles = [...this.modules.values()].filter(runtime => runtime.styleSheet).map(runtime => runtime.styleSheet()).join('\n');
@@ -91,26 +94,19 @@ class Companion {
 	async tick() {
 		const controlFile = path.join(this.root, 'control.json');
 		if (fs.existsSync(controlFile)) { const control = JSON.parse(fs.readFileSync(controlFile, 'utf8')); fs.unlinkSync(controlFile); if (control.instance === this.instance && control.action === 'stop') {await this.dispose(); return;} }
-		const filename = path.join(process.env.APPDATA || '', 'Antigravity/DevToolsActivePort');
-		if (!fs.existsSync(filename)) {this.writeState('waiting-for-antigravity'); return;}
-		const port = Number(fs.readFileSync(filename, 'utf8').split(/\r?\n/)[0]);
-		if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('Invalid current Antigravity CDP endpoint');
-		let version, targets;
-		try {version = await (await fetch(`http://127.0.0.1:${port}/json/version`, {signal: AbortSignal.timeout(2000)})).json(); targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)})).json();}
-		catch {for (const connection of this.connections.values()) connection.cdp.close(); this.connections.clear(); this.writeState('waiting-for-antigravity'); return;}
-		if (!/Antigravity\//.test(version['User-Agent'] || '')) throw Error('The CDP endpoint is not Antigravity');
-		const endpoint = version.webSocketDebuggerUrl || `port:${port}`;
-		if (this.endpoint !== endpoint) {for (const connection of this.connections.values()) connection.cdp.close(); this.connections.clear(); this.endpoint = endpoint;}
-		const pages = targets.filter(isCandidateTarget);
-		const current = new Set(pages.map(page => page.id));
+		const profiles = await discoverEndpoints();
+		const pages = profiles.flatMap(profile => profile.pages.map(page => ({...page, key: `${profile.id}:${page.id}`, profileId: profile.id, endpoint: profile.endpoint, email: profile.email})));
+		const current = new Set(pages.map(page => page.key));
 		delete this.errors.runtime;
 		for (const id of Object.keys(this.errors)) if (!current.has(id) && !this.modules.has(id)) delete this.errors[id];
-		for (const [id, connection] of this.connections) if (!current.has(id)) {connection.cdp.close(); this.connections.delete(id);}
+		for (const profile of profiles) if (profile.error) this.errors[profile.id] = profile.error;
+		for (const [id, connection] of this.connections) if (!current.has(id) || pages.find(page => page.key === id)?.endpoint !== connection.endpoint) {connection.cdp.close(); this.connections.delete(id);}
 		await Promise.all(pages.map(async page => {
-			try { const connection = this.connections.get(page.id); if (!connection || connection.cdp.closed) await this.attach(page); else await this.bootstrap(connection); }
-			catch (error) {this.errors[page.id] = error.message;}
+			try { const connection = this.connections.get(page.key); if (!connection || connection.cdp.closed) await this.attach(page); else await this.bootstrap(connection); }
+			catch (error) {this.errors[page.key] = error.message;}
 		}));
-		this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : 'waiting-for-shell', {appVersion: version['User-Agent']?.match(/Antigravity\/([^ ]+)/)?.[1]});
+		this.profileStates = profiles.map(({id, state, appVersion, error}) => ({id, state, appVersion, error, windows: [...this.connections.values()].filter(connection => connection.profileId === id && connection.shell).length}));
+		this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : pages.length ? 'waiting-for-shell' : 'waiting-for-antigravity');
 	}
 	async start() {
 		fs.mkdirSync(this.root, {recursive: true});

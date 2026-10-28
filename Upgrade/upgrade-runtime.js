@@ -27,7 +27,7 @@ const run = async (options = {}) => {
 		try {runtime = await require('../../Folders/code/runtime-health').inspectRuntime({expectedTools: tools.map(tool => tool.id)}); break;}
 		catch (error) {if (Date.now() >= deadline) throw error; await new Promise(resolve => setTimeout(resolve, 300));}
 	}
-	if (runtime.state !== 'ready') {log('Tools ожидает открытия Antigravity. При запуске модули подключатся через CDP; app.asar не изменяется.'); return {status: 'waiting', tools: tools.map(tool => tool.id)};}
+	if (runtime.state !== 'ready') {log(runtime.state === 'waiting-for-sign-in' ? `Tools ожидает завершения входа: ${runtime.windows.filter(window => window.state !== 'ready').map(window => window.profile).join(', ')}. CSS подключён; Folders ожидает основной интерфейс.` : 'Tools ожидает открытия Antigravity. При запуске модули подключатся через CDP; app.asar не изменяется.'); return {status: 'waiting', tools: tools.map(tool => tool.id), runtime};}
 	log(`${tools.map(tool => tool.id).join(', ')} работают через CDP; проверено окон: ${runtime.windows.length}. Установка Antigravity не изменялась.`);
 	return {status: 'ready', tools: tools.map(tool => tool.id), runtime};
 };

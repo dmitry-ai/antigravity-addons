@@ -1,0 +1,13 @@
+{
+	"schemaVersion": 1,
+	"skillsRoot": "C:/work/upwork/code/AI/primary/result/.agents/skills",
+	"profiles": [
+		{"id": "A0", "userData": "Antigravity"},
+		{
+			"id": "A6",
+			"userData": "Antigravity-A6",
+			"email": "admin6@mage2.pro",
+			"chromeShortcut": "6"
+		}
+	]
+}

@@ -870,8 +870,33 @@ button[data-project-card][data-folder-depth='8'],
 /* Keep transcript density scoped to the native conversation surface. */
 [data-testid='conversation-view'] {
 	--max-conversation-width: none;
+	/* The native fade used the same 48px reserve as the transcript spacer. */
+}
+[data-testid='conversation-view'] > div:has([data-testid='autoscroll-viewport']) > .absolute.bottom-0.pointer-events-none {
+	height: 4px !important;
+	left: 4px !important;
+	right: calc(var(--overview-panel-reserve, 0px) + 4px) !important;
 }
 [data-testid='conversation-view'] [data-testid='autoscroll-viewport'] {
+	padding-inline: 4px !important;
+	/* Native turn list ends in an inline-height spacer after its scroll anchor. */
+	/* Expanded activity panels add an indent on top of their row padding. */
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .relative.w-full:has(> .relative.flex.flex-col) {
+	/* A viewport-sized last turn otherwise leaves blank space under short replies. */
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .relative.w-full:has(> .relative.flex.flex-col) > div[style]:last-child:empty {
+	height: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .relative.w-full:has(> .relative.flex.flex-col) > .relative.flex.flex-col > .flex.items-start {
+	min-height: 0 !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .bleed-contain {
+	padding-inline-start: 0 !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .group.min-h-8,
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='thinking-collapsible-trigger'],
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='agent-loading'] {
 	padding-inline: 4px !important;
 }
 [data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-quotable],
@@ -896,6 +921,15 @@ button[data-project-card][data-folder-depth='8'],
 }
 [data-testid='conversation-view'] [data-testid='autoscroll-viewport'] div:has(> .leading-relaxed) {
 	padding-inline: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='turn-cards-container']:empty {
+	display: none !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .pt-3:has([data-testid='cascade-system-message-toolbar']) {
+	padding-top: 2px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='cascade-system-message-toolbar'] {
+	gap: 2px !important;
 }
 [data-testid='conversation-view'] [data-testid='autoscroll-viewport'] p code,
 [data-testid='conversation-view'] [data-testid='autoscroll-viewport'] li > code {
