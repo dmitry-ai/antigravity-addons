@@ -16,7 +16,7 @@ const run = async (options = {}) => {
 		if (tool.prepare) await require(tool.prepare)({dryRun: mode !== 'apply'});
 	}
 	if (mode === 'apply') {const startup = control.installStartup(); await control.ensureRunning(); log(`Автозагрузка Tools: ${startup}`);}
-	for (const tool of tools) if (tool.validate) {const result = await require(tool.validate)({bundlePath: options.bundlePath}); if (result?.message) log(`${tool.name}: ${result.message}`);}
+	for (const tool of tools) if (tool.validate) {const result = await require(tool.validate)(); if (result?.message) log(`${tool.name}: ${result.message}`);}
 	const state = control.readState();
 	if (mode === 'dry-run') {log('Исходники и конфигурация проверены. Установка Antigravity не изменялась.'); return {status: 'dry-run'};}
 	if (!control.alive(state)) throw Error('Фоновый загрузчик Tools не работает. Запустите Upg.');

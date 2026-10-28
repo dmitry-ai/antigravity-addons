@@ -36,6 +36,7 @@ const openFixture = async ({data, projects, summaries = {}, missingAnchor = fals
 			if (method === 'ListProjects') return Response.json(fixture.badProjects ? {changedProjectSchema: []} : {projectIds: fixture.projects.map(project => project.id)});
 			if (method === 'ReadProjects') return Response.json({projects: fixture.projects.filter(project => body.ids.includes(project.id))});
 			if (method === 'CreateProject') { fixture.projects.push(body.project); return Response.json({}); }
+			if (method === 'UpdateConversationAnnotations') {for(const id of body.cascadeIds){const summary=fixture.summaries[id];if(!summary)throw Error('Conversation not found');summary.annotations={...summary.annotations,...body.annotations};fixture.emit({updates:{[id]:summary}});}return Response.json({});}
 			if (method === 'JetboxSubscribeToSummaries') {
 				let controller;
 				const stream = new ReadableStream({start(value) { controller = value; fixture.streams.add(value); value.enqueue(frame({updates: fixture.summaries})); }, cancel() {fixture.streams.delete(controller);} });

@@ -14,7 +14,7 @@ try {
 	if ($Restore) {
 		$argumentsList += '--restore'
 	}
-	$requiredPackages = @('@electron\asar', 'acorn', 'acorn-walk', 'less')
+	$requiredPackages = @('less')
 	$missingPackages = @($requiredPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot ('node_modules\' + $_ + '\package.json'))) })
 	if (0 -lt $missingPackages.Count) {
 		Push-Location -LiteralPath $PSScriptRoot

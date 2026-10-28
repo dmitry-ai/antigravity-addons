@@ -3,10 +3,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {CDP} = require('./cdp-client');
 const registry = require('./registry');
+const {isCandidateTarget, shellProbe, isShell} = require('./antigravity-shell');
 const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
 const binding = '__antigravityToolsCall';
 const runtimeVersion = () => {
-	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js'].map(filename => path.join(__dirname, filename));
+	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
@@ -64,8 +65,8 @@ class Companion {
 		if (connection.booting || connection.cdp.closed) return;
 		connection.booting = true;
 		try {
-			const info = await connection.cdp.evaluate('({product:window.__APP_CONFIG__?.productName,csrf:typeof window.__APP_CONFIG__?.csrfToken,ready:document.readyState,origin:location.origin})');
-			if (!/antigravity/i.test(info?.product || '') || info.csrf !== 'string' || info.ready === 'loading' || !/^https:\/\/(localhost|127\.0\.0\.1):\d+$/.test(info.origin)) return;
+			const info = await connection.cdp.evaluate(shellProbe);
+			if (!isShell(info)) return;
 			connection.shell = true;
 			await connection.cdp.evaluate(bridgeSource);
 			if (!this.modules.has('folders')) await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;');
@@ -89,7 +90,7 @@ class Companion {
 	}
 	async tick() {
 		const controlFile = path.join(this.root, 'control.json');
-		if (fs.existsSync(controlFile)) { const control = JSON.parse(fs.readFileSync(controlFile, 'utf8')); if (control.instance === this.instance && control.action === 'stop') {await this.dispose(); return;} }
+		if (fs.existsSync(controlFile)) { const control = JSON.parse(fs.readFileSync(controlFile, 'utf8')); fs.unlinkSync(controlFile); if (control.instance === this.instance && control.action === 'stop') {await this.dispose(); return;} }
 		const filename = path.join(process.env.APPDATA || '', 'Antigravity/DevToolsActivePort');
 		if (!fs.existsSync(filename)) {this.writeState('waiting-for-antigravity'); return;}
 		const port = Number(fs.readFileSync(filename, 'utf8').split(/\r?\n/)[0]);
@@ -100,7 +101,7 @@ class Companion {
 		if (!/Antigravity\//.test(version['User-Agent'] || '')) throw Error('The CDP endpoint is not Antigravity');
 		const endpoint = version.webSocketDebuggerUrl || `port:${port}`;
 		if (this.endpoint !== endpoint) {for (const connection of this.connections.values()) connection.cdp.close(); this.connections.clear(); this.endpoint = endpoint;}
-		const pages = targets.filter(target => target.type === 'page' && /^https:\/\/(127\.0\.0\.1|localhost):\d+\/(?:[?#].*)?$/.test(target.url));
+		const pages = targets.filter(isCandidateTarget);
 		const current = new Set(pages.map(page => page.id));
 		delete this.errors.runtime;
 		for (const id of Object.keys(this.errors)) if (!current.has(id) && !this.modules.has(id)) delete this.errors[id];

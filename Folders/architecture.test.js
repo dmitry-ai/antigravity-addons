@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
@@ -10,8 +11,8 @@ const config = () => ({folders: [{id: 'root', name: 'Work', parentId: null}, {id
 const projects = [{id: 'p2', name: 'Project 10', newField: {}}, {id: 'p1', name: 'Project 2'}, {id: 'p3', name: 'Unassigned'}];
 const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
 const scratch = context => {
-	const parent = path.join(__dirname, 'work'); fs.mkdirSync(parent, {recursive: true});
-	const directory = fs.mkdtempSync(path.join(parent, 'architecture-'));
+	const parent = os.tmpdir();
+	const directory = fs.mkdtempSync(path.join(parent, 'antigravity-folders-'));
 	context.after(() => { const resolved = path.resolve(directory); assert.ok(resolved.startsWith(path.resolve(parent) + path.sep)); fs.rmSync(resolved, {recursive: true, force: true}); });
 	const filename = path.join(directory, 'folders.json'); fs.writeFileSync(filename, JSON.stringify(config()));
 	return {directory, filename};
@@ -92,7 +93,7 @@ test('Native API adapter tolerates added DTO fields and uses the declared projec
 		await adapter.createProject({id: 'exact-new-id', name: 'New', resources: []});
 		assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/CreateProject')).options.body).project.id, 'exact-new-id');
 		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
-		assert.equal(win.lastUrl, '/?section=p1&cascadeId=c1'); assert.equal(win.lastEvent.type, 'popstate');
+		assert.equal(win.lastUrl, '/c/c1?section=p1'); assert.equal(win.lastEvent.type, 'popstate');
 	} finally { adapter.dispose(); }
 });
 test('Native API errors and missing records are surfaced instead of reporting an empty successful tree', async () => {
@@ -114,4 +115,31 @@ test('Live conversation stream decodes fragmented/coalesced frames and preserves
 	}});
 	await adapter.start(); await complete; adapter.dispose();
 	assert.deepEqual(received, [['c1'], ['c2']]);
+});
+
+test('Renaming a running conversation sends an annotation patch without writing or cloning its trajectory summary', async () => {
+	const original={...summary('p1'),status:'CASCADE_RUN_STATUS_RUNNING',stepCount:120,trajectoryId:'same-trajectory',futureMetadata:{kept:true}},calls=[];
+	let ready,latest,stream;const received=new Promise(resolve=>{ready=resolve;});
+	const adapter=createAdapter({window:fakeWindow(),model,onSummaries:value=>{latest=value;ready();},fetch:async(url,options)=>{
+		calls.push({method:url.split('/').at(-1),body:typeof options.body==='string'?JSON.parse(options.body):null});
+		if(url.endsWith('/ListProjects'))return Response.json({projectIds:[]});
+		if(url.endsWith('/JetboxSubscribeToSummaries')){
+			return new Response(new ReadableStream({start(controller){stream=controller;controller.enqueue(encode({updates:{c1:original}}));options.signal.addEventListener('abort',()=>controller.close(),{once:true});}}),{headers:{'content-type':'application/connect+json'}});
+		}
+		if(url.endsWith('/UpdateConversationAnnotations')){stream.enqueue(encode({updates:{c1:{...original,stepCount:121}}}));await new Promise(resolve=>setImmediate(resolve));return Response.json({});}
+		throw Error('Unexpected RPC '+url);
+	}});
+	try{
+		await adapter.start();await received;await adapter.updateConversation('c1',{title:'52'});
+		assert.deepEqual(calls.find(call=>call.method==='UpdateConversationAnnotations').body,{cascadeIds:['c1'],annotations:{title:'52'},mergeAnnotations:true});
+		assert.equal(calls.some(call=>call.method==='JetboxWriteSummary'),false);
+		assert.equal(latest.size,1);assert.equal(latest.get('c1').trajectoryId,'same-trajectory');assert.equal(latest.get('c1').stepCount,121);assert.equal(latest.get('c1').status,'CASCADE_RUN_STATUS_RUNNING');
+		assert.deepEqual(latest.get('c1').futureMetadata,{kept:true});assert.equal(latest.get('c1').annotations.title,'52');
+	}finally{adapter.dispose();}
+});
+
+test('Subagent snapshots do not appear as duplicate root conversations in the project list',()=>{
+	const root={...summary('p1','52'),trajectoryMetadata:{projectId:'p1',rootConversationId:'root'}},child={...summary('p1','52'),trajectoryMetadata:{projectId:'p1',rootConversationId:'root'}};
+	const rows=model.buildRows({data:config(),projects,summaries:new Map([['root',root],['child',child]])});
+	assert.deepEqual(rows.filter(row=>row.kind==='conversation').map(row=>row.id),['root']);
 });

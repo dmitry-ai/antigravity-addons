@@ -28,10 +28,10 @@ flowchart LR
 ## Внешние контракты
 
 1. CDP: текущий порт читается из `%APPDATA%/Antigravity/DevToolsActivePort`, приложение проверяется через `/json/version`. Новые targets перечитываются; порт и ID не запоминаются как постоянные.
-2. Оболочка: локальная HTTPS-страница `/`, `window.__APP_CONFIG__.productName` и `csrfToken`, главный execution context. Iframe плагина не получает канал записи конфигурации.
+2. Оболочка: локальная HTTPS-страница с `window.__APP_CONFIG__.productName`, `csrfToken`, корнем приложения и nativeStorage; главный execution context. Отбор не ограничен путём `/`: страницы `/c/ID` также сохраняют канал хранилища. Iframe плагина не получает канал записи конфигурации.
 3. Место дерева: один `[data-testid="conversation-list-sidebar"]` внутри `[role="navigation"]`. Только этот список скрывается после успешного чтения данных. Остальной интерфейс остаётся под управлением Antigravity.
-4. Локальные RPC `/exa.language_server_pb.LanguageServerService/`: `ListProjects`, `ReadProjects`, `CreateProject`, `UpdateProject`, `JetboxSubscribeToSummaries`, `JetboxWriteSummary`.
-5. SPA-навигация: `section` и `cascadeId`. Изменение маршрута не перезагружает страницу.
+4. Локальные RPC `/exa.language_server_pb.LanguageServerService/`: `ListProjects`, `ReadProjects`, `CreateProject`, `UpdateProject`, `JetboxSubscribeToSummaries`, `UpdateConversationAnnotations`.
+5. SPA-навигация: `/c/ID?section=PROJECT_ID` для существующего разговора. Изменение маршрута не перезагружает страницу. Переименование отправляет только annotations с mergeAnnotations и точным cascadeIds; снимок траектории не перезаписывается. Прогресс, пришедший во время запроса, сохраняется.
 
 Схемы получены из установленной 2.27.0 и проверены фактическими ответами, а не угаданы по именам компонентов. Они зафиксированы в `daily/2026/10/28/1 - Upgrade/source/protobuf-message-contracts.json` и соседних файлах контрактов. Это частный API: его удаление потребует изменения этого адаптера.
 

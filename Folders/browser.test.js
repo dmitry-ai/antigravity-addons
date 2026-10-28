@@ -38,6 +38,8 @@ test('Real UI menus create a project in the exact chosen folder and cancellation
 	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_STATUS__?.state === 'ready');
 	const folder = fixture.page.locator('[data-folders-row="folder:root"]');
 	await folder.click({button: 'right'});
+	const menuGeometry=await fixture.page.locator('.antigravity-folder-menu-item').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().height));
+	assert.ok(menuGeometry.every(height=>height<=16.1),'Own context menu actions must retain compact 16px rows');
 	await fixture.page.getByRole('menuitem', {name: /Создать проект в этой папке/}).click();
 	await fixture.page.getByRole('dialog', {name: 'Создать проект'}).getByRole('button', {name: 'Отмена'}).click();
 	assert.equal(await fixture.page.evaluate(() => window.__foldersFixture.calls.some(call => call.method === 'CreateProject')), false);
@@ -69,8 +71,26 @@ test('Thousands of projects remain virtualized and live conversation updates kee
 	await fixture.page.getByRole('button', {name: /Live conversation/}).click();
 	await fixture.page.evaluate(() => window.__foldersFixture.emit({updates: {c1: {summary: 'Updated conversation', status: 'IDLE', trajectoryMetadata: {projectId: 'p0'}, futureMetadata: {untouched: true}}}}));
 	await fixture.page.getByRole('button', {name: /Updated conversation/}).waitFor();
-	assert.match(fixture.page.url(), /cascadeId=c1/);
+	assert.match(fixture.page.url(), /\/c\/c1\?section=p0/);
 	assert.equal(await fixture.page.locator('[data-folders-row="conversation:c1"]').getAttribute('aria-selected'), 'true');
 	assert.equal(await fixture.page.locator('#untouched-draft').inputValue(), 'Unsaved draft');
 	assert.deepEqual(fixture.errors, []);
+});
+
+test('The conversation rename UI keeps its ID, native route, project name, live progress, and unsaved input', {timeout:20000}, async context=>{
+	const summary={summary:'Before rename',annotations:{title:'Before rename'},status:'CASCADE_RUN_STATUS_RUNNING',stepCount:120,trajectoryId:'same-analysis',trajectoryMetadata:{projectId:'p1',rootConversationId:'c1'}};
+	const fixture=await openFixture({data,projects,summaries:{c1:summary}});context.after(()=>fixture.close());
+	await fixture.page.waitForFunction(()=>window.__PROJECT_FOLDERS_STATUS__?.state==='ready');
+	await fixture.page.locator('[data-folders-row="project:p1"] .fg-toggle').click();
+	await fixture.page.getByRole('button',{name:/Before rename/}).click({button:'right'});
+	await fixture.page.getByRole('menuitem',{name:'Переименовать…',exact:true}).click();
+	await fixture.page.getByRole('textbox',{name:'Название разговора'}).fill('52');
+	await fixture.page.getByRole('button',{name:'Сохранить',exact:true}).click();
+	await fixture.page.getByRole('button',{name:/52/}).click();
+	assert.match(fixture.page.url(),/\/c\/c1\?section=p1/);
+	await fixture.page.evaluate(()=>{const s=window.__foldersFixture.summaries.c1;window.__foldersFixture.emit({updates:{c1:{...s,stepCount:121}}});});
+	await fixture.page.waitForFunction(()=>window.__PROJECT_FOLDERS_VIEW__.state.summaries.get('c1').stepCount===121);
+	const proof=await fixture.page.evaluate(()=>({ids:[...window.__PROJECT_FOLDERS_VIEW__.state.summaries.keys()],project:window.__foldersFixture.projects.find(p=>p.id==='p1').name,methods:window.__foldersFixture.calls.map(c=>c.method),state:window.__PROJECT_FOLDERS_STATUS__.state}));
+	assert.deepEqual(proof.ids,['c1']);assert.equal(proof.project,'Project One');assert.equal(proof.state,'ready');assert.equal(proof.methods.includes('JetboxWriteSummary'),false);
+	assert.equal(await fixture.page.locator('#untouched-draft').inputValue(),'Unsaved draft');assert.deepEqual(fixture.errors,[]);
 });

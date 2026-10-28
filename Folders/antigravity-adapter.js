@@ -73,9 +73,8 @@
 	};
 	const navigate = ({projectId, conversationId}) => {
 		const url = new URL(win.location.href);
-		url.pathname = '/'; url.searchParams.delete('cascadeId'); url.searchParams.delete('section');
+		url.pathname = conversationId ? '/c/' + encodeURIComponent(conversationId) : '/'; url.searchParams.delete('cascadeId'); url.searchParams.delete('section');
 		if (projectId) url.searchParams.set('section', projectId);
-		if (conversationId) url.searchParams.set('cascadeId', conversationId);
 		win.history.pushState(null, '', url.pathname + url.search);
 		win.dispatchEvent(new win.PopStateEvent('popstate', {state: null}));
 	};
@@ -92,12 +91,14 @@
 	};
 	const updateConversation = async (id, annotations) => {
 		const current = summaries.get(id); if (!current) throw Error('Conversation is not present in the current snapshot');
-		const summary = {...structuredClone(current), annotations: {...structuredClone(current.annotations || {}), ...annotations}};
-		await rpc('JetboxWriteSummary', {cascadeId: id, summary});
+		await rpc('UpdateConversationAnnotations', {cascadeIds: [id], annotations, mergeAnnotations: true});
+		const latest = summaries.get(id); if (!latest) return;
+		const summary = {...structuredClone(latest), annotations: {...structuredClone(latest.annotations || {}), ...annotations}};
 		summaries = model.applySummaryUpdate(summaries, {updates: {[id]: summary}}); onSummaries(summaries);
 	};
 	return {
-		contract: 'antigravity-local-rpc-v1', rpc, readProjects, navigate, createProject, updateConversation,
+		contract: 'antigravity-local-rpc-v2', rpc, readProjects, navigate, createProject, updateConversation,
+		selection() {const url = new URL(win.location.href), match = /^\/c\/([^/]+)\/?$/.exec(url.pathname); return {projectId: url.searchParams.get('section'), conversationId: match ? decodeURIComponent(match[1]) : null};},
 		async start() {
 			await readProjects();
 			void watchSummaries();

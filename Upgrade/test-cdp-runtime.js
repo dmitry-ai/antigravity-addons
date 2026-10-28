@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const {Companion, bridgeSource, runtimeVersion} = require('./cdp-companion');
 const {CDP} = require('./cdp-client');
 const fixture = context => {
-	const parent = path.join(__dirname, 'work'); fs.mkdirSync(parent, {recursive: true}); const root = fs.mkdtempSync(path.join(parent, 'cdp-runtime-'));
+	const parent = os.tmpdir(); const root = fs.mkdtempSync(path.join(parent, 'antigravity-cdp-'));
 	context.after(() => {assert.ok(path.resolve(root).startsWith(path.resolve(parent) + path.sep)); fs.rmSync(root, {recursive: true, force: true});});
 	return root;
 };
@@ -19,7 +20,7 @@ class FakeCDP {
 		if (method === 'CSS.createStyleSheet') return {styleSheetId: 'owned-styles'};
 		return {};
 	}
-	async evaluate(expression) {this.expressions.push(expression); if (expression.startsWith('({product:')) return {product: 'Antigravity', csrf: 'string', ready: 'complete', origin: 'https://127.0.0.1:12345'};}
+	async evaluate(expression) {this.expressions.push(expression); if (expression.startsWith('({product:')) return {product: 'Antigravity', csrf: 'string', ready: 'complete', origin: 'https://127.0.0.1:12345', appRoot: true, nativeStorage: 'function'};}
 	close() {this.closed = true; this.handlers.get('close')?.();}
 }
 
@@ -90,4 +91,17 @@ test('A deferred source is retried after a user dialog closes and failed attachm
 	CDP.open = async () => broken;
 	await assert.rejects(runtime.attach({id:'closed-window',webSocketDebuggerUrl:'fixture'}), /Window closed/);
 	assert.equal(broken.closed, true); assert.equal(runtime.connections.has('closed-window'), false);
+});
+
+test('Opening a native conversation route keeps the same CDP binding and storage connection', async context=>{
+	const runtime=new Companion({root:fixture(context)}),cdp=new FakeCDP();let url='https://127.0.0.1:12345/';
+	const roaming=path.join(runtime.root,'roaming');fs.mkdirSync(path.join(roaming,'Antigravity'),{recursive:true});fs.writeFileSync(path.join(roaming,'Antigravity/DevToolsActivePort'),'10001');
+	const previous=process.env.APPDATA;process.env.APPDATA=roaming;context.after(()=>{process.env.APPDATA=previous;});
+	context.mock.method(CDP,'open',async()=>cdp);
+	context.mock.method(globalThis,'fetch',async endpoint=>Response.json(endpoint.endsWith('/json/version')?{'User-Agent':'Antigravity/2.27.0',webSocketDebuggerUrl:'ws://fixture/browser'}:[{id:'main',type:'page',url,webSocketDebuggerUrl:'ws://fixture/main'}]));
+	runtime.modules.set('folders',{source:()=> 'window.testFolders=true'});
+	await runtime.tick();const connection=runtime.connections.get('main');assert.ok(connection?.shell);
+	url='https://127.0.0.1:12345/c/existing-conversation?section=project';await runtime.tick();
+	assert.equal(runtime.connections.get('main'),connection);assert.equal(cdp.closed,false);assert.equal(cdp.calls.filter(call=>call.method==='Runtime.addBinding').length,1);
+	await runtime.dispose();
 });

@@ -1,0 +1,37 @@
+/* Keep transcript density scoped to the native conversation surface. */
+[data-testid='conversation-view'] {
+	--max-conversation-width: none;
+	[data-testid='autoscroll-viewport'] {
+		padding-inline: 4px !important;
+		[data-quotable], .whitespace-pre-wrap, .leading-relaxed, .prose {
+			line-height: 18px !important;
+		}
+		p, li { line-height: 18px !important; }
+		p { margin-block: 0 !important; }
+		.leading-relaxed { gap: 4px !important; }
+		.leading-relaxed :is(ul,ol):not(.contains-task-list) {
+			padding-inline-start: 16px !important;
+			margin-block: 2px !important;
+		}
+		div:has(> .leading-relaxed) { padding-inline: 4px !important; }
+		p code, li > code { line-height: 18px !important; padding-block: 0 !important; }
+		[data-testid='user-input-step'] { padding-top: 4px !important; }
+		[data-testid='thinking-collapsible-trigger'] {
+			min-height: 22px !important;
+			padding-block: 1px !important;
+			line-height: 18px !important;
+		}
+	}
+	> div:has([data-testid='agent-input-box']) {
+		padding: 0 4px 2px !important;
+		gap: 2px !important;
+	}
+	[data-testid='agent-input-box'] [contenteditable='true'] {
+		padding-block: 4px !important;
+		line-height: 18px !important;
+	}
+	[data-testid='agent-input-box'] p {
+		top: 4px !important;
+		line-height: 18px !important;
+	}
+}

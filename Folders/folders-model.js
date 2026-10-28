@@ -89,7 +89,7 @@
 			append(assigned, ids.has(folderId) ? folderId : null, project);
 		}
 		for (const [id, summary] of summaries) {
-			if (summary.annotations?.archived || summary.annotations?.isArchived || summary.trajectoryMetadata?.parentConversationId) continue;
+			if (summary.annotations?.archived || summary.annotations?.isArchived || summary.trajectoryMetadata?.parentConversationId || summary.trajectoryMetadata?.rootConversationId && summary.trajectoryMetadata.rootConversationId !== id) continue;
 			const projectId = summaryProject(summary);
 			if (archivedProjectIds.has(projectId)) continue;
 			if (active(summary) && projectId) activeProjects.add(projectId);

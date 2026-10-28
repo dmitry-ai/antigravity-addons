@@ -283,6 +283,7 @@ button[data-project-card] svg {
 	background: transparent !important;
 	color: var(--muted-foreground, #8e8e93) !important;
 	font-size: 12px !important;
+	line-height: 14px !important;
 	line-height: 1 !important;
 	padding: 0 !important;
 	opacity: 0 !important;
@@ -343,6 +344,7 @@ button[data-project-card] svg {
 	box-sizing: border-box !important;
 	font-family: inherit !important;
 	font-size: 12px !important;
+	line-height: 14px !important;
 	color: var(--foreground, #18181b) !important;
 	user-select: none !important;
 	animation: antigravity-menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1) !important;
@@ -357,14 +359,18 @@ button[data-project-card] svg {
 		transform: scale(1) translateY(0);
 	}
 }
-.antigravity-folder-menu-item {
+.antigravity-folder-menu .antigravity-folder-menu-item {
 	display: flex !important;
 	align-items: center !important;
 	justify-content: space-between !important;
 	gap: 8px !important;
 	flex-shrink: 0 !important;
 	white-space: nowrap !important;
-	padding: 5px 8px !important;
+	min-height: 16px !important;
+	line-height: 14px !important;
+	height: 16px !important;
+	box-sizing: border-box !important;
+	padding: 0 8px !important;
 	border-radius: 5px !important;
 	cursor: pointer !important;
 	color: var(--foreground, #18181b) !important;
@@ -385,13 +391,13 @@ button[data-project-card] svg {
 }
 .antigravity-folder-menu-title {
 	flex-shrink: 0;
-	padding: 4px 8px 6px;
+	padding: 2px 8px;
 	font-size: 11px;
 	font-weight: 600;
 	color: var(--muted-foreground, #71717a);
 }
 .antigravity-folder-targets {
-	min-height: 24px;
+	min-height: 16px;
 	max-height: min(260px, calc(100dvh - 130px));
 	overflow: auto;
 	overscroll-behavior: contain;
@@ -400,13 +406,13 @@ button[data-project-card] svg {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	height: 24px;
+	height: 16px;
 	padding-right: 8px;
 	border-radius: 4px;
 	cursor: pointer;
 	white-space: nowrap;
 	font-size: 12px;
-	line-height: 1;
+	line-height: 14px;
 	outline: none;
 }
 .antigravity-folder-target:is(:hover, :focus),
@@ -419,7 +425,7 @@ button[data-project-card] svg {
 	justify-content: center;
 	flex: 0 0 16px;
 	width: 16px;
-	height: 20px;
+	height: 16px;
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -860,4 +866,59 @@ button[data-project-card][data-folder-depth='8'],
 [data-index][data-folder-depth='8'] [data-testid='empty-placeholder'],
 [data-index][data-folder-depth='8'] [data-testid='conversation-row-sidebar'] {
 	padding-left: 128px !important;
+}
+/* Keep transcript density scoped to the native conversation surface. */
+[data-testid='conversation-view'] {
+	--max-conversation-width: none;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] {
+	padding-inline: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-quotable],
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .whitespace-pre-wrap,
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .leading-relaxed,
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .prose {
+	line-height: 18px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] p,
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] li {
+	line-height: 18px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] p {
+	margin-block: 0 !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .leading-relaxed {
+	gap: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] .leading-relaxed :is(ul,ol):not(.contains-task-list) {
+	padding-inline-start: 16px !important;
+	margin-block: 2px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] div:has(> .leading-relaxed) {
+	padding-inline: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] p code,
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] li > code {
+	line-height: 18px !important;
+	padding-block: 0 !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='user-input-step'] {
+	padding-top: 4px !important;
+}
+[data-testid='conversation-view'] [data-testid='autoscroll-viewport'] [data-testid='thinking-collapsible-trigger'] {
+	min-height: 22px !important;
+	padding-block: 1px !important;
+	line-height: 18px !important;
+}
+[data-testid='conversation-view'] > div:has([data-testid='agent-input-box']) {
+	padding: 0 4px 2px !important;
+	gap: 2px !important;
+}
+[data-testid='conversation-view'] [data-testid='agent-input-box'] [contenteditable='true'] {
+	padding-block: 4px !important;
+	line-height: 18px !important;
+}
+[data-testid='conversation-view'] [data-testid='agent-input-box'] p {
+	top: 4px !important;
+	line-height: 18px !important;
 }

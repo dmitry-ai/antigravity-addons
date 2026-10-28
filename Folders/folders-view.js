@@ -61,8 +61,8 @@
 		const el = element('div', 'fg-row');
 		el.dataset.foldersRow = row.key; el.dataset.rowIndex = index; el.style.top = `${index * rowHeight}px`; el.style.setProperty('--fg-depth', row.depth);
 		el.setAttribute('role', 'treeitem'); el.setAttribute('aria-level', row.depth + 1);
-		const selection = new URL(location.href).searchParams;
-		if (row.kind === 'conversation' && selection.get('cascadeId') === row.id || row.kind === 'project' && !selection.get('cascadeId') && selection.get('section') === row.id) el.setAttribute('aria-selected', 'true');
+		const selection = adapter.selection();
+		if (row.kind === 'conversation' && selection.conversationId === row.id || row.kind === 'project' && !selection.conversationId && selection.projectId === row.id) el.setAttribute('aria-selected', 'true');
 		if (row.folderId) { el.dataset.folderId = row.folderId; el.dataset.folderDepth = row.depth; }
 		if (row.projectId) el.dataset.groupId = row.projectId;
 		if (row.kind === 'folder' || row.kind === 'project') {
@@ -77,11 +77,14 @@
 		} else if (row.kind === 'project') {
 			const button = element('button', 'fg-label'); button.dataset.projectCard = 'true'; button.dataset.projectId = row.id;
 			if (row.folderId) button.dataset.folderId = row.folderId;
-			button.append(element('span', row.running ? 'fg-icon fg-running' : 'fg-icon', row.running ? '●' : '▱'), element('span', 'truncate', row.name));
+			const icon=element('span', row.running ? 'fg-icon fg-project-running' : 'fg-icon');
+			icon.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3z"/></svg>';
+			button.title='Проект: '+row.name;
+			button.append(icon, element('span', 'truncate', row.name));
 			button.onclick = () => adapter.navigate({projectId: row.id}); el.append(button);
 		} else if (row.kind === 'conversation') {
 			const button = element('button', 'fg-label'); button.dataset.testid = 'conversation-row-sidebar'; button.dataset.cascadeId = row.id;
-			button.dataset.selected = selection.get('cascadeId') === row.id;
+			button.dataset.selected = selection.conversationId === row.id;
 			const running = row.running;
 			button.append(element('span', running ? 'fg-icon fg-running' : 'fg-icon', running ? '●' : row.pinned ? '📌' : '◦'), element('span', 'truncate', row.name));
 			button.onclick = () => adapter.navigate({projectId: row.projectId, conversationId: row.id}); el.append(button);
@@ -145,6 +148,7 @@
 			}
 		});
 		view.root = root; status('mount', null); render(); client.bindRoot(root);
+		if (Number.isFinite(window.__FOLDERS_RESTORE_SCROLL__)) {scroll.scrollTop=window.__FOLDERS_RESTORE_SCROLL__;delete window.__FOLDERS_RESTORE_SCROLL__;render();}
 	};
 	async function createProjectDialog(folderId) {
 		client.ui.closeContextMenu(); if (client.activeModal) return;
@@ -194,7 +198,7 @@
 		inspect() { return {...window.__PROJECT_FOLDERS_STATUS__, rowCount: state.rows.length, renderedRows: canvas?.children.length || 0, collapsed: [...state.collapsed]}; },
 		reportAction(error) { status('action', error); },
 		refresh: render,
-		dispose() { disposed = true; clearInterval(timer); clearTimeout(paintTimer); observer.disconnect(); sizing.disconnect(); removeStorageListener?.(); adapter.dispose(); root?.remove(); style.remove(); if (nativeList) { nativeList.style.paddingTop = nativePaddingTop; nativeList.style.removeProperty('display'); nativeList.removeAttribute('aria-hidden'); } window.removeEventListener('antigravity-folders-updated', schedule); window.removeEventListener('popstate', schedule); delete window.__PROJECT_FOLDERS_VIEW__; }
+		dispose() { if(scroll)window.__FOLDERS_RESTORE_SCROLL__=scroll.scrollTop;disposed = true; clearInterval(timer); clearTimeout(paintTimer); observer.disconnect(); sizing.disconnect(); removeStorageListener?.(); adapter.dispose(); root?.remove(); style.remove(); if (nativeList) { nativeList.style.paddingTop = nativePaddingTop; nativeList.style.removeProperty('display'); nativeList.removeAttribute('aria-hidden'); } window.removeEventListener('antigravity-folders-updated', schedule); window.removeEventListener('popstate', schedule); delete window.__PROJECT_FOLDERS_VIEW__; }
 	};
 	window.__PROJECT_FOLDERS_VIEW__ = view;
 	window.addEventListener('antigravity-folders-updated', schedule);

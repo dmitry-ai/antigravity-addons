@@ -25,14 +25,14 @@ const discover = (root = toolsRoot) => {
 			if (false !== tool.enabled) {
 				if (tool.runtimeFiles !== undefined && (!Array.isArray(tool.runtimeFiles) || tool.runtimeFiles.some(file => typeof file !== 'string'))) throw Error(`Некорректный runtimeFiles: ${manifest}`);
 				tool.runtimeFiles = (tool.runtimeFiles || []).map(file => resolveFile(code, file));
-				for (const field of ['entry', 'prepare', 'validate', 'cdp']) {
+				for (const field of ['prepare', 'validate', 'cdp']) {
 					if (tool[field]) {
 						tool[field] = resolveFile(code, tool[field]);
 						new vm.Script(fs.readFileSync(tool[field], 'utf8'), {filename: tool[field]});
 					}
 				}
-				if (!tool.entry && !tool.cdp) {
-					throw new Error(`У модуля нет entry или cdp: ${manifest}`);
+				if (!tool.cdp || tool.entry) {
+					throw new Error(`Модулю нужен cdp без старого entry: ${manifest}`);
 				}
 				r.push({...tool, code, manifest, order: tool.order ?? 100, dependsOn: tool.dependsOn ?? []});
 			}
