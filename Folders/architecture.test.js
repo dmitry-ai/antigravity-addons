@@ -1,0 +1,144 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {EventEmitter} = require('node:events');
+const {createRequire} = require('node:module');
+const model = require('./folders-model');
+const createAdapter = require('./antigravity-adapter');
+const manager = require('./folders-manager');
+const {FoldersStore} = require('./folders-store');
+test('Vendor client source is preserved byte for byte across legacy, current, and future layouts', () => {
+	const {applyFolderPatch} = require('./legacy-migration');
+	for (const source of ['"use strict"; const old = () => {};', 'let future = async function*() {yield {renamed:true}};', fs.readFileSync(path.resolve(__dirname, '../../../../daily/2026/10/28/1 - Upgrade/source/renderer-2.27.0.js'), 'utf8')]) assert.ok(applyFolderPatch(source) === source);
+	new vm.Script(require('./renderer-source').rendererSource({folders: [], projectFolderMap: {}}));
+});
+const config = () => ({folders: [{id: 'root', name: 'Work', parentId: null}, {id: 'ten', name: '10', parentId: 'root'}, {id: 'two', name: '2', parentId: 'root'}, {id: 'empty', name: 'Empty', parentId: null}], projectFolderMap: {p1: 'two', p2: 'two'}, futureMetadata: {preserve: true}});
+const projects = [{id: 'p2', name: 'Project 10', newField: {}}, {id: 'p1', name: 'Project 2'}, {id: 'p3', name: 'Unassigned'}];
+const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
+const scratch = context => {
+	const parent = path.join(__dirname, 'work'); fs.mkdirSync(parent, {recursive: true});
+	const directory = fs.mkdtempSync(path.join(parent, 'architecture-'));
+	context.after(() => { const resolved = path.resolve(directory); assert.ok(resolved.startsWith(path.resolve(parent) + path.sep)); fs.rmSync(resolved, {recursive: true, force: true}); });
+	const filename = path.join(directory, 'folders.json'); fs.writeFileSync(filename, JSON.stringify(config()));
+	return {directory, filename};
+};
+test('The independent model sorts nested folders and projects and preserves conversation identities', () => {
+	const data = config(), before = JSON.stringify(data);
+	const rows = model.buildRows({data, projects, summaries: new Map([['c1', summary('p1')], ['standalone', summary(null)]])});
+	assert.deepEqual(rows.filter(row => row.kind === 'folder').map(row => row.id), ['empty', 'root', 'two', 'ten']);
+	assert.deepEqual(rows.filter(row => row.kind === 'project').map(row => row.id), ['p1', 'p2', 'p3']);
+	assert.equal(rows.find(row => row.id === 'c1').depth, 3);
+	assert.equal(rows.find(row => row.id === 'c1').projectId, 'p1');
+	assert.equal(rows.some(row => row.kind === 'empty' && row.folderId === 'root'), false);
+	assert.equal(rows.some(row => row.kind === 'empty' && row.folderId === 'empty'), true);
+	assert.equal(JSON.stringify(data), before);
+});
+test('Collapsed parents never leak assigned projects, subfolders, or conversations to the root', () => {
+	const rows = model.buildRows({data: config(), projects, summaries: new Map([['c1', summary('p1')]]), collapsed: new Set(['folder:root'])});
+	assert.equal(rows.some(row => ['two', 'ten', 'p1', 'p2', 'c1'].includes(row.id)), false);
+	assert.equal(rows.some(row => row.id === 'p3'), true);
+});
+test('Folder mutations validate cycles and sibling names, promote children, and preserve unknown metadata', () => {
+	const original = config();
+	assert.throws(() => model.applyAction(original, {action: 'move-folder', id: 'root', newParentId: 'two'}), /Cycle/);
+	assert.throws(() => model.applyAction(original, {action: 'rename-folder', id: 'ten', newName: '2'}), /collision/);
+	assert.throws(() => model.applyAction(original, {action: 'add-folder', name: 'New', parentId: 'missing'}), /not found/);
+	let next = model.applyAction(original, {action: 'add-folder', id: 'child', name: 'Child', parentId: 'two'});
+	next = model.applyAction(next, {action: 'remove-folder', id: 'two'});
+	assert.equal(next.folders.find(folder => folder.id === 'child').parentId, 'root');
+	assert.equal(next.projectFolderMap.p1, 'root');
+	assert.deepEqual(next.futureMetadata, original.futureMetadata);
+	assert.equal(original.folders.some(folder => folder.id === 'two'), true);
+});
+test('Assignments use exact opaque IDs, never project labels or positional matches', () => {
+	const data = model.applyAction(config(), {action: 'assign-project', projectId: 'Same visible name / provider:new', folderId: 'ten'});
+	assert.equal(data.projectFolderMap['Same visible name / provider:new'], 'ten');
+	assert.equal(data.projectFolderMap.p1, 'two');
+	assert.throws(() => model.applyAction(data, {action: 'assign-project', projectId: 'p4', folderId: 'Work'}), /not found/);
+});
+test('Conversation updates handle deletion and additive fields; incompatible schemas fail explicitly', () => {
+	const first = model.applySummaryUpdate(new Map(), {updates: {c1: {...summary('p1'), future: {value: 1}}}});
+	const next = model.applySummaryUpdate(first, {updates: {c2: summary('p2')}, deletes: ['c1'], futureEnvelopeField: true});
+	assert.deepEqual([...next.keys()], ['c2']);
+	assert.throws(() => model.applySummaryUpdate(next, {updates: []}), /Invalid/);
+	assert.throws(() => model.applySummaryUpdate(next, {newProtocol: {items: []}}), /contract changed/);
+});
+test('Atomic storage rejects stale UI revisions and stale CLI snapshots without overwriting concurrent work', context => {
+	const {filename, directory} = scratch(context); const store = new FoldersStore(filename); context.after(() => store.dispose());
+	const snapshot = manager.readConfig(filename), oldRevision = store.revision;
+	store.dispatch({action: 'rename-folder', id: 'ten', newName: 'Ten', revision: oldRevision});
+	assert.throws(() => store.dispatch({action: 'rename-folder', id: 'two', newName: 'Lost', revision: oldRevision}), /concurrently/);
+	snapshot.folders[0].name = 'Stale CLI';
+	assert.throws(() => manager.writeConfig(snapshot, filename), /concurrently/);
+	assert.equal(manager.readConfig(filename).folders.find(folder => folder.id === 'ten').name, 'Ten');
+	assert.deepEqual(fs.readdirSync(directory), ['folders.json']);
+});
+test('Invalid external JSON retains the last valid tree and reports an error, then recovers after atomic replacement', async context => {
+	const {filename, directory} = scratch(context); const store = new FoldersStore(filename); context.after(() => store.dispose());
+	const before = store.data;
+	fs.writeFileSync(filename, '{'); store.reload();
+	assert.equal(store.data, before); assert.ok(store.error);
+	assert.throws(() => store.dispatch({action: 'remove-folder', id: 'root'}));
+	const next = config(); next.folders[0].name = 'External';
+	const temporary = path.join(directory, 'next.json'); fs.writeFileSync(temporary, JSON.stringify(next)); fs.renameSync(temporary, filename);
+	await new Promise(resolve => setTimeout(resolve, 160));
+	assert.equal(store.error, null); assert.equal(store.data.folders[0].name, 'External');
+});
+const fakeWindow = () => {
+	const win = {__APP_CONFIG__: {csrfToken: 'fixture-only'}, location: {href: 'https://127.0.0.1:12345/'}, history: {pushState(_state, _title, url) { win.lastUrl = url; }}, dispatchEvent(event) { win.lastEvent = event; }, PopStateEvent: class {constructor(type) {this.type = type;}}};
+	return win;
+};
+test('Native API adapter tolerates added DTO fields and uses the declared project endpoints and IDs', async () => {
+	const calls = [], win = fakeWindow();
+	const adapter = createAdapter({window: win, model, fetch: async (url, options) => { calls.push({url, options}); return Response.json(url.endsWith('/ListProjects') ? {projectIds: ['p1'], future: {}} : url.endsWith('/ReadProjects') ? {projects: [projects[1]], future: true} : {}); }});
+	try {
+		assert.equal((await adapter.readProjects())[0].id, 'p1');
+		assert.deepEqual(JSON.parse(calls[1].options.body), {ids: ['p1']});
+		assert.equal(calls[0].options.headers['x-codeium-csrf-token'], 'fixture-only');
+		await adapter.createProject({id: 'exact-new-id', name: 'New', resources: []});
+		assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/CreateProject')).options.body).project.id, 'exact-new-id');
+		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
+		assert.equal(win.lastUrl, '/?section=p1&cascadeId=c1'); assert.equal(win.lastEvent.type, 'popstate');
+	} finally { adapter.dispose(); }
+});
+test('Native API errors and missing records are surfaced instead of reporting an empty successful tree', async () => {
+	const adapter = createAdapter({window: fakeWindow(), model, fetch: async url => Response.json(url.endsWith('/ListProjects') ? {projectIds: ['p1']} : {projects: []})});
+	await assert.rejects(adapter.readProjects(), /refusing to hide missing projects/); adapter.dispose();
+	const failed = createAdapter({window: fakeWindow(), model, fetch: async () => new Response('changed', {status: 404})});
+	await assert.rejects(failed.createProject({id: 'p-new', name: 'New'}), /HTTP 404/); failed.dispose();
+});
+const encode = value => { const data = new TextEncoder().encode(JSON.stringify(value)), bytes = new Uint8Array(data.length + 5); new DataView(bytes.buffer).setUint32(1, data.length); bytes.set(data, 5); return bytes; };
+test('Live conversation stream decodes fragmented/coalesced frames and preserves updates and deletions', async () => {
+	const a = encode({updates: {c1: summary('p1')}}), b = encode({updates: {c2: summary('p1')}, deletes: ['c1']});
+	const frames = new Uint8Array(a.length + b.length); frames.set(a); frames.set(b, a.length);
+	let finish;
+	const complete = new Promise(resolve => {finish = resolve;});
+	const received = [];
+	const adapter = createAdapter({window: fakeWindow(), model, onSummaries: value => { received.push([...value.keys()]); if (received.length === 2) { adapter.dispose(); finish(); } }, fetch: async url => {
+		if (!url.endsWith('/JetboxSubscribeToSummaries')) return Response.json(url.endsWith('/ListProjects') ? {projectIds: []} : {});
+		return new Response(new ReadableStream({start(controller) {controller.enqueue(frames.slice(0, 3)); controller.enqueue(frames.slice(3, 17)); controller.enqueue(frames.slice(17));}}), {headers: {'content-type': 'application/connect+json'}});
+	}});
+	await adapter.start(); await complete; adapter.dispose();
+	assert.deepEqual(received, [['c1'], ['c2']]);
+});
+test('Eight mock windows attach independently, pass native client bytes through, and clean up without touching app lifecycle', async context => {
+	const {filename} = scratch(context), realRequire = createRequire(__filename), handlers = new Map();
+	let registrations = 0;
+	const session = {protocol: {handle(scheme, handler) {registrations++; handlers.set(scheme, handler);}, unhandle() {throw Error('No legacy handler should be replaced');}}};
+	const module = {exports: {}};
+	vm.compileFunction(fs.readFileSync(path.join(__dirname, 'folders-host.js'), 'utf8'), ['require', 'module', '__dirname', 'console', 'URL', 'Response', 'setTimeout', 'clearTimeout'])(name => name === 'electron' ? {net: {fetch: async () => new Response('native client bytes')}} : realRequire(name), module, __dirname, console, URL, Response, setTimeout, clearTimeout);
+	const windows = [];
+	const makeWindow = () => { const win = new EventEmitter(), wc = new EventEmitter(); win.webContents = wc; win.isDestroyed = () => false; wc.session = session; wc.isDestroyed = () => false; wc.getURL = () => 'https://127.0.0.1:12345/'; wc.isLoading = () => true; wc.scripts = []; wc.executeJavaScript = async source => { wc.scripts.push(source); }; return win; };
+	context.after(() => windows.forEach(win => win.emit('closed')));
+	for (let index = 0; index < 8; index++) { const win = makeWindow(); windows.push(win); module.exports(win, filename); module.exports(win, filename); win.webContents.emit('dom-ready'); }
+	assert.equal(registrations, 1); assert.ok(windows.every(win => win.webContents.scripts.length === 1));
+	const native = await handlers.get('https')(new Request('https://127.0.0.1:12345/main.js')); assert.equal(await native.text(), 'native client bytes');
+	const current = await (await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders'))).json(); assert.equal(current.schemaVersion, 2);
+	const rejected = await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'move-folder', id: 'root', newParentId: 'two'})}));
+	assert.equal(rejected.status, 400); assert.match((await rejected.json()).error, /Cycle/);
+	for (const win of windows.splice(0)) win.emit('closed');
+	const reopened = makeWindow(); windows.push(reopened); module.exports(reopened, filename);
+	assert.equal((await (await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders'))).json()).schemaVersion, 2);
+});

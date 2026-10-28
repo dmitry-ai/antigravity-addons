@@ -16,7 +16,7 @@ const applyEdits = (source, edits) => {
 	return r;
 };
 const applyLayout = (source, layout, replacement, prefix) => {
-	const edits = [{start: layout.row.loop.start, end: layout.row.loop.end, text: remap(replacement, layout.row.names).replace('__ORIGINAL_LOOP_BODY__', layout.row.body)}];
+	const edits = [{start: layout.row.loop.start, end: layout.row.loop.end, text: remap(replacement, layout.row.names).replace('__PROJECT_GROUPS__', layout.row.groups).replace('__ORIGINAL_LOOP_BODY__', layout.row.body)}];
 	const {section, header, project, empty, virtual, hook, memo, react} = layout;
 	const row = getProperty(section.node.arguments[1], 'data-title').object.name;
 	addProperties(edits, section.node.arguments[1], `'data-folder-id':${row}.folderId,'data-folder-depth':${row}.folderDepth`);
@@ -126,13 +126,7 @@ const collectLayout = source => {
 	createProject.menu = requireOne(menuItems, 'пункт создания проекта');
 	if (!createProject.name) throw new Error('Не найден компонент создания проекта');
 	const saveProject = requireOne([...projectSaves.values()].filter(save => save.calls.length === 3), 'сохранение нового проекта');
-	const loopCandidates = [];
-	walk.simple(row.node.body, {CallExpression: node => {
-		if ('forEach' === getMember(node.callee) && 'ConditionalExpression' === node.callee.object?.type && source.slice(node.callee.object.test.start, node.callee.object.test.end).includes(`${row.fields.get('sectionHeader')}?.isCollapsed`)) {
-			loopCandidates.push(node);
-		}
-	}});
-	const loop = requireOne(loopCandidates, 'цикл проектов');
+	const loop = collectProjectLoop(row);
 	const collapse = row.declarations.filter(declaration => 'ArrowFunctionExpression' === declaration.init?.type && source.slice(declaration.init.start, declaration.init.end).includes(`${row.fields.get('collapsedSectionHeaderIds')}.includes(`));
 	const caller = requireOne(calls.filter(call => call.node.callee.name === row.node.id.name), 'вызов генератора строк');
 	const memoCall = requireOne(caller.ancestors.filter(node => 'CallExpression' === node.type && 'useMemo' === getMember(node.callee)), 'React useMemo');
@@ -146,6 +140,7 @@ const collectLayout = source => {
 		row: {
 			node: row.node,
 			loop,
+			groups: source.slice(loop.callee.object.start, loop.callee.object.end),
 			body: source.slice(loop.arguments[0].body.start + 1, loop.arguments[0].body.end - 1),
 			names: {b: row.fields.get('groups'), c: row.fields.get('groupBy'), h: row.fields.get('sectionHeader'), l: row.fields.get('variant'), q: row.returned.name, t: requireOne(collapse, 'состояние раскрытия папок').id.name, v: loop.arguments[0].params[0].name}
 		},
@@ -155,6 +150,36 @@ const collectLayout = source => {
 		throw new Error('Изменилась структура React-компонентов Antigravity');
 	}
 	return r;
+};
+const collectProjectLoop = row => {
+	const bindings = [];
+	const loops = [];
+	walk.fullAncestor(row.node, (node, state, ancestors) => {
+		if (getFunction(ancestors) === row.node) {
+			if ('VariableDeclarator' === node.type && 'Identifier' === node.id.type && node.init) {
+				bindings.push({name: node.id.name, value: node.init, start: node.start});
+			}
+			if ('AssignmentExpression' === node.type && '=' === node.operator && 'Identifier' === node.left.type) {
+				bindings.push({name: node.left.name, value: node.right, start: node.start});
+			}
+			if ('CallExpression' === node.type && 'forEach' === getMember(node.callee)) loops.push(node);
+		}
+	});
+	bindings.sort((a, b) => b.start - a.start);
+	const matches = loops.filter(loop => {
+		let selection = loop.callee.object;
+		let before = loop.start;
+		// Newer clients assign the collapsed selection before iterating it; names may be reused.
+		while ('Identifier' === selection?.type) {
+			const binding = bindings.find(item => item.name === selection.name && item.start < before);
+			if (!binding) break;
+			selection = binding.value;
+			before = binding.start;
+		}
+		const condition = selection?.test?.expression || selection?.test;
+		return 'ConditionalExpression' === selection?.type && 'isCollapsed' === getMember(condition) && condition.object?.name === row.fields.get('sectionHeader') && selection.alternate?.name === row.fields.get('groups') && 'CallExpression' === selection.consequent?.type && 'filter' === getMember(selection.consequent.callee) && selection.consequent.callee.object?.name === row.fields.get('groups');
+	});
+	return requireOne(matches, 'цикл проектов');
 };
 const getFunction = ancestors => [...ancestors].reverse().find(node => /Function/.test(node.type));
 const getMember = node => 'SequenceExpression' === node?.type ? getMember(node.expressions.at(-1)) : node?.computed ? node.property?.value : node?.property?.name;
@@ -175,4 +200,4 @@ const requireOne = (matches, description) => {
 	}
 	return matches[0];
 };
-module.exports = {applyLayout, collectLayout, remap};
+module.exports = {applyLayout, collectLayout, collectProjectLoop, remap};

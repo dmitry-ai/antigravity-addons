@@ -1,2 +1,3 @@
-// Behavioural regression tests. Live desktop checks are documented separately.
-require('./test-regressions');
+require("./architecture.test");
+require("./folder-picker.test");
+require("./project-creation.test");

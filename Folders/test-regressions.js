@@ -123,7 +123,7 @@ test('Actual application bundle is transformed as a complete executable script',
   const { applyFolderPatch } = require('./folders-patch');
   const source = fs.readFileSync(bundlePath, 'utf8');
   const transformed = applyFolderPatch(source, { folders: [{ id: 'empty-test', name: 'Empty Test' }], projectFolderMap: {} });
-  assert.notEqual(transformed, source, 'Compatible installed bundle must not silently fall back');
+  assert.ok(transformed !== source, 'Compatible installed bundle must not silently fall back');
   new vm.Script(transformed);
   assert.equal(applyFolderPatch('unsupported future application bundle', {}), 'unsupported future application bundle');
 });

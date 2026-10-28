@@ -9,7 +9,7 @@ function fixture() {
   let changed;
   const window = {__PROJECT_FOLDERS_DATA__: {folders: [{id: 'target', name: 'Work', parentId: null}], projectFolderMap: {}}, addEventListener() {}};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'folders-client.js'), 'utf8'), {
-    window, console: {log() {}, warn() {}},
+    window, AbortController, console: {log() {}, warn() {}},
     document: {readyState: 'loading', documentElement: {}, addEventListener() {}, querySelectorAll: () => dialogs, querySelector: () => null},
     MutationObserver: class {constructor(fn) {changed = fn;} observe() {}},
     requestAnimationFrame: fn => frames.push(fn), alert() {}

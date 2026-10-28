@@ -15,6 +15,8 @@
   if ('undefined' === typeof window) { r = undefined; break result; }
   if (window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__) { r = undefined; break result; }
   window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__ = true;
+  const lifetime = new AbortController();
+  const listen = (type, listener, capture = false) => window.addEventListener(type, listener, {capture, signal: lifetime.signal});
   console.log('[folders-client] Initializing Hierarchical Project Folders UI Controller...');
   function escapeHtml(str) {
 		let r;
@@ -93,6 +95,7 @@
       return result;
     },
     revealCreatedProject(projectId, folderId) {
+      if (window.__PROJECT_FOLDERS_VIEW__) return window.__PROJECT_FOLDERS_VIEW__.reveal(projectId, folderId);
       // Opening a folder's own action does not require moving or scrolling to the root toolbar.
       let folder = this.getFolder(folderId);
       while (folder) {
@@ -113,15 +116,18 @@
         const res = await fetch('/api/project-folders', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action, ...payload })
+          body: JSON.stringify({ action, ...payload, revision: window.__FOLDERS_REVISION__ })
         });
         const result = await res.json();
+        if (result.revision) window.__FOLDERS_REVISION__ = result.revision;
         if (result.success && result.data) {
           this.notifyUpdate(result.data);
         }
+        window.__PROJECT_FOLDERS_VIEW__?.reportAction(result.success ? null : result.error || 'Folder action failed');
         { r = result; break result; }
       } catch (err) {
         console.error('[folders-client] Action error:', err);
+        window.__PROJECT_FOLDERS_VIEW__?.reportAction(err.message);
         { r = { success: false, error: err.message }; break result; }
       }
 			}
@@ -308,6 +314,9 @@
       return options.join('');
     }
   };
+  client.ui = {showCreateFolderDialog, showFolderContextMenu, showProjectContextMenu, showMoveFolderMenu, showContextMenu, closeContextMenu};
+  client.bindRoot = root => { observer.disconnect(); observer.observe(root, {childList: true, subtree: true}); enhanceSidebarElements(); };
+  client.dispose = () => { lifetime.abort(); observer.disconnect(); if (enhanceFrame) cancelAnimationFrame(enhanceFrame); closeContextMenu(); client.activeModal?.remove(); window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__ = false; delete window.__PROJECT_FOLDERS_CLIENT__; };
   window.__PROJECT_FOLDERS_CLIENT__ = client;
   // --- 2. Context Menu System ---
   function closeContextMenu() {
@@ -689,6 +698,7 @@
         icon: '➕',
         label: 'Создать проект в этой папке…',
         onClick: () => {
+          if (window.__PROJECT_FOLDERS_VIEW__) return window.__PROJECT_FOLDERS_VIEW__.createProject(folderId);
           const button = folderHeaderEl.querySelector('[data-folder-create-project]');
           button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
           button?.click();
@@ -759,12 +769,12 @@
     showContextMenu(e.clientX, e.clientY, items, 'Переместить проект');
   }
   // --- 8. Global Event Listeners (Keyboard, Outside Click) ---
-  window.addEventListener('click', (e) => {
+  listen('click', (e) => {
     if (client.activeMenu && !client.activeMenu.contains(e.target)) {
       closeContextMenu();
     }
   });
-  window.addEventListener('keydown', (e) => {
+  listen('keydown', (e) => {
     if ('Escape' === e.key) {
       closeContextMenu();
       if (client.activeModal) {
@@ -815,10 +825,12 @@
     return { projectId: cardEl.getAttribute('data-project-id'), projectName: label };
   }
   function enhanceSidebarElements() {
+    if (lifetime.signal.aborted || window.__FOLDERS_STANDALONE__ && !window.__PROJECT_FOLDERS_VIEW__?.root) return;
+    const sidebarRoot = window.__PROJECT_FOLDERS_VIEW__?.root || document;
     const creation = client.pendingCreation;
     if (creation?.dialog && !creation.dialog.isConnected) client.pendingCreation = null;
     // A. Main Projects Header: 'Create Folder' button + Drop target to unassign/re-parent
-    const mainHeader = document.querySelector("[data-testid='section-header'][data-title='Projects'], [data-testid='section-header'][data-title='Workspaces'], [data-testid='section-header'][data-title*='Project']");
+    const mainHeader = sidebarRoot.querySelector("[data-testid='section-header'][data-title='Projects'], [data-testid='section-header'][data-title='Workspaces'], [data-testid='section-header'][data-title*='Project']");
     if (mainHeader) {
       const actionsContainer = mainHeader.querySelector('.group\\/section-header > div:last-child') || mainHeader.querySelector('div:last-child');
       if (actionsContainer && !actionsContainer.querySelector('.btn-create-folder')) {
@@ -894,7 +906,7 @@
       }
     }
     // B. Folder Headers: '+', '...' buttons, context menu, drag & drop
-    const folderHeaders = document.querySelectorAll("[data-testid='section-header'][data-title*='📁']");
+    const folderHeaders = sidebarRoot.querySelectorAll("[data-testid='section-header'][data-title*='📁']");
     folderHeaders.forEach(headerEl => {
       const info = extractFolderInfo(headerEl);
       if (!info || !info.folderId) return;
@@ -1131,7 +1143,7 @@
       }
     });
     // C. Empty Folder Placeholders: Also accept dropping directly onto "(папка пуста)"
-    const placeholders = document.querySelectorAll("[data-testid='empty-placeholder'], [data-group-id^='folder-']");
+    const placeholders = sidebarRoot.querySelectorAll("[data-testid='empty-placeholder'], [data-group-id^='folder-']");
     placeholders.forEach(ph => {
 			let r;
 			result: {
@@ -1198,7 +1210,7 @@
 			return r;
     });
     // D. Project Cards: Draggable and context menu
-    const projectCards = document.querySelectorAll('button[data-project-card]');
+    const projectCards = sidebarRoot.querySelectorAll('button[data-project-card]');
     projectCards.forEach(card => {
 			let r;
 			result: {
@@ -1242,7 +1254,7 @@
 			return r;
     });
     // E. Conversation Rows: Track active project and folder on click
-    const convoRows = document.querySelectorAll("[data-testid^='conversation-row-']");
+    const convoRows = sidebarRoot.querySelectorAll("[data-testid^='conversation-row-']");
     convoRows.forEach(row => {
       if (row._foldersConvoHooked) return;
       row._foldersConvoHooked = true;
@@ -1255,12 +1267,16 @@
       });
     });
   }
+  let enhanceFrame = null;
   const observer = new MutationObserver(() => {
-    enhanceSidebarElements();
+    const creation = client.pendingCreation;
+    if (creation?.dialog && !creation.dialog.isConnected) client.pendingCreation = null;
+    if (enhanceFrame) return;
+    enhanceFrame = requestAnimationFrame(() => { enhanceFrame = null; enhanceSidebarElements(); });
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (!window.__FOLDERS_STANDALONE__) observer.observe(document.documentElement, { childList: true, subtree: true });
   if ('loading' === document.readyState) {
-    document.addEventListener('DOMContentLoaded', enhanceSidebarElements);
+    document.addEventListener('DOMContentLoaded', enhanceSidebarElements, {once: true, signal: lifetime.signal});
   } else {
     enhanceSidebarElements();
   }

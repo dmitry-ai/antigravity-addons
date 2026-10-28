@@ -12,6 +12,8 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('node:crypto');
+const revisions = new WeakMap();
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
 const PROJECTS_DIR = path.join(process.env.USERPROFILE || 'C:/Users/dfedi', '.gemini/config/projects').replace(/\\/g, '/');
 /**
@@ -75,19 +77,30 @@ function readConfig(configPath = DEFAULT_CONFIG_PATH) {
 	let r;
 	result: {
   if (fs.existsSync(configPath)) {
-    { r = JSON.parse(fs.readFileSync(configPath, 'utf8')); break result; }
+    const raw = fs.readFileSync(configPath, 'utf8');
+    r = JSON.parse(raw.replace(/^\uFEFF/, ''));
+    revisions.set(r, crypto.createHash('sha256').update(raw).digest('hex'));
+    break result;
   }
   { r = { folders: [], projectFolderMap: {}, collapsedFolders: [] }; break result; }
 	}
 	return r;
 }
-function writeConfig(data, configPath = DEFAULT_CONFIG_PATH) {
+function writeConfig(data, configPath = DEFAULT_CONFIG_PATH, {expectedHash = revisions.get(data)} = {}) {
   validateTree(data.folders);
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf8');
+  const temporary = path.join(dir, `.${path.basename(configPath)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  try {
+    const descriptor = fs.openSync(temporary, 'wx');
+    try { fs.writeFileSync(descriptor, JSON.stringify(data, null, 2)); fs.fsyncSync(descriptor); }
+    finally { fs.closeSync(descriptor); }
+    if (expectedHash && (!fs.existsSync(configPath) || crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex') !== expectedHash)) throw Error('Folders configuration changed concurrently; reload it and retry');
+    fs.renameSync(temporary, configPath);
+    revisions.set(data, crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex'));
+  } finally { fs.rmSync(temporary, {force: true}); }
 }
 /**
  * Validates the folder tree structure:
