@@ -5,6 +5,7 @@
 	"enabled": true,
 	"order": 20,
 	"dependsOn": ["css"],
-	"entry": "folders-bootstrap.js",
+	"cdp": "cdp-runtime.js",
+	"runtimeFiles": ["folders-store.js", "folders-manager.js", "folders-model.js", "renderer-source.js"],
 	"validate": "verify.js"
 }

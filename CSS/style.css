@@ -1,3 +1,7 @@
+:root {
+	--antigravity-tree-row-height: 16px;
+	--antigravity-tree-line-height: 14px;
+}
 [role='navigation'][aria-label='Sidebar'] {
 	padding-bottom: 2px !important;
 }
@@ -163,6 +167,34 @@ button[data-project-card] svg {
 	line-height: 14px !important;
 	padding-bottom: 0 !important;
 	padding-top: 0 !important;
+}
+/* Native menus are portaled outside the sidebar. Scope by role and explicit
+	 model-selector anchors, never by general button/div or generated class names. */
+[role='menu'] [role='menuitem'],
+[role='menu'] [role='menuitemcheckbox'],
+[role='menu'] [role='menuitemradio'] {
+	min-height: 20px !important;
+	padding-top: 1px !important;
+	padding-bottom: 1px !important;
+	font-size: 12px !important;
+	line-height: 16px !important;
+}
+[data-testid='model-selector-panel'] {
+	gap: 0 !important;
+}
+[data-testid='model-selector-panel'] button,
+[data-testid='model-selector-panel'] [role='menuitem'],
+[data-testid='model-selector-panel'] [data-testid='model-selector-header'] {
+	font-size: 12px !important;
+	line-height: 16px !important;
+}
+[data-testid='model-selector-panel'] [data-testid='model-selector-header'] {
+	padding-bottom: 2px !important;
+}
+[data-testid='model-selector-trigger'],
+[data-testid='permissions-selector-trigger'] {
+	height: 22px !important;
+	min-height: 22px !important;
 }
 /* ========================================================
 	 Иерархическая система отступов папок и проектов (Method 1)

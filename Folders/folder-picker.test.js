@@ -44,9 +44,9 @@ test('project picker sends exact target IDs and keeps the current folder separat
   let items, title;
   const client = {getProjectFolderId: () => 'month', postAction: (...args) => actions.push(args)};
   vm.compileFunction(functions.get('showProjectContextMenu') + '\nshowProjectContextMenu(event, null, "project-id", "Same name");',
-    ['client', 'showContextMenu', 'event', 'showCreateFolderDialog'])(client,
+    ['client', 'showContextMenu', 'event', 'showCreateFolderDialog', 'window'])(client,
     (_x, _y, value, label) => {items = value; title = label;},
-    {preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1}, () => {});
+    {preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1}, () => {}, {});
   assert.equal(title, 'Переместить проект');
   assert.equal(items[0].folderTree.selectedId, 'month');
   assert.equal(actions.length, 0, 'Opening a picker changes no assignments');

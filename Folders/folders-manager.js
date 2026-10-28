@@ -94,8 +94,13 @@ function writeConfig(data, configPath = DEFAULT_CONFIG_PATH, {expectedHash = rev
   }
   const temporary = path.join(dir, `.${path.basename(configPath)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   try {
+    const previousText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+    const newline = previousText.includes('\r\n') ? '\r\n' : '\n';
+    let text = JSON.stringify(data, null, 2).replace(/\n/g, newline);
+    if (previousText.endsWith('\n')) text += newline;
+    if (previousText.startsWith('\uFEFF')) text = '\uFEFF' + text;
     const descriptor = fs.openSync(temporary, 'wx');
-    try { fs.writeFileSync(descriptor, JSON.stringify(data, null, 2)); fs.fsyncSync(descriptor); }
+    try { fs.writeFileSync(descriptor, text); fs.fsyncSync(descriptor); }
     finally { fs.closeSync(descriptor); }
     if (expectedHash && (!fs.existsSync(configPath) || crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex') !== expectedHash)) throw Error('Folders configuration changed concurrently; reload it and retry');
     fs.renameSync(temporary, configPath);
@@ -110,52 +115,7 @@ function writeConfig(data, configPath = DEFAULT_CONFIG_PATH, {expectedHash = rev
  * 4. Siblings under the same parent must have unique names (case-insensitive).
  */
 function validateTree(folders) {
-  if (!Array.isArray(folders)) {
-    throw new Error('folders must be an array');
-  }
-  const idMap = new Map();
-  for (const f of folders) {
-    if (!f.id || 'string' !== typeof f.id) {
-      throw new Error(`Invalid folder id: ${JSON.stringify(f.id)}`);
-    }
-    if (idMap.has(f.id)) {
-      throw new Error(`Duplicate folder ID: "${f.id}"`);
-    }
-    idMap.set(f.id, f);
-  }
-  // Check parent references & cycles
-  for (const f of folders) {
-    if (null !== f.parentId && f.parentId !== undefined) {
-      if (!idMap.has(f.parentId)) {
-        throw new Error(`Folder "${f.name}" (${f.id}) references non-existent parentId: "${f.parentId}"`);
-      }
-      // Check for cycles by walking up ancestor chain
-      const visited = new Set([f.id]);
-      let curr = f;
-      while (curr.parentId) {
-        if (visited.has(curr.parentId)) {
-          throw new Error(`Cycle detected in folder hierarchy involving "${f.name}" (${f.id})`);
-        }
-        visited.add(curr.parentId);
-        curr = idMap.get(curr.parentId);
-        if (!curr) break;
-      }
-    }
-  }
-  // Check sibling name uniqueness
-  const siblingGroups = new Map();
-  for (const f of folders) {
-    const parentKey = f.parentId || '__root__';
-    if (!siblingGroups.has(parentKey)) {
-      siblingGroups.set(parentKey, new Set());
-    }
-    const nameLower = (f.name || '').trim().toLowerCase();
-    const group = siblingGroups.get(parentKey);
-    if (group.has(nameLower)) {
-      throw new Error(`Sibling folder name collision under parent "${f.parentId}": "${f.name}"`);
-    }
-    group.add(nameLower);
-  }
+  return require("./folders-model").validateFolders(folders);
 }
 /**
  * Returns a Set of all descendant IDs for a given folder.

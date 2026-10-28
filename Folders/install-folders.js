@@ -5,12 +5,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const BOOTSTRAP_PATH = path.resolve(__dirname, '../../CSS/code/bootstrap.js');
-const FOLDERS_BOOTSTRAP_PATH = path.join(__dirname, 'folders-bootstrap.js').replace(/\\/g, '/');
-const INJECTION_LINE = `\ttry { require('${FOLDERS_BOOTSTRAP_PATH}')(win); } catch (e) { console.error('[folders-bootstrap]', e); }`;
 function install() {
 	setEnabled(true);
-	console.log('[install-folders] Folders включён в tool.json. Для подключения запустите ярлык Upgrade при закрытом Antigravity.');
+	console.log('[install-folders] Folders включён в tool.json. Запустите Upg; закрывать Antigravity не требуется.');
 }
 function setEnabled(enabled) {
 	const filename = path.join(__dirname, 'tool.json');
@@ -29,4 +26,4 @@ if (require.main === module) {
     process.exit(1);
   }
 }
-module.exports = { install, setEnabled, BOOTSTRAP_PATH, INJECTION_LINE };
+module.exports = {install, setEnabled};

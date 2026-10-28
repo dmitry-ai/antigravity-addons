@@ -2,18 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
-const {EventEmitter} = require('node:events');
-const {createRequire} = require('node:module');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
 const {FoldersStore} = require('./folders-store');
-test('Vendor client source is preserved byte for byte across legacy, current, and future layouts', () => {
-	const {applyFolderPatch} = require('./legacy-migration');
-	for (const source of ['"use strict"; const old = () => {};', 'let future = async function*() {yield {renamed:true}};', fs.readFileSync(path.resolve(__dirname, '../../../../daily/2026/10/28/1 - Upgrade/source/renderer-2.27.0.js'), 'utf8')]) assert.ok(applyFolderPatch(source) === source);
-	new vm.Script(require('./renderer-source').rendererSource({folders: [], projectFolderMap: {}}));
-});
 const config = () => ({folders: [{id: 'root', name: 'Work', parentId: null}, {id: 'ten', name: '10', parentId: 'root'}, {id: 'two', name: '2', parentId: 'root'}, {id: 'empty', name: 'Empty', parentId: null}], projectFolderMap: {p1: 'two', p2: 'two'}, futureMetadata: {preserve: true}});
 const projects = [{id: 'p2', name: 'Project 10', newField: {}}, {id: 'p1', name: 'Project 2'}, {id: 'p3', name: 'Unassigned'}];
 const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
@@ -91,8 +83,8 @@ const fakeWindow = () => {
 	return win;
 };
 test('Native API adapter tolerates added DTO fields and uses the declared project endpoints and IDs', async () => {
-	const calls = [], win = fakeWindow();
-	const adapter = createAdapter({window: win, model, fetch: async (url, options) => { calls.push({url, options}); return Response.json(url.endsWith('/ListProjects') ? {projectIds: ['p1'], future: {}} : url.endsWith('/ReadProjects') ? {projects: [projects[1]], future: true} : {}); }});
+	const calls = [], win = fakeWindow(), native = [projects[1]];
+	const adapter = createAdapter({window: win, model, fetch: async (url, options) => { calls.push({url, options}); if(url.endsWith('/CreateProject'))native.push(JSON.parse(options.body).project); return Response.json(url.endsWith('/ListProjects') ? {projectIds: native.map(project => project.id), future: {}} : url.endsWith('/ReadProjects') ? {projects: native, future: true} : {}); }});
 	try {
 		assert.equal((await adapter.readProjects())[0].id, 'p1');
 		assert.deepEqual(JSON.parse(calls[1].options.body), {ids: ['p1']});
@@ -122,23 +114,4 @@ test('Live conversation stream decodes fragmented/coalesced frames and preserves
 	}});
 	await adapter.start(); await complete; adapter.dispose();
 	assert.deepEqual(received, [['c1'], ['c2']]);
-});
-test('Eight mock windows attach independently, pass native client bytes through, and clean up without touching app lifecycle', async context => {
-	const {filename} = scratch(context), realRequire = createRequire(__filename), handlers = new Map();
-	let registrations = 0;
-	const session = {protocol: {handle(scheme, handler) {registrations++; handlers.set(scheme, handler);}, unhandle() {throw Error('No legacy handler should be replaced');}}};
-	const module = {exports: {}};
-	vm.compileFunction(fs.readFileSync(path.join(__dirname, 'folders-host.js'), 'utf8'), ['require', 'module', '__dirname', 'console', 'URL', 'Response', 'setTimeout', 'clearTimeout'])(name => name === 'electron' ? {net: {fetch: async () => new Response('native client bytes')}} : realRequire(name), module, __dirname, console, URL, Response, setTimeout, clearTimeout);
-	const windows = [];
-	const makeWindow = () => { const win = new EventEmitter(), wc = new EventEmitter(); win.webContents = wc; win.isDestroyed = () => false; wc.session = session; wc.isDestroyed = () => false; wc.getURL = () => 'https://127.0.0.1:12345/'; wc.isLoading = () => true; wc.scripts = []; wc.executeJavaScript = async source => { wc.scripts.push(source); }; return win; };
-	context.after(() => windows.forEach(win => win.emit('closed')));
-	for (let index = 0; index < 8; index++) { const win = makeWindow(); windows.push(win); module.exports(win, filename); module.exports(win, filename); win.webContents.emit('dom-ready'); }
-	assert.equal(registrations, 1); assert.ok(windows.every(win => win.webContents.scripts.length === 1));
-	const native = await handlers.get('https')(new Request('https://127.0.0.1:12345/main.js')); assert.equal(await native.text(), 'native client bytes');
-	const current = await (await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders'))).json(); assert.equal(current.schemaVersion, 2);
-	const rejected = await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'move-folder', id: 'root', newParentId: 'two'})}));
-	assert.equal(rejected.status, 400); assert.match((await rejected.json()).error, /Cycle/);
-	for (const win of windows.splice(0)) win.emit('closed');
-	const reopened = makeWindow(); windows.push(reopened); module.exports(reopened, filename);
-	assert.equal((await (await handlers.get('https')(new Request('https://127.0.0.1:12345/api/project-folders'))).json()).schemaVersion, 2);
 });

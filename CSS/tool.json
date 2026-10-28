@@ -4,6 +4,6 @@
 	"name": "Компактный интерфейс",
 	"enabled": true,
 	"order": 10,
-	"entry": "bootstrap.js",
+	"cdp": "cdp-runtime.js",
 	"prepare": "build.js"
 }

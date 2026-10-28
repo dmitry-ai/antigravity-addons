@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const inspectRuntime = async () => {
+const inspectRuntime = async ({expectedTools = ['css', 'folders']} = {}) => {
 	const filename = path.join(process.env.APPDATA || '', 'Antigravity/DevToolsActivePort');
 	if (!fs.existsSync(filename)) return {state: 'unavailable', reason: 'CDP endpoint file is absent'};
 	const port = Number(fs.readFileSync(filename, 'utf8').split(/\r?\n/)[0]);
@@ -21,13 +21,14 @@ const inspectRuntime = async () => {
 			const status = await new Promise((resolve, reject) => {
 				const timeout = setTimeout(() => reject(Error('CDP health check timeout')), 5000);
 				socket.addEventListener('message', event => { const result = JSON.parse(event.data); if (result.id !== 1) return; clearTimeout(timeout); if (result.error || result.result?.exceptionDetails) reject(Error('CDP health check failed')); else resolve(result.result?.result?.value); });
-				socket.send(JSON.stringify({id: 1, method: 'Runtime.evaluate', params: {expression: 'window.__PROJECT_FOLDERS_VIEW__?.inspect() || {state:"missing",reason:"Folders runtime is not attached"}', returnByValue: true}}));
+				const expression = `(() => {const tools=window.__ANTIGRAVITY_TOOLS_STATUS__,expected=${JSON.stringify(expectedTools)};if(!tools||expected.some(id=>!tools.tools.includes(id)))return {state:'missing',reason:'Tools runtime is not attached',tools};if(tools.pending.length)return {state:'deferred',reason:tools.pending,tools};return expected.includes('folders')?{...(window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'missing',reason:'Folders runtime is not attached'}),tools}:{state:'ready',tools};})()`;
+				socket.send(JSON.stringify({id: 1, method: 'Runtime.evaluate', params: {expression, returnByValue: true}}));
 			});
 			windows.push({url: page.url, ...status});
 		} finally { socket.close(); }
 	}
 	const failed = windows.filter(win => win.state !== 'ready');
-	if (failed.length) throw Error(`Folders runtime is not healthy: ${failed.map(win => `${win.state}: ${JSON.stringify(win.errors || win.reason || {})}`).join('; ')}`);
+	if (failed.length) throw Error(`Tools runtime is not healthy: ${failed.map(win => `${win.state}: ${JSON.stringify(win.errors || win.reason || {})}`).join('; ')}`);
 	return {state: 'ready', windows};
 };
 if (require.main === module) inspectRuntime().then(result => { console.log(JSON.stringify(result, null, 2)); if (result.state !== 'ready') process.exitCode = 2; }).catch(error => {console.error(error.message); process.exitCode = 1;});

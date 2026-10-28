@@ -4,7 +4,7 @@
 })(function createAdapter({window: win, fetch: request = win.fetch.bind(win), model = win.AntigravityFoldersModel, onProjects = () => {}, onSummaries = () => {}, onStatus = () => {}}) {
 	const service = '/exa.language_server_pb.LanguageServerService/';
 	const lifetime = new AbortController();
-	let summaries = new Map(), poll, stopped = false;
+	let summaries = new Map(), poll, stopped = false, retryDelay = 1000;
 	const headers = type => {
 		if (typeof win.__APP_CONFIG__?.csrfToken !== 'string') throw Error('Antigravity API contract: csrfToken is unavailable');
 		return {'content-type': type, 'x-codeium-csrf-token': win.__APP_CONFIG__.csrfToken, 'connect-protocol-version': '1'};
@@ -21,11 +21,13 @@
 		const listed = await rpc('ListProjects', {});
 		const ids = listed.projectIds || [];
 		if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id)) throw Error('ListProjects: projectIds contract changed');
+		if (new Set(ids).size !== ids.length) throw Error('ListProjects: duplicate project IDs');
 		if (!ids.length && Object.keys(listed).some(key => key !== 'projectIds')) throw Error('ListProjects: unknown project list schema');
 		const result = ids.length ? await rpc('ReadProjects', {ids}) : {projects: []};
 		const projects = result.projects || [];
 		if (!Array.isArray(projects) || projects.some(project => !project || typeof project.id !== 'string' || !project.id || project.name !== undefined && typeof project.name !== 'string')) throw Error('ReadProjects: project schema changed');
 		if (projects.length !== ids.length) throw Error(`ReadProjects: expected ${ids.length} projects, received ${projects.length}; refusing to hide missing projects`);
+		if (new Set(projects.map(project => project.id)).size !== ids.length || projects.some(project => !ids.includes(project.id))) throw Error('ReadProjects: project IDs do not match the request');
 		onProjects(projects); onStatus('projects', null);
 		return projects;
 	};
@@ -51,22 +53,22 @@
 					pending = pending.slice(size + 5);
 					if (flags !== 0) throw Error(message.error?.message || 'Conversation stream ended or changed encoding');
 					incoming = model.applySummaryUpdate(incoming, message); summaries = incoming;
+					retryDelay = 1000;
 					onSummaries(summaries); onStatus('conversations', null);
 				}
 			}
 		} finally { await reader.cancel().catch(() => {}); }
 	};
 	const watchSummaries = async () => {
-		let delay = 1000;
 		while (!stopped) {
 			try { await streamOnce(); }
 			catch (error) { if (stopped) break; onStatus('conversations', error.message); }
 			await new Promise(resolve => {
 				const finish = () => { clearTimeout(timer); lifetime.signal.removeEventListener('abort', finish); resolve(); };
-				const timer = setTimeout(finish, delay);
+				const timer = setTimeout(finish, retryDelay);
 				lifetime.signal.addEventListener('abort', finish, {once: true});
 			});
-			delay = Math.min(delay * 2, 30000);
+			retryDelay = Math.min(retryDelay * 2, 30000);
 		}
 	};
 	const navigate = ({projectId, conversationId}) => {
@@ -79,12 +81,23 @@
 	};
 	const createProject = async ({id, name, resources = []}) => {
 		if (!id || !name.trim()) throw Error('Project id and name are required');
-		await rpc('CreateProject', {project: {id, name: name.trim(), projectResources: {resources}, settings: {}}});
-		await readProjects();
+		// A dialog owns one UUID. Retrying after an ambiguous network failure must
+		// recover that exact project rather than create or capture another one.
+		if (!(await readProjects()).some(project => project.id === id)) {
+			try {await rpc('CreateProject', {project: {id, name: name.trim(), projectResources: {resources}, settings: {}}});}
+			catch (error) {if (!(await readProjects()).some(project => project.id === id)) throw error;}
+		}
+		if (!(await readProjects()).some(project => project.id === id)) throw Error(`CreateProject: exact project ${id} is missing after creation`);
 		return id;
 	};
+	const updateConversation = async (id, annotations) => {
+		const current = summaries.get(id); if (!current) throw Error('Conversation is not present in the current snapshot');
+		const summary = {...structuredClone(current), annotations: {...structuredClone(current.annotations || {}), ...annotations}};
+		await rpc('JetboxWriteSummary', {cascadeId: id, summary});
+		summaries = model.applySummaryUpdate(summaries, {updates: {[id]: summary}}); onSummaries(summaries);
+	};
 	return {
-		contract: 'antigravity-local-rpc-v1', rpc, readProjects, navigate, createProject,
+		contract: 'antigravity-local-rpc-v1', rpc, readProjects, navigate, createProject, updateConversation,
 		async start() {
 			await readProjects();
 			void watchSummaries();

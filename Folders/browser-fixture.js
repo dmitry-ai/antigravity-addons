@@ -2,11 +2,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../../Upgrade/code/node_modules/playwright-core');
 const {rendererSource} = require('./renderer-source');
-const openFixture = async ({data, projects, summaries = {}, missingAnchor = false, badProjects = false} = {}) => {
+const openFixture = async ({data, projects, summaries = {}, missingAnchor = false, badProjects = false, delayedAnchor = false} = {}) => {
 	const browser = await chromium.launch({headless: true, ...(process.env.FOLDERS_TEST_BROWSER ? {executablePath: process.env.FOLDERS_TEST_BROWSER} : process.platform === 'win32' ? {channel: 'msedge'} : {})});
 	const page = await browser.newPage({viewport: {width: 900, height: 700}});
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
-	await page.route('https://folders-fixture.invalid/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head></head><body style="margin:0"><nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="${missingAnchor ? 'changed-sidebar-contract' : 'conversation-list-sidebar'}" style="height:100%"><article class="new-future-vendor-class">Native project list</article></div></nav><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea></body></html>`}));
+	await page.route('https://folders-fixture.invalid/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head></head><body style="margin:0"><nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="${missingAnchor || delayedAnchor ? 'changed-sidebar-contract' : 'conversation-list-sidebar'}" style="height:100%"><article class="new-future-vendor-class">Native project list</article></div></nav><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea></body></html>`}));
 	await page.addInitScript(({data, projects, summaries, badProjects}) => {
 		window.__APP_CONFIG__ = {csrfToken: 'isolated-fixture', appVersion: 'future-fixture'};
 		const fixture = window.__foldersFixture = {data, projects, summaries, calls: [], storage: {}, listeners: new Set(), streams: new Set(), revision: 1, observers: [], badProjects};
@@ -44,10 +44,18 @@ const openFixture = async ({data, projects, summaries = {}, missingAnchor = fals
 			}
 			return new Response('Unknown fixture method', {status: 404});
 		};
+		window.__ANTIGRAVITY_TOOLS_REQUEST__ = async (tool, message) => {
+			if (tool !== 'folders') throw Error('Unknown fixture tool');
+			if (message.method === 'GET_VIEW_STATE') return fixture.viewState || {schemaVersion: 1};
+			if (message.method === 'SET_VIEW_STATE') {fixture.viewState = {schemaVersion: 1, ...message.body}; window.dispatchEvent(new CustomEvent('antigravity-folders-view-state', {detail: fixture.viewState})); return fixture.viewState;}
+			const response = await window.fetch('/api/project-folders', {method: message.method, body: message.body ? JSON.stringify(message.body) : undefined});
+			const result = await response.json(); if (!response.ok || result.error) throw Error(result.error || 'Fixture request failed'); return result;
+		};
 	}, {data, projects, summaries, badProjects});
 	await page.goto('https://folders-fixture.invalid/');
 	await page.addStyleTag({content: fs.readFileSync(path.resolve(__dirname, '../../CSS/code/style.css'), 'utf8')});
 	await page.addScriptTag({content: rendererSource(data) + '\n//# sourceURL=folders-runtime-fixture.js'});
+	if (delayedAnchor) await page.evaluate(() => { setTimeout(() => {const old=document.querySelector('[data-testid="changed-sidebar-contract"]');const next=old.cloneNode(true);next.dataset.testid='conversation-list-sidebar';old.replaceWith(next);},500); });
 	return {browser, page, errors, async close() {await browser.close();}};
 };
 module.exports = {openFixture};

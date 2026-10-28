@@ -62,38 +62,6 @@
     draggedFolderId: null,
     draggedProjectId: null,
     isDragging: false,
-    pendingCreation: null,
-    async runProjectCreation(folderId, action) {
-      const context = folderId && this.getFolder(folderId)
-        ? { folderId, running: true, dialog: null } : null;
-      this.pendingCreation = context;
-      const previous = new Set(document.querySelectorAll('[role="dialog"]'));
-      try { return await action(); }
-      finally {
-        if (context) {
-          context.running = false;
-          requestAnimationFrame(() => {
-            if (this.pendingCreation !== context) return;
-            context.dialog = [...document.querySelectorAll('[role="dialog"]')].find(el => !previous.has(el)) || null;
-            if (!context.dialog) this.pendingCreation = null;
-          });
-        }
-      }
-    },
-    captureProjectCreation() {
-      const context = this.pendingCreation;
-      return context && (context.running || context.dialog?.isConnected) ? context : null;
-    },
-    async saveCreatedProject(save, projectId, context) {
-      const result = await save();
-      if (context && this.getFolder(context.folderId)) {
-        const assignment = await this.postAction('assign-project', { projectId, folderId: context.folderId });
-        if (assignment.success) this.revealCreatedProject(projectId, context.folderId);
-        else alert('Проект создан, но не удалось поместить его в папку: ' + (assignment.error || 'неизвестная ошибка'));
-      }
-      if (this.pendingCreation === context) this.pendingCreation = null;
-      return result;
-    },
     revealCreatedProject(projectId, folderId) {
       if (window.__PROJECT_FOLDERS_VIEW__) return window.__PROJECT_FOLDERS_VIEW__.reveal(projectId, folderId);
       // Opening a folder's own action does not require moving or scrolling to the root toolbar.
@@ -113,12 +81,13 @@
 			result: {
       try {
         console.log(`[folders-client] Dispatching action: ${action}`, payload);
-        const res = await fetch('/api/project-folders', {
+        const requestBody = {action, ...payload, revision: window.__FOLDERS_REVISION__};
+        const res = window.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await fetch('/api/project-folders', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action, ...payload, revision: window.__FOLDERS_REVISION__ })
+          body: JSON.stringify(requestBody)
         });
-        const result = await res.json();
+        const result = window.__ANTIGRAVITY_TOOLS_REQUEST__ ? await window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'POST', body: requestBody}) : await res.json();
         if (result.revision) window.__FOLDERS_REVISION__ = result.revision;
         if (result.success && result.data) {
           this.notifyUpdate(result.data);
@@ -139,7 +108,7 @@
       this.triggerRerender();
     },
     triggerRerender() {
-      // The shared React row hook subscribes to this event.
+      // The independent tree subscribes to this event.
       window.dispatchEvent(new CustomEvent('antigravity-folders-updated', { detail: this.data }));
     },
     getFolder(id) {
@@ -699,9 +668,7 @@
         label: 'Создать проект в этой папке…',
         onClick: () => {
           if (window.__PROJECT_FOLDERS_VIEW__) return window.__PROJECT_FOLDERS_VIEW__.createProject(folderId);
-          const button = folderHeaderEl.querySelector('[data-folder-create-project]');
-          button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-          button?.click();
+          throw Error('Folders view is unavailable; run Upg to reconnect');
         }
       },
       {
@@ -750,6 +717,12 @@
       selectedId: currentFolderId,
       onSelect: folderId => client.postAction('assign-project', {projectId, folderId})
     }}, {separator: true}];
+    if (window.__PROJECT_FOLDERS_VIEW__) {
+      items.push({label: 'Открыть проект', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
+      items.push({label: 'Новый разговор', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
+      items.push({label: 'Переименовать проект…', onClick: () => window.__PROJECT_FOLDERS_VIEW__.renameProject(projectId)});
+      items.push({separator: true});
+    }
     items.push({
       icon: '➕',
       label: 'Создать папку…',
@@ -827,8 +800,6 @@
   function enhanceSidebarElements() {
     if (lifetime.signal.aborted || window.__FOLDERS_STANDALONE__ && !window.__PROJECT_FOLDERS_VIEW__?.root) return;
     const sidebarRoot = window.__PROJECT_FOLDERS_VIEW__?.root || document;
-    const creation = client.pendingCreation;
-    if (creation?.dialog && !creation.dialog.isConnected) client.pendingCreation = null;
     // A. Main Projects Header: 'Create Folder' button + Drop target to unassign/re-parent
     const mainHeader = sidebarRoot.querySelector("[data-testid='section-header'][data-title='Projects'], [data-testid='section-header'][data-title='Workspaces'], [data-testid='section-header'][data-title*='Project']");
     if (mainHeader) {
@@ -1269,8 +1240,6 @@
   }
   let enhanceFrame = null;
   const observer = new MutationObserver(() => {
-    const creation = client.pendingCreation;
-    if (creation?.dialog && !creation.dialog.isConnected) client.pendingCreation = null;
     if (enhanceFrame) return;
     enhanceFrame = requestAnimationFrame(() => { enhanceFrame = null; enhanceSidebarElements(); });
   });

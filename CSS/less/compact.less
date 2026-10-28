@@ -161,3 +161,27 @@ button[data-project-card] svg {
 	padding-bottom: 0 !important;
 	padding-top: 0 !important;
 }
+/* Native menus are portaled outside the sidebar. Scope by role and explicit
+   model-selector anchors, never by general button/div or generated class names. */
+[role='menu'] [role='menuitem'],
+[role='menu'] [role='menuitemcheckbox'],
+[role='menu'] [role='menuitemradio'] {
+	min-height: 20px !important;
+	padding-top: 1px !important;
+	padding-bottom: 1px !important;
+	font-size: 12px !important;
+	line-height: 16px !important;
+}
+[data-testid='model-selector-panel'] {
+	gap: 0 !important;
+	button, [role='menuitem'], [data-testid='model-selector-header'] {
+		font-size: 12px !important;
+		line-height: 16px !important;
+	}
+	[data-testid='model-selector-header'] { padding-bottom: 2px !important; }
+}
+[data-testid='model-selector-trigger'],
+[data-testid='permissions-selector-trigger'] {
+	height: 22px !important;
+	min-height: 22px !important;
+}

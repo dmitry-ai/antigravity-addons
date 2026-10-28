@@ -23,14 +23,16 @@ const discover = (root = toolsRoot) => {
 				throw new Error(`Некорректные enabled, order или dependsOn: ${manifest}`);
 			}
 			if (false !== tool.enabled) {
-				for (const field of ['entry', 'prepare', 'validate']) {
+				if (tool.runtimeFiles !== undefined && (!Array.isArray(tool.runtimeFiles) || tool.runtimeFiles.some(file => typeof file !== 'string'))) throw Error(`Некорректный runtimeFiles: ${manifest}`);
+				tool.runtimeFiles = (tool.runtimeFiles || []).map(file => resolveFile(code, file));
+				for (const field of ['entry', 'prepare', 'validate', 'cdp']) {
 					if (tool[field]) {
 						tool[field] = resolveFile(code, tool[field]);
 						new vm.Script(fs.readFileSync(tool[field], 'utf8'), {filename: tool[field]});
 					}
 				}
-				if (!tool.entry) {
-					throw new Error(`У модуля нет entry: ${manifest}`);
+				if (!tool.entry && !tool.cdp) {
+					throw new Error(`У модуля нет entry или cdp: ${manifest}`);
 				}
 				r.push({...tool, code, manifest, order: tool.order ?? 100, dependsOn: tool.dependsOn ?? []});
 			}
