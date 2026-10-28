@@ -33,6 +33,34 @@ test('Collapsed parents never leak assigned projects, subfolders, or conversatio
 	assert.equal(rows.some(row => ['two', 'ten', 'p1', 'p2', 'c1'].includes(row.id)), false);
 	assert.equal(rows.some(row => row.id === 'p3'), true);
 });
+
+test('Hiding Outside of Project changes only visible rows and preserves conversations and exact project identities', () => {
+	const data = config();
+	const nativeProjects = [...projects, {id: 'outside-of-project', name: 'Outside of Project'}, {id: 'ordinary', name: 'Outside of Project'}];
+	const summaries = new Map([['outside-chat', summary('outside-of-project')], ['kept-chat', summary('p1')], ['pinned-outside', {...summary('outside-of-project'), annotations: {pinned: true}}]]);
+	const before = structuredClone({data, projects: nativeProjects, summaries});
+	const options = {data, projects: nativeProjects, summaries};
+	const visible = model.buildRows(options), hidden = model.buildRows({...options, hideOutsideProject: true});
+	assert.ok(visible.some(row => row.id === 'outside-of-project'));
+	assert.ok(visible.some(row => row.id === 'outside-chat'));
+	assert.equal(hidden.some(row => row.id === 'outside-of-project' || row.id === 'outside-chat'), false);
+	assert.ok(hidden.some(row => row.id === 'ordinary'));
+	assert.ok(hidden.some(row => row.id === 'kept-chat'));
+	assert.ok(hidden.some(row => row.id === 'pinned-outside'));
+	assert.equal(hidden.length, visible.length - 2);
+	assert.deepEqual({data, projects: nativeProjects, summaries}, before);
+});
+
+test('Hiding the standalone Conversations section preserves its source summaries and project chats', () => {
+	const summaries = new Map([['no-project', summary(null)], ['missing-project', summary('missing')], ['project-chat', summary('p1')]]);
+	const before = structuredClone(summaries), options = {data: config(), projects, summaries};
+	const visible = model.buildRows(options), hidden = model.buildRows({...options, hideStandaloneConversations: true});
+	assert.ok(visible.some(row => row.key === 'standalone'));
+	assert.equal(hidden.some(row => row.key === 'standalone' || row.id === 'no-project' || row.id === 'missing-project'), false);
+	assert.ok(hidden.some(row => row.id === 'project-chat'));
+	assert.equal(hidden.length, visible.length - 3);
+	assert.deepEqual(summaries, before);
+});
 test('Folder mutations validate cycles and sibling names, promote children, and preserve unknown metadata', () => {
 	const original = config();
 	assert.throws(() => model.applyAction(original, {action: 'move-folder', id: 'root', newParentId: 'two'}), /Cycle/);

@@ -11,6 +11,7 @@ const bootstrap = (require, config) => {
 	app.setPath('sessionData', config.userDataDir);
 	app.setPath('logs', path.join(config.userDataDir, 'logs'));
 	app.setAppUserModelId('Google.Antigravity.' + config.id);
+	require(path.join(config.codeRoot, 'window-identity.js')).installWindowIdentity(require, config);
 	// The server's supported headless mode explicitly selects its file token store.
 	// Electron itself stays graphical. A separate home alone DOES NOT isolate the OS keyring.
 	const originalSpawn = processes.spawn;

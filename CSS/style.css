@@ -1,6 +1,8 @@
 :root {
 	--antigravity-tree-row-height: 16px;
 	--antigravity-tree-line-height: 14px;
+	--antigravity-hide-outside-project: 1;
+	--antigravity-hide-standalone-conversations: 1;
 }
 [role='navigation'][aria-label='Sidebar'] {
 	padding-bottom: 2px !important;
@@ -199,6 +201,9 @@ button[data-project-card] svg {
 /* ========================================================
 	 Иерархическая система отступов папок и проектов (Method 1)
 	 ======================================================== */
+[data-testid='conversation-list-sidebar'] [data-testid='section-header'][data-title='Outside of Project'] {
+	display: none !important;
+}
 :root,
 [data-testid='conversation-list-sidebar'] {
 	--folder-indent-unit: 14px;

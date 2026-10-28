@@ -74,7 +74,7 @@
 		for (const id of message.deletes || []) result.delete(id);
 		return result;
 	};
-	const buildRows = ({data, projects, summaries = new Map(), collapsed = new Set()}) => {
+	const buildRows = ({data, projects, summaries = new Map(), collapsed = new Set(), hideOutsideProject = false, hideStandaloneConversations = false}) => {
 		const ids = validateFolders(data.folders);
 		const children = new Map(), assigned = new Map(), conversations = new Map(), pinned = [], activeProjects = new Set(), activeFolders = new Set();
 		const append = (map, key, value) => { if (!map.has(key)) map.set(key, []); map.get(key).push(value); };
@@ -84,6 +84,7 @@
 			if (!project.id || projectIds.has(project.id)) throw Error('Missing or duplicate native project id');
 			projectIds.add(project.id);
 			if (project.archived) { archivedProjectIds.add(project.id); continue; }
+			if (hideOutsideProject && project.id === 'outside-of-project') continue;
 			if (project.id === 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40' && project.name === 'project-folders/folders') continue;
 			const folderId = data.projectFolderMap?.[project.id];
 			append(assigned, ids.has(folderId) ? folderId : null, project);
@@ -125,7 +126,7 @@
 			}
 		};
 		visit(null, 0); projectRows(null, 0);
-		if (conversations.has(null)) {
+		if (!hideStandaloneConversations && conversations.has(null)) {
 			rows.push({kind: 'section', key: 'standalone', name: 'Conversations', depth: 0});
 			conversationRows(null, null, 0);
 		}

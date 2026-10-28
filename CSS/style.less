@@ -6,6 +6,9 @@
 :root {
 	--antigravity-tree-row-height: @tree-row-height;
 	--antigravity-tree-line-height: @tree-line-height;
+	// Folders reads this before calculating virtual row positions.
+	--antigravity-hide-outside-project: 1;
+	--antigravity-hide-standalone-conversations: 1;
 }
 @import 'less/compact.less';
 @import 'less/folders.less';

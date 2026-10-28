@@ -105,8 +105,11 @@
 		if (disposed || !root?.isConnected || !scroll) return;
 		if (client.activeMenu || client.activeModal || root.querySelector('.folder-rename-input') || client.isDragging) { schedule(); return; }
 		try {
-			rowHeight = parseFloat(getComputedStyle(root).getPropertyValue('--antigravity-tree-row-height')) || 16;
-			state.rows = model.buildRows({data: client.data, projects: state.projects, summaries: state.summaries, collapsed: state.collapsed});
+			const appearance = getComputedStyle(root);
+			rowHeight = parseFloat(appearance.getPropertyValue('--antigravity-tree-row-height')) || 16;
+			const hideOutsideProject = appearance.getPropertyValue('--antigravity-hide-outside-project').trim() === '1';
+			const hideStandaloneConversations = appearance.getPropertyValue('--antigravity-hide-standalone-conversations').trim() === '1';
+			state.rows = model.buildRows({data: client.data, projects: state.projects, summaries: state.summaries, collapsed: state.collapsed, hideOutsideProject, hideStandaloneConversations});
 			canvas.style.height = `${state.rows.length * rowHeight}px`;
 			const start = Math.max(0, Math.floor(scroll.scrollTop / rowHeight) - 8);
 			const end = Math.min(state.rows.length, Math.ceil((scroll.scrollTop + scroll.clientHeight) / rowHeight) + 8);
