@@ -1,7 +1,7 @@
 /**
  * install-folders.js
  * Enables Folders in its Upgrade tool.json manifest.
- * Preserves the previous manifest in tool.json.bak; does not patch app.asar.
+ * Does not patch app.asar or leave backup files beside the manifest.
  */
 const fs = require('fs');
 const path = require('path');
@@ -13,8 +13,6 @@ function setEnabled(enabled) {
 	const filename = path.join(__dirname, 'tool.json');
 	const content = fs.readFileSync(filename, 'utf8');
 	const tool = JSON.parse(content);
-  // Backup
-	fs.writeFileSync(`${filename}.bak`, content, 'utf8');
 	tool.enabled = enabled;
 	fs.writeFileSync(filename, JSON.stringify(tool, null, '\t') + '\n');
 }
