@@ -8,7 +8,7 @@ const {discoverEndpoints} = require('./profile-endpoints');
 const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
 const binding = '__antigravityToolsCall';
 const runtimeVersion = () => {
-	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../../../Multi-Account/code/profiles.js', '../../../Multi-Account/code/profiles.json'].map(filename => path.join(__dirname, filename));
+	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };

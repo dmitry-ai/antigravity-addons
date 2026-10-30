@@ -1,8 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const {CDP} = require('../../Upgrade/code/cdp-client');
-const {isCandidateTarget,shellProbe,isShell} = require('../../Upgrade/code/antigravity-shell');
-const {discoverEndpoints} = require('../../Upgrade/code/profile-endpoints');
+const {CDP} = require('../Upgrade/cdp-client');
+const {isCandidateTarget,shellProbe,isShell} = require('../Upgrade/antigravity-shell');
+const {discoverEndpoints} = require('../Upgrade/profile-endpoints');
 const inspectRuntime = async ({expectedTools = ['css','folders']} = {}) => {
 	const profiles = await discoverEndpoints();
 	const errors = profiles.filter(profile => profile.error);

@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const {readProfiles} = require('../../../Multi-Account/code/profiles');
+const {readProfiles} = require('../Multi-Account/profiles');
 const {isCandidateTarget} = require('./antigravity-shell');
 const discoverEndpoints = async () => Promise.all(readProfiles().map(async profile => {
 	const result = {id: profile.id, email: profile.email, userDataDir: profile.userDataDir, state: 'unavailable', pages: []};

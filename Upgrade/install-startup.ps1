@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$NodePath, [switch]$Remove)
 $ErrorActionPreference = 'Stop'
 $startupDirectory = [Environment]::GetFolderPath('Startup')
+if (-not $startupDirectory) { $startupDirectory = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup' }
 $shortcutPath = Join-Path $startupDirectory 'Antigravity Tools (CDP).lnk'
 if ($Remove) {
     if (Test-Path -LiteralPath $shortcutPath) { Remove-Item -LiteralPath $shortcutPath }

@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const {chromium} = require('../../Upgrade/code/node_modules/playwright-core');
+const {chromium} = require('../Upgrade/node_modules/playwright-core');
 const {rendererSource} = require('./renderer-source');
 const openFixture = async ({data, projects, summaries = {}, missingAnchor = false, badProjects = false, delayedAnchor = false, bootingShell = false} = {}) => {
 	const browser = await chromium.launch({headless: true, ...(process.env.FOLDERS_TEST_BROWSER ? {executablePath: process.env.FOLDERS_TEST_BROWSER} : process.platform === 'win32' ? {channel: 'msedge'} : {})});
@@ -57,7 +57,7 @@ const openFixture = async ({data, projects, summaries = {}, missingAnchor = fals
 		};
 	}, {data, projects, summaries, badProjects});
 	await page.goto('https://folders-fixture.invalid/');
-	await page.addStyleTag({content: fs.readFileSync(path.resolve(__dirname, '../../CSS/code/style.css'), 'utf8')});
+	await page.addStyleTag({content: fs.readFileSync(path.resolve(__dirname, '../CSS/style.css'), 'utf8')});
 	await page.addScriptTag({content: rendererSource(data) + '\n//# sourceURL=folders-runtime-fixture.js'});
 	if (delayedAnchor) await page.evaluate(() => { setTimeout(() => {const old=document.querySelector('[data-testid="changed-sidebar-contract"]');const next=old.cloneNode(true);next.dataset.testid='conversation-list-sidebar';old.replaceWith(next);},500); });
 	return {browser, page, errors, async close() {await browser.close();}};

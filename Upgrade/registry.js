@@ -1,16 +1,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const toolsRoot = path.resolve(__dirname, '../..');
+const toolsRoot = path.resolve(__dirname, '..');
 const discover = (root = toolsRoot) => {
 	const r = [];
 	const ids = new Set();
 	for (const folder of fs.readdirSync(root, {withFileTypes: true}).filter(item => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-		const code = path.join(root, folder.name, 'code');
+		const code = path.join(root, folder.name);
 		const manifest = path.join(code, 'tool.json');
 		if (!fs.existsSync(manifest)) {
-			if ('Upgrade' !== folder.name && fs.existsSync(code) && fs.readdirSync(code).some(file => /\.[cm]?js$/.test(file))) {
-				throw new Error(`Добавьте code/tool.json для инструмента ${folder.name}: ${code}`);
+			if (!['Upgrade', 'Multi-Account'].includes(folder.name) && fs.existsSync(code) && fs.readdirSync(code).some(file => /\.[cm]?js$/.test(file))) {
+				throw new Error(`Добавьте tool.json для инструмента ${folder.name}: ${code}`);
 			}
 		}
 		else {

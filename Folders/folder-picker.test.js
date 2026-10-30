@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const walk = require('../../Upgrade/code/node_modules/acorn-walk');
-const {parse} = require('../../Upgrade/code/node_modules/acorn');
+const walk = require('../Upgrade/node_modules/acorn-walk');
+const {parse} = require('../Upgrade/node_modules/acorn');
 const source = fs.readFileSync(path.join(__dirname, 'folders-client.js'), 'utf8');
 const functions = new Map();
 walk.simple(parse(source, {ecmaVersion: 'latest'}), {

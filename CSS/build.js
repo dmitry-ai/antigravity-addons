@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const less = require('../../Upgrade/code/node_modules/less');
+const less = require('../Upgrade/node_modules/less');
 const input = path.join(__dirname, 'style.less');
 const output = path.join(__dirname, 'style.css');
 let queue = Promise.resolve();

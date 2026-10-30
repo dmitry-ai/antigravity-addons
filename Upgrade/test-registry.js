@@ -9,7 +9,7 @@ const fixture = context => {
 	const parent = os.tmpdir(), root = fs.mkdtempSync(path.join(parent, 'antigravity-registry-'));
 	context.after(() => {assert.ok(path.resolve(root).startsWith(path.resolve(parent) + path.sep)); fs.rmSync(root, {recursive:true, force:true});});
 	const add = (name, manifest) => {
-		const code = path.join(root, name, 'code'); fs.mkdirSync(code, {recursive:true});
+		const code = path.join(root, name); fs.mkdirSync(code, {recursive:true});
 		fs.writeFileSync(path.join(code, 'cdp.js'), 'module.exports=()=>({})');
 		fs.writeFileSync(path.join(code, 'helper.js'), 'module.exports={}');
 		fs.writeFileSync(path.join(code, 'tool.json'), JSON.stringify({schemaVersion:1, cdp:'cdp.js', ...manifest}));

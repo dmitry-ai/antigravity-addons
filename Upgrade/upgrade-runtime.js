@@ -24,7 +24,7 @@ const run = async (options = {}) => {
 	const deadline = Date.now() + (mode === 'apply' ? 15000 : 0);
 	let runtime;
 	for (;;) {
-		try {runtime = await require('../../Folders/code/runtime-health').inspectRuntime({expectedTools: tools.map(tool => tool.id)}); break;}
+		try {runtime = await require('../Folders/runtime-health').inspectRuntime({expectedTools: tools.map(tool => tool.id)}); break;}
 		catch (error) {if (Date.now() >= deadline) throw error; await new Promise(resolve => setTimeout(resolve, 300));}
 	}
 	if (runtime.state !== 'ready') {log(runtime.state === 'waiting-for-sign-in' ? `Tools ожидает завершения входа: ${runtime.windows.filter(window => window.state !== 'ready').map(window => window.profile).join(', ')}. CSS подключён; Folders ожидает основной интерфейс.` : 'Tools ожидает открытия Antigravity. При запуске модули подключатся через CDP; app.asar не изменяется.'); return {status: 'waiting', tools: tools.map(tool => tool.id), runtime};}

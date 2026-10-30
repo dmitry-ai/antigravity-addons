@@ -1,6 +1,7 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'build-icon.ps1') | Out-Null
 $desktopPath = [Environment]::GetFolderPath('Desktop')
+if (-not $desktopPath) { $desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop }
 $shortcutPath = Join-Path $desktopPath 'A6.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)

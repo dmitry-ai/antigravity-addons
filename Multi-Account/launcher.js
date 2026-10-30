@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {readProfiles} = require('./profiles');
-const {CDP} = require('../../tools/Upgrade/code/cdp-client');
+const {CDP} = require('../Upgrade/cdp-client');
 const {bootstrap} = require('./main-bootstrap');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
@@ -49,14 +49,14 @@ const launch = async id => {
 	const chrome = readChromeShortcut(profile);
 	prepareProfile(profile);
 	const log = message => fs.appendFileSync(path.join(profile.userDataDir, 'launcher.log'), new Date().toISOString() + ' ' + message + '\n');
-	await require('../../tools/Upgrade/code/runtime-control').ensureRunning();
+	await require('../Upgrade/runtime-control').ensureRunning();
 	const activated = await activateExisting(profile);
 	if (activated) {console.log(JSON.stringify(activated)); return;}
 	const executable = path.join(process.env.LOCALAPPDATA, 'Programs/antigravity/Antigravity.exe');
 	if (!fs.existsSync(executable)) throw Error('Antigravity is not installed at ' + executable);
 	// Start Tools in the real user's environment before changing the app's child environment.
 	log('Launch requested for ' + id);
-	const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0'], {env: childEnvironment(profile), windowsHide: true, detached: true, stdio: ['ignore', 'ignore', 'pipe']});
+	const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0'], {cwd: path.dirname(executable), env: childEnvironment(profile), windowsHide: true, detached: true, stdio: ['ignore', 'ignore', 'pipe']});
 	let inspector, exited, spawnError;
 	child.once('error', error => {spawnError = error;});
 	child.once('exit', code => {exited = code;});

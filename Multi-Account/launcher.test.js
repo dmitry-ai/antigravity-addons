@@ -52,7 +52,7 @@ test('The native terminal OAuth bridge accepts only the matching state at the of
 });
 
 test('The official callback can clear its address bar; the original navigation still must match A6 OAuth state',async context=>{
-	const {EventEmitter}=require('node:events'),{OAuthBridge}=require('./oauth-bridge'),{CDP}=require('../../tools/Upgrade/code/cdp-client');
+	const {EventEmitter}=require('node:events'),{OAuthBridge}=require('./oauth-bridge'),{CDP}=require('../Upgrade/cdp-client');
 	const child=new EventEmitter(),written=[];child.stdin={end:()=>{},write:value=>written.push(value)};child.stderr=new EventEmitter();
 	let closed=0;context.mock.method(CDP,'open',async url=>{assert.equal(url,'ws://127.0.0.1:9222/own-callback');return{evaluate:async()=> 'https://antigravity.google/oauth-callback?state=own-state&code=matching-code',close:()=>{closed++;}};});
 	const bridge=new OAuthBridge({child,chromePort:9222,open:async()=>{},request:async()=>Response.json([{type:'page',url:'https://antigravity.google/oauth-callback',webSocketDebuggerUrl:'ws://127.0.0.1:9222/own-callback'}])});context.after(()=>bridge.dispose());
@@ -61,7 +61,7 @@ test('The official callback can clear its address bar; the original navigation s
 });
 
 test('Post-login recovery refuses A0 and never reloads an app or a draft',async context=>{
-	const {refreshInitialPage}=require('./oauth-bridge'),{CDP}=require('../../tools/Upgrade/code/cdp-client'),vm=require('node:vm');
+	const {refreshInitialPage}=require('./oauth-bridge'),{CDP}=require('../Upgrade/cdp-client'),vm=require('node:vm');
 	await assert.rejects(refreshInitialPage({id:'A0',userDataDir:'unused'}),/secondary profile/);
 	const root=fixture(context);fs.writeFileSync(path.join(root,'DevToolsActivePort'),'10006');const calls=[];
 	context.mock.method(globalThis,'fetch',async url=>{assert.match(url,/^http:\/\/127\.0\.0\.1:10006\//);return Response.json(url.endsWith('/json/version')?{'User-Agent':'Antigravity/2.27.0'}:['blank','app','draft'].map(id=>({id,type:'page',url:'https://127.0.0.1:20006/',webSocketDebuggerUrl:'ws://127.0.0.1:10006/'+id})));});

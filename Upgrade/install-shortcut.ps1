@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $desktopPath = [Environment]::GetFolderPath('Desktop')
+if (-not $desktopPath) { $desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop }
 $shortcutPath = Join-Path $desktopPath 'Upg.lnk'
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

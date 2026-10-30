@@ -9,7 +9,7 @@ const callbackCode = (targets, pending) => {
 	}
 	return null;
 };
-const {CDP} = require('../../tools/Upgrade/code/cdp-client');
+const {CDP} = require('../Upgrade/cdp-client');
 const refreshInitialPage = async ({id, userDataDir}) => {
 	if (id === 'A0' || !/^A\d+$/.test(id || '')) throw Error('Only a managed secondary profile can refresh its initial page');
 	// A first login can outlast Chromium's initial navigation. Reload only an

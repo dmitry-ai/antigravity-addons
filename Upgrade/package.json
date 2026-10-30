@@ -9,8 +9,8 @@
 		"check": "node upgrade.js --check",
 		"restore": "node upgrade.js --restore",
 		"start": "node upgrade.js",
-		"test": "node --test test-registry.js test-cdp-runtime.js ../../Folders/code/test-suite.js",
-		"test:browser": "node --test ../../Folders/code/browser.test.js"
+		"test": "node --test test-registry.js test-cdp-runtime.js ../Folders/test-suite.js",
+		"test:browser": "node --test ../Folders/browser.test.js"
 	},
 	"dependencies": {
 		"less": "4.4.2"
