@@ -33,6 +33,35 @@ test('A sidebar created after asynchronous native startup recovers automatically
 	assert.equal(await fixture.page.evaluate(() => window.__foldersFixture.observerRunaway), undefined);
 	assert.deepEqual(fixture.errors, []);
 });
+test('Early CDP attachment during native shell and skeleton boot never flashes a mount fault before the sidebar renders', {timeout: 15000}, async context => {
+	const fixture = await openFixture({data, projects, bootingShell: true}); context.after(() => fixture.close());
+	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_VIEW__?.state.haveConfig && window.__PROJECT_FOLDERS_VIEW__?.state.haveProjects);
+	await fixture.page.waitForTimeout(150);
+	const duringAuthSpinner = await fixture.page.evaluate(() => ({status: window.__PROJECT_FOLDERS_STATUS__, fault: document.querySelector('.fg-fault')?.textContent || null}));
+	assert.equal(duringAuthSpinner.status.state, 'loading');
+	assert.deepEqual(duringAuthSpinner.status.errors, {});
+	assert.equal(duringAuthSpinner.fault, null);
+	await fixture.page.evaluate(() => {
+		document.querySelector('#root').innerHTML = '<div class="agy-shell"><nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="sidebar-list-skeleton">Loading conversations...</div></nav></div>';
+	});
+	await fixture.page.waitForTimeout(150);
+	const duringSkeleton = await fixture.page.evaluate(() => ({status: window.__PROJECT_FOLDERS_STATUS__, fault: document.querySelector('.fg-fault')?.textContent || null}));
+	assert.equal(duringSkeleton.status.state, 'loading');
+	assert.deepEqual(duringSkeleton.status.errors, {});
+	assert.equal(duringSkeleton.fault, null);
+	await fixture.page.evaluate(() => {
+		const skeleton = document.querySelector('[data-testid="sidebar-list-skeleton"]');
+		const list = document.createElement('div');
+		list.dataset.testid = 'conversation-list-sidebar';
+		list.style.height = '100%';
+		list.innerHTML = '<article class="new-future-vendor-class">Native project list</article>';
+		skeleton.replaceWith(list);
+	});
+	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_STATUS__?.state === 'ready', {timeout: 5000});
+	assert.equal(await fixture.page.locator('.fg-fault').count(), 0);
+	assert.equal(await fixture.page.locator('[data-folders-root]').count(), 1);
+	assert.deepEqual(fixture.errors, []);
+});
 test('Real UI menus create a project in the exact chosen folder and cancellation does not capture a later project', {timeout: 20000}, async context => {
 	const fixture = await openFixture({data, projects}); context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_STATUS__?.state === 'ready');

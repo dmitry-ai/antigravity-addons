@@ -6,6 +6,10 @@
 	let root, nativeList, nativePaddingTop, scroll, canvas, timer, paintTimer, disposed = false, storageReady = false;
 	let rowHeight = 16;
 	let removeStorageListener;
+	const mountDeadline = Date.now() + 15000;
+	const isOnboardingRoute = () => /^\/onboarding(?:\/|$)/.test(location.pathname);
+	const isStandaloneRoute = () => /^\/(?:artifact|s|settings-standalone|terminal-standalone)(?:\/|$)/.test(location.pathname);
+	const nativeSidebarPending = () => Date.now() < mountDeadline && (!document.querySelector('[role="navigation"]') && !document.querySelector('.agy-shell') || !!document.querySelector('[role="navigation"] [data-testid="sidebar-list-skeleton"]'));
 	const sizing = new ResizeObserver(() => schedule());
 	const storageKey = 'antigravity-folders.v2.collapsed';
 	const element = (tag, className, text) => { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; };
@@ -16,7 +20,8 @@
 	const status = (channel, error) => {
 		if (disposed) return;
 		if (error) state.errors.set(channel, error); else state.errors.delete(channel);
-		window.__PROJECT_FOLDERS_STATUS__ = {architecture: 2, state: state.errors.size ? 'error' : state.ready && state.haveSummaries ? 'ready' : 'loading', nativeContract: adapter.contract, errors: Object.fromEntries(state.errors), folders: client.data.folders.length, projects: state.projects.length, conversations: state.summaries.size};
+		const viewState = state.errors.size ? 'error' : isOnboardingRoute() ? 'deferred' : isStandaloneRoute() || state.ready && state.haveSummaries ? 'ready' : 'loading';
+		window.__PROJECT_FOLDERS_STATUS__ = {architecture: 2, state: viewState, ...(isOnboardingRoute() ? {reason: [{id: 'folders', reason: 'onboarding'}]} : {}), nativeContract: adapter.contract, errors: Object.fromEntries(state.errors), folders: client.data.folders.length, projects: state.projects.length, conversations: state.summaries.size};
 		const message = [...state.errors].map(([key, value]) => `${key}: ${value}`).join('\n');
 		const banner = root?.querySelector('.fg-state');
 		const bannerText = message ? `Folders — ошибка совместимости или связи. ${message}` : '';
@@ -122,7 +127,9 @@
 	}
 	const mount = () => {
 		if (disposed || root?.isConnected || !state.haveConfig || !state.haveProjects) return;
+		if (isOnboardingRoute() || isStandaloneRoute()) { status('mount', null); return; }
 		const matches = [...document.querySelectorAll('[data-testid="conversation-list-sidebar"]')].filter(el => el.closest('[role="navigation"]'));
+		if (matches.length === 0 && nativeSidebarPending()) { status('mount', null); return; }
 		if (matches.length !== 1) { status('mount', `Expected one native sidebar, found ${matches.length}`); return; }
 		nativeList = matches[0];
 		nativePaddingTop = nativeList.style.paddingTop;

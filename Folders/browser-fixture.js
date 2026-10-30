@@ -2,11 +2,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../../Upgrade/code/node_modules/playwright-core');
 const {rendererSource} = require('./renderer-source');
-const openFixture = async ({data, projects, summaries = {}, missingAnchor = false, badProjects = false, delayedAnchor = false} = {}) => {
+const openFixture = async ({data, projects, summaries = {}, missingAnchor = false, badProjects = false, delayedAnchor = false, bootingShell = false} = {}) => {
 	const browser = await chromium.launch({headless: true, ...(process.env.FOLDERS_TEST_BROWSER ? {executablePath: process.env.FOLDERS_TEST_BROWSER} : process.platform === 'win32' ? {channel: 'msedge'} : {})});
 	const page = await browser.newPage({viewport: {width: 900, height: 700}});
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
-	await page.route('https://folders-fixture.invalid/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head></head><body style="margin:0"><nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="${missingAnchor || delayedAnchor ? 'changed-sidebar-contract' : 'conversation-list-sidebar'}" style="height:100%"><article class="new-future-vendor-class">Native project list</article></div></nav><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea></body></html>`}));
+	const body = bootingShell
+		? '<div id="root"><div class="w-full h-full flex items-center justify-center">Loading auth...</div></div><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea>'
+		: `<nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="${missingAnchor || delayedAnchor ? 'changed-sidebar-contract' : 'conversation-list-sidebar'}" style="height:100%"><article class="new-future-vendor-class">Native project list</article></div></nav><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea>`;
+	await page.route('https://folders-fixture.invalid/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head></head><body style="margin:0">${body}</body></html>`}));
 	await page.addInitScript(({data, projects, summaries, badProjects}) => {
 		window.__APP_CONFIG__ = {csrfToken: 'isolated-fixture', appVersion: 'future-fixture'};
 		const fixture = window.__foldersFixture = {data, projects, summaries, calls: [], storage: {}, listeners: new Set(), streams: new Set(), revision: 1, observers: [], badProjects};
