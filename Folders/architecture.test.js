@@ -177,6 +177,7 @@ const fakeWindow = () => {
 		history: {
 			pushState(_state, _title, url) {
 				win.lastUrl = url;
+				win.location.href = new URL(url, win.location.href).href;
 			}
 		},
 		dispatchEvent(event) {
@@ -220,6 +221,13 @@ test('Native API adapter tolerates added DTO fields and uses the declared projec
 		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
 		assert.equal(win.lastUrl, '/c/c1?section=p1');
 		assert.equal(win.lastEvent.type, 'popstate');
+		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+		// "Add Project settings action to project context menu in Folders":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/17
+		adapter.openProjectSettings('p2');
+		assert.equal(win.lastUrl, '/c/c1?section=p1&settingsOpen=true&settingsProjectId=p2');
+		assert.equal(win.lastEvent.type, 'popstate');
+		assert.throws(() => adapter.openProjectSettings(''), /Project id is required/);
 	}
 	finally {
 		adapter.dispose();
@@ -378,4 +386,47 @@ test('Subagent snapshots do not appear as duplicate root conversations in the pr
 		summaries: new Map([['root', root], ['child', child]])
 	});
 	assert.deepEqual(rows.filter(row => 'conversation' === row.kind).map(row => row.id), ['root']);
+});
+// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add Project settings action to project context menu in Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/17
+test('folders-view readConfig coalesces concurrent polls so a restarting companion never queues duplicate 15s requests', async () => {
+	const vm = require('node:vm');
+	const viewSource = fs.readFileSync(path.join(__dirname, 'folders-view.js'), 'utf8');
+	const match = /let configPromise = null;[\s\S]*?return configPromise;\s*\};/.exec(viewSource);
+	assert.ok(match, 'folders-view.js must define coalesced readConfig');
+	let getCalls = 0;
+	let releaseGet;
+	const statuses = [];
+	const sandbox = {
+		window: {
+			__ANTIGRAVITY_TOOLS_REQUEST__: (_tool, message) => {
+				if ('GET' === message.method) {
+					getCalls++;
+				}
+				return new Promise(resolve => {
+					releaseGet = () => resolve({schemaVersion: 2, revision: 'rev-coalesced', data: config()});
+				});
+			}
+		},
+		model,
+		state: {haveConfig: false, revision: ''},
+		client: {notifyUpdate() {}},
+		status: (channel, err) => statuses.push([channel, err])
+	};
+	vm.createContext(sandbox);
+	const readConfig = vm.runInContext(`${match[0]}\nreadConfig;`, sandbox);
+	const p1 = readConfig();
+	const p2 = readConfig();
+	const p3 = readConfig();
+	assert.equal(getCalls, 1, 'Concurrent polls while GET is in-flight must share one storage request');
+	releaseGet();
+	await Promise.all([p1, p2, p3]);
+	assert.equal(sandbox.state.haveConfig, true);
+	assert.equal(sandbox.state.revision, 'rev-coalesced');
+	assert.deepEqual(statuses, [['folders', null]]);
+	const p4 = readConfig();
+	assert.equal(getCalls, 2, 'Subsequent poll after completion issues a fresh GET');
+	releaseGet();
+	await p4;
 });

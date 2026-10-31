@@ -163,6 +163,26 @@
 		win.history.pushState(null, '', url.pathname + url.search);
 		win.dispatchEvent(new win.PopStateEvent('popstate', {state: null}));
 	};
+	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// "Add Project settings action to project context menu in Folders":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/17
+	const openProjectSettings = (projectId, screen) => {
+		if (!projectId || 'string' !== typeof projectId) {
+			throw Error('Project id is required');
+		}
+		const url = new URL(win.location.href);
+		url.searchParams.set('settingsOpen', 'true');
+		url.searchParams.set('settingsProjectId', projectId);
+		if (screen) {
+			url.searchParams.set('settingsScreen', screen);
+		}
+		else {
+			url.searchParams.delete('settingsScreen');
+		}
+		url.searchParams.delete('settingsSection');
+		win.history.pushState(null, '', url.pathname + url.search);
+		win.dispatchEvent(new win.PopStateEvent('popstate', {state: null}));
+	};
 	const createProject = async ({id, name, resources = []}) => {
 		if (!id || !name.trim()) {
 			throw Error('Project id and name are required');
@@ -205,6 +225,7 @@
 		rpc,
 		readProjects,
 		navigate,
+		openProjectSettings,
 		createProject,
 		updateConversation,
 		selection() {

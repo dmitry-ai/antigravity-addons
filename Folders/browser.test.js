@@ -198,6 +198,12 @@ test('The conversation rename UI keeps its ID, native route, project name, live 
 	await fixture.page.getByRole('button', {name: 'Save', exact: true}).click();
 	await fixture.page.getByRole('button', {name: /52/}).click();
 	assert.match(fixture.page.url(), /\/c\/c1\?section=p1/);
+	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// "Add Project settings action to project context menu in Folders":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/17
+	await fixture.page.locator('[data-folders-row="project:p1"] .fg-label').click({button: 'right'});
+	await fixture.page.getByRole('button', {name: 'Project settings…', exact: true}).click();
+	assert.match(fixture.page.url(), /\/c\/c1\?section=p1&settingsOpen=true&settingsProjectId=p1$/);
 	await fixture.page.evaluate(() => {
 		const s = window.__foldersFixture.summaries.c1;
 		window.__foldersFixture.emit({updates: {c1: {...s, stepCount: 121}}});

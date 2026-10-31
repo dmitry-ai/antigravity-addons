@@ -15,10 +15,14 @@ const runtimeVersion = () => {
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
+// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add Project settings action to project context menu in Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/17
 const bridgeSource = `(() => {
-if(window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__===1)return;
+if(window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__===1){window.__ANTIGRAVITY_TOOLS_RETRY__?.();return;}
 const pending=new Map();let sequence=0;
-window.__ANTIGRAVITY_TOOLS_REQUEST__=(tool,message)=>new Promise((resolve,reject)=>{const id=++sequence;const timer=setTimeout(()=>{pending.delete(id);reject(Error('Tools storage did not respond; run Upg to reconnect'));},15000);pending.set(id,{resolve,reject,timer});window.${binding}(JSON.stringify({id,tool,message}));});
+window.__ANTIGRAVITY_TOOLS_REQUEST__=(tool,message)=>new Promise((resolve,reject)=>{const id=++sequence;const timer=setTimeout(()=>{pending.delete(id);reject(Error('Tools storage did not respond; run Upg to reconnect'));},15000);pending.set(id,{resolve,reject,timer,tool,message});window.${binding}(JSON.stringify({id,tool,message}));});
+window.__ANTIGRAVITY_TOOLS_RETRY__=()=>{for(const [id,item] of pending)if(item.tool)window.${binding}(JSON.stringify({id,tool:item.tool,message:item.message}));};
 window.__ANTIGRAVITY_TOOLS_DELIVER__=reply=>{const request=pending.get(reply.id);if(!request)return;pending.delete(reply.id);clearTimeout(request.timer);reply.error?request.reject(Error(reply.error)):request.resolve(reply.result);};
 window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__=1;
 })()`;
@@ -330,7 +334,7 @@ class Companion {
 			this.stopped = true;
 			clearTimeout(this.timer);
 			await Promise.allSettled([...this.connections.values()].filter(connection => connection.shell).map(async connection => {
-				await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;delete window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__;delete window.__ANTIGRAVITY_TOOLS_REQUEST__;delete window.__ANTIGRAVITY_TOOLS_DELIVER__;delete window.__ANTIGRAVITY_TOOLS_STATUS__;');
+				await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;delete window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__;delete window.__ANTIGRAVITY_TOOLS_REQUEST__;delete window.__ANTIGRAVITY_TOOLS_RETRY__;delete window.__ANTIGRAVITY_TOOLS_DELIVER__;delete window.__ANTIGRAVITY_TOOLS_STATUS__;');
 				const sheet = connection.sheets.get(':styles');
 				if (sheet) {
 					await connection.cdp.call('CSS.setStyleSheetText', {styleSheetId: sheet, text: ''});

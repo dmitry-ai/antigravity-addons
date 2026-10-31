@@ -160,27 +160,38 @@
 			},
 			onStatus: status
 		});
-		const readConfig = async () => {
-			const response = window.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await fetch('/api/project-folders');
-			if (response && !response.ok) {
-				throw Error(`Folder storage: HTTP ${response.status}; run Upg to reconnect the loader`);
+		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+		// "Add Project settings action to project context menu in Folders":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/17
+		let configPromise = null;
+		const readConfig = () => {
+			if (!configPromise) {
+				configPromise = (async () => {
+					const response = window.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await fetch('/api/project-folders');
+					if (response && !response.ok) {
+						throw Error(`Folder storage: HTTP ${response.status}; run Upg to reconnect the loader`);
+					}
+					const payload = response ? await response.json() : await window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
+					if (payload.error) {
+						throw Error(payload.error);
+					}
+					const data = 2 === payload.schemaVersion ? payload.data : payload;
+					model.validateFolders(data.folders);
+					state.haveConfig = true;
+					if (payload.revision) {
+						window.__FOLDERS_REVISION__ = payload.revision;
+					}
+					const revision = payload.revision || JSON.stringify(data);
+					if (revision !== state.revision) {
+						state.revision = revision;
+						client.notifyUpdate(data);
+					}
+					status('folders', null);
+				})().finally(() => {
+					configPromise = null;
+				});
 			}
-			const payload = response ? await response.json() : await window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
-			if (payload.error) {
-				throw Error(payload.error);
-			}
-			const data = 2 === payload.schemaVersion ? payload.data : payload;
-			model.validateFolders(data.folders);
-			state.haveConfig = true;
-			if (payload.revision) {
-				window.__FOLDERS_REVISION__ = payload.revision;
-			}
-			const revision = payload.revision || JSON.stringify(data);
-			if (revision !== state.revision) {
-				state.revision = revision;
-				client.notifyUpdate(data);
-			}
-			status('folders', null);
+			return configPromise;
 		};
 		const rowElement = (row, index) => {
 			const el = element('div', 'fg-row');

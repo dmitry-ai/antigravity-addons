@@ -6,10 +6,10 @@ const path = require('node:path');
 const cp = require('node:child_process');
 const {stateRoot, runtimeVersion} = require('./cdp-companion');
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-const readState = () => {
+const readState = (root = stateRoot) => {
 	let r = null;
 	try {
-		r = JSON.parse(fs.readFileSync(path.join(stateRoot, 'runtime.json'), 'utf8'));
+		r = JSON.parse(fs.readFileSync(path.join(root, 'runtime.json'), 'utf8'));
 	}
 	catch {
 		r = null;
@@ -29,29 +29,48 @@ const alive = state => {
 	}
 	return r;
 };
-const ensureRunning = async () => {
+const ensureRunning = async ({root = stateRoot, delay = 200} = {}) => {
 	let r;
 	result: {
-		const existing = readState();
-		if (alive(existing) && existing.version === runtimeVersion() && existing.runtimePath === path.join(__dirname, 'cdp-companion.js')) {
+		const expectedVersion = runtimeVersion();
+		const expectedPath = path.join(__dirname, 'cdp-companion.js');
+		const existing = readState(root);
+		if (alive(existing) && existing.version === expectedVersion && existing.runtimePath === expectedPath) {
 			r = existing;
 			break result;
 		}
 		if (alive(existing)) {
-			await stopRuntime();
+			await stopRuntime({root, delay});
 		}
-		fs.mkdirSync(stateRoot, {recursive: true});
-		const child = cp.spawn(process.execPath, [path.join(__dirname, 'cdp-companion.js')], {detached: true, windowsHide: true, stdio: 'ignore'});
-		child.unref();
+		fs.mkdirSync(root, {recursive: true});
+		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+		// "Add Project settings action to project context menu in Folders":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/17
+		const shortcut = 'win32' === process.platform ? path.join(process.env.APPDATA || '', 'Microsoft/Windows/Start Menu/Programs/Startup/Antigravity Tools (CDP).lnk') : '';
+		const explorer = 'win32' === process.platform ? path.join(process.env.SystemRoot || 'C:\\Windows', 'explorer.exe') : '';
+		const spawnDirect = () => {
+			const child = cp.spawn(process.execPath, [expectedPath], {detached: true, windowsHide: true, stdio: 'ignore'});
+			child.unref();
+		};
+		const viaShell = Boolean(shortcut && fs.existsSync(shortcut) && fs.existsSync(explorer));
+		if (viaShell) {
+			cp.spawn(explorer, [shortcut], {detached: true, windowsHide: true, stdio: 'ignore'}).unref();
+		}
+		else {
+			spawnDirect();
+		}
 		for (let attempt = 0; 30 > attempt; attempt++) {
-			await pause(200);
-			const current = readState();
-			if (alive(current)) {
+			if (10 === attempt && viaShell) {
+				spawnDirect();
+			}
+			await pause(delay);
+			const current = readState(root);
+			if (alive(current) && current.version === expectedVersion && current.instance !== existing?.instance) {
 				r = current;
 				break result;
 			}
 		}
-		throw Error(`CDP runtime did not start; inspect ${stateRoot}`);
+		throw Error(`CDP runtime did not start; inspect ${root}`);
 	}
 	return r;
 };
@@ -65,16 +84,16 @@ const installStartup = () => {
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 // https://github.com/dmitry-ai/antigravity-addons/issues/13
-const stopRuntime = async () => {
+const stopRuntime = async ({root = stateRoot, delay = 200} = {}) => {
 	result: {
-		const state = readState();
+		const state = readState(root);
 		if (!alive(state)) {
 			break result;
 		}
-		fs.writeFileSync(path.join(stateRoot, 'control.json'), JSON.stringify({instance: state.instance, action: 'stop'}));
+		fs.writeFileSync(path.join(root, 'control.json'), JSON.stringify({instance: state.instance, action: 'stop'}));
 		for (let attempt = 0; 40 > attempt; attempt++) {
-			await pause(200);
-			if ('stopped' === readState()?.state) {
+			await pause(delay);
+			if ('stopped' === readState(root)?.state) {
 				break result;
 			}
 		}

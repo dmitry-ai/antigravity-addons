@@ -246,3 +246,154 @@ test('Profiles with identical target IDs remain independent when one endpoint di
 	assert.equal(runtime.connections.size, 2);
 	await runtime.dispose();
 });
+// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add Project settings action to project context menu in Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/17
+test('ensureRunning stops an outdated companion, launches via explorer.exe startup shortcut outside caller Job Object, and falls back when shell is absent', async context => {
+	const root = fixture(context);
+	const roaming = path.join(root, 'roaming');
+	const sysRoot = path.join(root, 'Windows');
+	const shortcut = path.join(roaming, 'Microsoft/Windows/Start Menu/Programs/Startup/Antigravity Tools (CDP).lnk');
+	const explorer = path.join(sysRoot, 'explorer.exe');
+	fs.mkdirSync(path.dirname(shortcut), {recursive: true});
+	fs.mkdirSync(sysRoot, {recursive: true});
+	fs.writeFileSync(shortcut, 'shortcut');
+	fs.writeFileSync(explorer, 'explorer');
+	const prevAppData = process.env.APPDATA;
+	const prevSystemRoot = process.env.SystemRoot;
+	process.env.APPDATA = roaming;
+	process.env.SystemRoot = sysRoot;
+	context.after(() => {
+		process.env.APPDATA = prevAppData;
+		process.env.SystemRoot = prevSystemRoot;
+	});
+	const cp = require('node:child_process');
+	const control = require('./runtime-control');
+	const expectedVersion = runtimeVersion();
+	const expectedPath = path.join(__dirname, 'cdp-companion.js');
+	fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
+		instance: 'stale-instance',
+		version: 'old-version',
+		pid: process.pid,
+		runtimePath: expectedPath,
+		state: 'connected',
+		updated: new Date().toISOString()
+	}));
+	const spawns = [];
+	let shellStartsCompanion = true;
+	context.mock.method(cp, 'spawn', (command, args, options) => {
+		spawns.push({command, args, options});
+		if (command === explorer && shellStartsCompanion) {
+			setImmediate(() => {
+				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
+					instance: 'shell-instance',
+					version: expectedVersion,
+					pid: process.pid,
+					runtimePath: expectedPath,
+					state: 'connected',
+					updated: new Date().toISOString()
+				}));
+			});
+		}
+		else if (command === process.execPath) {
+			setImmediate(() => {
+				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
+					instance: 'fallback-instance',
+					version: expectedVersion,
+					pid: process.pid,
+					runtimePath: expectedPath,
+					state: 'connected',
+					updated: new Date().toISOString()
+				}));
+			});
+		}
+		return {unref() {}};
+	});
+	const watchControl = setInterval(() => {
+		const controlFile = path.join(root, 'control.json');
+		if (fs.existsSync(controlFile)) {
+			const cmd = JSON.parse(fs.readFileSync(controlFile, 'utf8'));
+			fs.unlinkSync(controlFile);
+			if ('stale-instance' === cmd.instance && 'stop' === cmd.action) {
+				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
+					instance: 'stale-instance',
+					version: 'old-version',
+					pid: process.pid,
+					runtimePath: expectedPath,
+					state: 'stopped',
+					updated: new Date().toISOString()
+				}));
+			}
+		}
+	}, 2);
+	context.after(() => clearInterval(watchControl));
+	const started = await control.ensureRunning({root, delay: 5});
+	assert.equal(started.instance, 'shell-instance');
+	assert.equal(spawns.length, 1, 'Shell launch via explorer.exe must succeed without spawning direct node.exe inside caller Job Object');
+	assert.equal(spawns[0].command, explorer);
+	assert.deepEqual(spawns[0].args, [shortcut]);
+	spawns.length = 0;
+	shellStartsCompanion = false;
+	fs.unlinkSync(path.join(root, 'runtime.json'));
+	const fallback = await control.ensureRunning({root, delay: 5});
+	assert.equal(fallback.instance, 'fallback-instance');
+	assert.equal(spawns.length, 2, 'Fallback to direct node.exe must run after shell launch attempts expire');
+	assert.equal(spawns[0].command, explorer);
+	assert.equal(spawns[1].command, process.execPath);
+	assert.deepEqual(spawns[1].args, [expectedPath]);
+});
+test('Executing bridgeSource across a companion restart re-dispatches in-flight storage requests without a 15s timeout', async context => {
+	const vm = require('node:vm');
+	const root = fixture(context);
+	const runtime = new Companion({root});
+	runtime.modules.set('folders', {
+		request: message => ({schemaVersion: 2, revision: 'rev-1', method: message.method, data: {folders: [], projectFolderMap: {}}})
+	});
+	let bindingOnline = false;
+	const cdp = new FakeCDP();
+	const win = {
+		setTimeout,
+		clearTimeout,
+		__antigravityToolsCall: payload => {
+			if (bindingOnline) {
+				void runtime.handleRequest({cdp, shell: true, contextId: 7}, {
+					name: '__antigravityToolsCall',
+					executionContextId: 7,
+					payload
+				});
+			}
+		}
+	};
+	win.window = win;
+	vm.createContext(win);
+	cdp.evaluate = async expression => {
+		let r;
+		cdp.expressions.push(expression);
+		if (expression.startsWith('({product:')) {
+			r = {product: 'Antigravity', csrf: 'string', ready: 'complete', origin: 'https://127.0.0.1:12345', appRoot: true, nativeStorage: 'function'};
+		}
+		else {
+			r = vm.runInContext(expression, win);
+		}
+		return r;
+	};
+	vm.runInContext(bridgeSource, win);
+	const inflight = win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
+	bindingOnline = true;
+	await runtime.bootstrap({
+		id: 'A0:main',
+		profileId: 'A0',
+		email: 'user@example.com',
+		frameId: 'main',
+		contextId: 7,
+		cdp,
+		sources: new Map(),
+		sheets: new Map(),
+		shell: false,
+		booting: false
+	});
+	const result = await inflight;
+	assert.equal(result.revision, 'rev-1');
+	assert.equal(result.method, 'GET');
+	await runtime.dispose();
+});

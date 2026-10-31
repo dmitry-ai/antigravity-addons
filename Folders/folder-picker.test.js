@@ -65,6 +65,34 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	items[0].folderTree.onSelect('ten');
 	assert.deepEqual(actions, [['assign-project', {projectId: 'project-id', folderId: 'ten'}]]);
 	assert.equal(items.some(item => /Into folder/.test(item.label ?? '')), false, 'No repeated path labels');
+	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// "Add Project settings action to project context menu in Folders":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/17
+	const openedSettings = [];
+	vm.compileFunction(
+		functions.get('showProjectContextMenu') + '\nshowProjectContextMenu(event, null, "project-id", "Same name");',
+		['client', 'showContextMenu', 'event', 'showCreateFolderDialog', 'window']
+	)(
+		client,
+		(_x, _y, value) => {
+			items = value;
+		},
+		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
+		() => {},
+		{
+			__PROJECT_FOLDERS_VIEW__: {
+				adapter: {
+					navigate() {},
+					openProjectSettings: id => openedSettings.push(id)
+				},
+				renameProject() {}
+			}
+		}
+	);
+	const settingsItem = items.find(item => 'Project settings…' === item.label);
+	assert.ok(settingsItem);
+	settingsItem.onClick();
+	assert.deepEqual(openedSettings, ['project-id']);
 });
 test('growing a menu near the lower-right corner keeps it inside the viewport', () => {
 	const menu = {_folderAnchor: {x: 299, y: 461}, offsetWidth: 250, offsetHeight: 230, style: {}};

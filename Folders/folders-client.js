@@ -883,6 +883,10 @@
 			if (window.__PROJECT_FOLDERS_VIEW__) {
 				items.push({label: 'Open project', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
 				items.push({label: 'New conversation', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
+				// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+				// "Add Project settings action to project context menu in Folders":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/17
+				items.push({label: 'Project settings…', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.openProjectSettings(projectId)});
 				items.push({label: 'Rename project…', onClick: () => window.__PROJECT_FOLDERS_VIEW__.renameProject(projectId)});
 				items.push({separator: true});
 			}
