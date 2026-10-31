@@ -1,9 +1,13 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
+// https://github.com/dmitry-ai/antigravity-addons/issues/18
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {openFixture} = require('./browser-fixture');
+const {openFixture, closeSharedBrowser} = require('./browser-fixture');
+test.after(() => closeSharedBrowser());
 const data = {
 	folders: [
 		{id: 'root', name: 'Work', parentId: null},
@@ -17,7 +21,7 @@ const projects = [
 	{id: 'p2', name: 'Project Two'}
 ];
 test('A real browser mounts the independent tree on unrelated vendor markup and keeps the event loop responsive', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects});
+	const fixture = await openFixture({data, projects, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForTimeout(300);
 	const report = await fixture.page.evaluate(() => ({
@@ -48,7 +52,7 @@ test('A real browser mounts the independent tree on unrelated vendor markup and 
 	await fixture.page.locator('.fg-native').click();
 });
 test('A missing native mount produces a visible fault without starving the event loop or hiding the native UI', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects, missingAnchor: true});
+	const fixture = await openFixture({data, projects, missingAnchor: true, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForTimeout(400);
 	const report = await fixture.page.evaluate(() => ({
@@ -64,7 +68,7 @@ test('A missing native mount produces a visible fault without starving the event
 	assert.deepEqual(fixture.errors, []);
 });
 test('A sidebar created after asynchronous native startup recovers automatically without a reload', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects, delayedAnchor: true});
+	const fixture = await openFixture({data, projects, delayedAnchor: true, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state, {timeout: 5000});
 	assert.equal(await fixture.page.locator('.fg-fault').count(), 0);
@@ -76,7 +80,7 @@ test('A sidebar created after asynchronous native startup recovers automatically
 // "Coordinate Folders sidebar mounting with asynchronous shell auth initialization and loading skeleton in A6":
 // https://github.com/dmitry-ai/antigravity-addons/issues/14
 test('Early CDP attachment during native shell and skeleton boot never flashes a mount fault before the sidebar renders', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects, bootingShell: true});
+	const fixture = await openFixture({data, projects, bootingShell: true, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_VIEW__?.state.haveConfig && window.__PROJECT_FOLDERS_VIEW__?.state.haveProjects);
 	await fixture.page.waitForTimeout(150);
@@ -112,7 +116,7 @@ test('Early CDP attachment during native shell and skeleton boot never flashes a
 	assert.deepEqual(fixture.errors, []);
 });
 test('Real UI menus create a project in the exact chosen folder and cancellation does not capture a later project', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects});
+	const fixture = await openFixture({data, projects, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	const folder = fixture.page.locator('[data-folders-row="folder:root"]');
@@ -141,7 +145,7 @@ test('Real UI menus create a project in the exact chosen folder and cancellation
 	assert.deepEqual(fixture.errors, []);
 });
 test('New vendor API schemas produce a visible fault and preserve the original project list', {timeout: 30000}, async context => {
-	const fixture = await openFixture({data, projects, badProjects: true});
+	const fixture = await openFixture({data, projects, badProjects: true, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'error' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	assert.match(await fixture.page.locator('.fg-fault').textContent(), /unknown project list schema/);
@@ -151,7 +155,7 @@ test('New vendor API schemas produce a visible fault and preserve the original p
 });
 test('Thousands of projects remain virtualized and live conversation updates keep the selected route and draft', {timeout: 30000}, async context => {
 	const many = Array.from({length: 5000}, (_, index) => ({id: `p${index}`, name: `Project ${index}`}));
-	const fixture = await openFixture({data: {folders: [], projectFolderMap: {}}, projects: many});
+	const fixture = await openFixture({data: {folders: [], projectFolderMap: {}}, projects: many, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	const report = await fixture.page.evaluate(() => window.__PROJECT_FOLDERS_VIEW__.inspect());
@@ -188,7 +192,7 @@ test('The conversation rename UI keeps its ID, native route, project name, live 
 		trajectoryId: 'same-analysis',
 		trajectoryMetadata: {projectId: 'p1', rootConversationId: 'c1'}
 	};
-	const fixture = await openFixture({data, projects, summaries: {c1: summary}});
+	const fixture = await openFixture({data, projects, summaries: {c1: summary}, context});
 	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	await fixture.page.locator('[data-folders-row="project:p1"] .fg-toggle').click();
