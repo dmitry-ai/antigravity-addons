@@ -1,7 +1,12 @@
-﻿$ErrorActionPreference = 'Stop'
+# 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+# https://github.com/dmitry-ai/antigravity-addons/issues/12
+$ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'build-icon.ps1') | Out-Null
 $desktopPath = [Environment]::GetFolderPath('Desktop')
-if (-not $desktopPath) { $desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop }
+if (-not $desktopPath) {
+	$desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop
+}
 $shortcutPath = Join-Path $desktopPath 'A6.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)

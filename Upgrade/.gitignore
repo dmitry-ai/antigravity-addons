@@ -1,3 +1,6 @@
+# 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+# https://github.com/dmitry-ai/antigravity-addons/issues/6
 node_modules/
 state/
 work/

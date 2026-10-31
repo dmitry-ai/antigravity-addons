@@ -1,3 +1,6 @@
+# 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+# https://github.com/dmitry-ai/antigravity-addons/issues/15
 *.exe
 *.log
 node-path.txt

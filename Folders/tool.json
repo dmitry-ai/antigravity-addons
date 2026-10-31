@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "folders",
-	"name": "Иерархические папки",
+	"name": "Hierarchical Folders",
 	"enabled": true,
 	"order": 20,
 	"dependsOn": ["css"],

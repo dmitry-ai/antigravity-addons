@@ -1,3 +1,6 @@
+/* 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk */
+/* "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+": */
+/* https://github.com/dmitry-ai/antigravity-addons/issues/10 */
 .fg-panel{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--sidebar,#f7f7f7);color:var(--foreground,#222);font:13px var(--font-sans,Arial,sans-serif);z-index:2;min-height:0}
 .fg-panel *{box-sizing:border-box}.fg-panel button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left;min-width:0}.fg-panel button:focus-visible{outline:2px solid var(--ring,#487bce);outline-offset:-2px}
 .fg-panel .fg-toolbar{display:flex;align-items:center;height:20px!important;min-height:20px!important;padding:0 6px;gap:6px;flex-shrink:0}.fg-toolbar strong{flex:1;font-weight:600;font-size:11px}.fg-actions{display:flex;gap:5px}.fg-native{font-size:11px!important;color:var(--muted-foreground,#666)!important}.fg-state{padding:6px 8px;color:#ad231c;background:#fff0ed;white-space:normal;line-height:1.4;flex-shrink:0}.fg-state:empty{display:none}

@@ -1,13 +1,11 @@
-/**
- * install-folders.js
- * Enables Folders in its Upgrade tool.json manifest.
- * Does not patch app.asar or leave backup files beside the manifest.
- */
+// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Implement left-sidebar project folders (Folders), CLI manager, installer scripts, and remove right-panel sidecar prototype":
+// https://github.com/dmitry-ai/antigravity-addons/issues/3
 const fs = require('fs');
 const path = require('path');
 function install() {
 	setEnabled(true);
-	console.log('[install-folders] Folders включён в tool.json. Запустите Upg; закрывать Antigravity не требуется.');
+	console.log('[install-folders] Folders enabled in tool.json. Run Upg; closing Antigravity is not required.');
 }
 function setEnabled(enabled) {
 	const filename = path.join(__dirname, 'tool.json');
@@ -17,11 +15,12 @@ function setEnabled(enabled) {
 	fs.writeFileSync(filename, JSON.stringify(tool, null, '\t') + '\n');
 }
 if (require.main === module) {
-  try {
-    install();
-  } catch (err) {
-    console.error('[install-folders] Error:', err.message);
-    process.exit(1);
-  }
+	try {
+		install();
+	}
+	catch (err) {
+		console.error('[install-folders] Error:', err.message);
+		process.exit(1);
+	}
 }
 module.exports = {install, setEnabled};

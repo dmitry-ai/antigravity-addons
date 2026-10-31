@@ -1,7 +1,8 @@
-/* Keep transcript density scoped to the native conversation surface. */
+// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 [data-testid='conversation-view'] {
 	--max-conversation-width: none;
-	/* The native fade used the same 48px reserve as the transcript spacer. */
 	> div:has([data-testid='autoscroll-viewport']) > .absolute.bottom-0.pointer-events-none {
 		height: 4px !important;
 		left: 4px !important;
@@ -9,14 +10,17 @@
 	}
 	[data-testid='autoscroll-viewport'] {
 		padding-inline: 4px !important;
-		/* Native turn list ends in an inline-height spacer after its scroll anchor. */
 		.relative.w-full:has(> .relative.flex.flex-col) {
-			> div[style]:last-child:empty { height: 4px !important; }
-			/* A viewport-sized last turn otherwise leaves blank space under short replies. */
-			> .relative.flex.flex-col > .flex.items-start { min-height: 0 !important; }
+			> div[style]:last-child:empty {
+				height: 4px !important;
+			}
+			> .relative.flex.flex-col > .flex.items-start {
+				min-height: 0 !important;
+			}
 		}
-		/* Expanded activity panels add an indent on top of their row padding. */
-		.bleed-contain { padding-inline-start: 0 !important; }
+		.bleed-contain {
+			padding-inline-start: 0 !important;
+		}
 		.group.min-h-8,
 		[data-testid='thinking-collapsible-trigger'],
 		[data-testid='agent-loading'] {
@@ -25,19 +29,38 @@
 		[data-quotable], .whitespace-pre-wrap, .leading-relaxed, .prose {
 			line-height: 18px !important;
 		}
-		p, li { line-height: 18px !important; }
-		p { margin-block: 0 !important; }
-		.leading-relaxed { gap: 4px !important; }
+		p, li {
+			line-height: 18px !important;
+		}
+		p {
+			margin-block: 0 !important;
+		}
+		.leading-relaxed {
+			gap: 4px !important;
+		}
 		.leading-relaxed :is(ul,ol):not(.contains-task-list) {
 			padding-inline-start: 16px !important;
 			margin-block: 2px !important;
 		}
-		div:has(> .leading-relaxed) { padding-inline: 4px !important; }
-		[data-testid='turn-cards-container']:empty { display: none !important; }
-		.pt-3:has([data-testid='cascade-system-message-toolbar']) { padding-top: 2px !important; }
-		[data-testid='cascade-system-message-toolbar'] { gap: 2px !important; }
-		p code, li > code { line-height: 18px !important; padding-block: 0 !important; }
-		[data-testid='user-input-step'] { padding-top: 4px !important; }
+		div:has(> .leading-relaxed) {
+			padding-inline: 4px !important;
+		}
+		[data-testid='turn-cards-container']:empty {
+			display: none !important;
+		}
+		.pt-3:has([data-testid='cascade-system-message-toolbar']) {
+			padding-top: 2px !important;
+		}
+		[data-testid='cascade-system-message-toolbar'] {
+			gap: 2px !important;
+		}
+		p code, li > code {
+			line-height: 18px !important;
+			padding-block: 0 !important;
+		}
+		[data-testid='user-input-step'] {
+			padding-top: 4px !important;
+		}
 		[data-testid='thinking-collapsible-trigger'] {
 			min-height: 22px !important;
 			padding-block: 1px !important;

@@ -1,3 +1,6 @@
+// 2026-10-11 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Create CSS customization tool (CSS/style.css) to compact Antigravity 2.0 sidebar project rows and chat layout":
+// https://github.com/dmitry-ai/antigravity-addons/issues/2
 [role='navigation'][aria-label='Sidebar'] {
 	padding-bottom: 2px !important;
 	> div:first-child {
@@ -43,7 +46,6 @@
 		padding-top: 2px !important;
 	}
 }
-/* Compact the real menu and overlay toolbar together with the sidebar spacer. */
 div:has(> [data-testid='title-menu-bar']) {
 	height: 24px !important;
 	min-height: 24px !important;
@@ -60,7 +62,9 @@ div:has(> [data-testid='title-menu-bar']) {
 #root .absolute.top-0:has([data-testid='sidebar-toggle']),
 #root .absolute.top-0:has([data-testid='toggle-aux-sidebar']) {
 	height: 26px !important;
-	button { max-height: 24px !important; }
+	button {
+		max-height: 24px !important;
+	}
 }
 [data-testid='conversation-list-sidebar'] {
 	-webkit-mask-image: none !important;
@@ -111,7 +115,6 @@ button[data-project-card] svg {
 	height: 16px !important;
 	width: 16px !important;
 }
-/* Project names use the row width; reserve space for actions only while visible. */
 [data-testid='conversation-list-sidebar'] button[data-project-card] {
 	padding-right: 6px !important;
 	> div,
@@ -161,8 +164,6 @@ button[data-project-card] svg {
 	padding-bottom: 0 !important;
 	padding-top: 0 !important;
 }
-/* Native menus are portaled outside the sidebar. Scope by role and explicit
-   model-selector anchors, never by general button/div or generated class names. */
 [role='menu'] [role='menuitem'],
 [role='menu'] [role='menuitemcheckbox'],
 [role='menu'] [role='menuitemradio'] {
@@ -178,7 +179,9 @@ button[data-project-card] svg {
 		font-size: 12px !important;
 		line-height: 16px !important;
 	}
-	[data-testid='model-selector-header'] { padding-bottom: 2px !important; }
+	[data-testid='model-selector-header'] {
+		padding-bottom: 2px !important;
+	}
 }
 [data-testid='model-selector-trigger'],
 [data-testid='permissions-selector-trigger'] {

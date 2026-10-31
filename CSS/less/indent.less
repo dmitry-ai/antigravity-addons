@@ -1,15 +1,11 @@
-/* ========================================================
-   Иерархические отступы по глубине дерева (Method 1)
-   Систематическая архитектура для папок, проектов, плейсхолдеров
-   ======================================================== */
-/* 1. Маппинг глубины в CSS Custom Property (по умолчанию уровни 0 - 12) */
+// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+// https://github.com/dmitry-ai/antigravity-addons/issues/4
 each(range(0, @folder-depth-limit), {
 	[data-folder-depth='@{value}'] {
 		--folder-depth: @value;
 	}
 });
-/* 2. Динамический расчет через CSS Custom Properties */
-/* Заголовки папок: базовый отступ внутреннего контейнера 8px */
 [data-testid='section-header'][data-folder-id] > .group\/section-header,
 .group\/section-header[data-folder-id],
 [data-testid='section-header'][data-folder-depth] > .group\/section-header,
@@ -17,13 +13,10 @@ each(range(0, @folder-depth-limit), {
 	padding-left: calc(8px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 	margin-left: 0 !important;
 }
-/* Карточки проектов: базовый отступ 4px; размеры иконок задаются в compact.less */
 button[data-project-card][data-folder-depth],
 [data-index][data-folder-depth] button[data-project-card] {
 	padding-left: calc(4px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 }
-/* Плейсхолдеры пустых папок и проектов: отступ внутри виртуального контейнера строки */
-/* Плейсхолдеры пустых папок и проектов: компактный отступ (16px база + D * 14px) */
 [data-testid='empty-placeholder'][data-folder-depth],
 [data-index][data-folder-depth] [data-testid='empty-placeholder'] {
 	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
@@ -31,20 +24,16 @@ button[data-project-card][data-folder-depth],
 	font-style: italic !important;
 	opacity: 0.5 !important;
 }
-/* Строки разговоров внутри проектов: компактный отступ (16px база + D * 14px) */
 [data-index][data-folder-depth] [data-testid='conversation-row-sidebar'] {
 	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 }
-/* Обнуляем отступ у внешнего контейнера строки разговоров, чтобы он никогда не дублировал padding-left */
 [data-index][data-folder-depth] > div.w-full.h-full,
 [data-index][data-folder-depth] > div.w-full.group:has([data-testid]) {
 	padding-left: 0 !important;
 }
-/* Кнопка "See all / See less" внутри проектов: 16px базовый отступ */
 [data-index][data-folder-depth] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
 	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
 }
-/* Указатель времени справа от чатов в сайдбаре (убран по требованию пользователя) */
 [data-testid='conversation-row-sidebar'] [data-screenshot-volatile],
 [data-testid='conversation-row-sidebar'] span.text-xs.opacity-60,
 [data-testid='conversation-row-sidebar'] span.min-w-4,
@@ -52,7 +41,6 @@ button[data-project-card][data-folder-depth],
 [data-testid^='conversation-row-'] span.min-w-4 {
 	display: none !important;
 }
-/* Заголовок чата продолжается на всю доступную ширину строки без пустого пространства справа */
 [data-testid='conversation-row-sidebar'] {
 	position: relative !important;
 	padding-right: 6px !important;
@@ -72,8 +60,6 @@ button[data-project-card][data-folder-depth],
 	width: 100% !important;
 	max-width: 100% !important;
 }
-/* Правый блок элементов управления (Pin, Меню, Архив) вынесен из потока flex,
-   чтобы заголовок занимал всё свободное место, а кнопки при наведении накладывались с правильным z-index */
 [data-testid='conversation-row-sidebar'] > div.shrink-0,
 [data-testid^='conversation-row-'] > div.shrink-0 {
 	position: absolute !important;
@@ -86,7 +72,6 @@ button[data-project-card][data-folder-depth],
 	display: flex !important;
 	align-items: center !important;
 }
-/* В неактивном состоянии правый блок не блокирует клики по строке разговора */
 [data-testid='conversation-row-sidebar']:not(:hover):not(:focus-within) > div.shrink-0,
 [data-testid^='conversation-row-']:not(:hover):not(:focus-within) > div.shrink-0 {
 	pointer-events: none !important;
@@ -97,8 +82,6 @@ button[data-project-card][data-folder-depth],
 [data-testid^='conversation-row-']:focus-within > div.shrink-0 {
 	pointer-events: auto !important;
 }
-/* Контейнер кнопок действий при наведении: z-index, высота 100% и плотный градиентный фон,
-   исключающий просвечивание текста под кнопками */
 [data-testid='conversation-row-sidebar'] > div.shrink-0 > div,
 [data-testid^='conversation-row-'] > div.shrink-0 > div {
 	height: 100% !important;
@@ -131,22 +114,18 @@ button[data-project-card][data-folder-depth],
 	position: relative !important;
 	z-index: 30 !important;
 }
-/* 3. Эксплицитные селекторы с числовыми отступами (по умолчанию уровни 0 - 8) */
-/* Заголовки папок: 8px + D * 14px */
 each(range(0, @explicit-depth-limit), {
 	[data-testid='section-header'][data-folder-depth='@{value}'] > .group\/section-header,
 	.group\/section-header[data-folder-depth='@{value}'] {
 		padding-left: (8px + @value * @folder-indent) !important;
 	}
 });
-/* Карточки проектов: 4px + D * 14px */
 each(range(0, @explicit-depth-limit), {
 	button[data-project-card][data-folder-depth='@{value}'],
 	[data-index][data-folder-depth='@{value}'] button[data-project-card] {
 		padding-left: (4px + @value * @folder-indent) !important;
 	}
 });
-/* Плейсхолдеры и строки разговоров: 16px + D * 14px */
 each(range(0, @explicit-depth-limit), {
 	[data-testid='empty-placeholder'][data-folder-depth='@{value}'],
 	[data-index][data-folder-depth='@{value}'] [data-testid='empty-placeholder'],

@@ -1,11 +1,14 @@
-﻿param([switch]$Check, [switch]$Restore, [switch]$NoPause)
+# 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+# https://github.com/dmitry-ai/antigravity-addons/issues/6
+param([switch]$Check, [switch]$Restore, [switch]$NoPause)
 $ErrorActionPreference = 'Stop'
 $exitStatus = 1
 try {
 	$nodeCommand = Get-Command node.exe -ErrorAction Stop
 	$nodeVersion = [version](& $nodeCommand.Source -p 'process.versions.node')
 	if ([version]'22.12.0' -gt $nodeVersion) {
-		throw 'Требуется Node.js 22.12.0 или новее.'
+		throw 'Node.js 22.12.0 or newer is required.'
 	}
 	$argumentsList = @((Join-Path $PSScriptRoot 'upgrade.js'))
 	if ($Check) {
@@ -21,7 +24,7 @@ try {
 		try {
 			& npm.cmd ci --ignore-scripts --no-audit --no-fund
 			if (0 -ne $LASTEXITCODE) {
-				throw 'Не удалось установить зависимости. Проверьте доступ к npm.'
+				throw 'Failed to install dependencies. Check npm access.'
 			}
 		}
 		finally {
@@ -35,6 +38,6 @@ catch {
 	Write-Host $_.Exception.Message -ForegroundColor Red
 }
 if (-not $NoPause) {
-	[void](Read-Host 'Нажмите Enter, чтобы закрыть это окно')
+	[void](Read-Host 'Press Enter to close this window')
 }
 exit $exitStatus

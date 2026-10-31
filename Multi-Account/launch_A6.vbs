@@ -1,3 +1,6 @@
+' 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+' "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+' https://github.com/dmitry-ai/antigravity-addons/issues/12
 Option Explicit
 Dim sh, fso, script
 Set sh = CreateObject("WScript.Shell")

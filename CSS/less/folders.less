@@ -1,7 +1,6 @@
-/* ========================================================
-   Иерархическая система отступов папок и проектов (Method 1)
-   ======================================================== */
-// Also hide the heading when switching to the native sidebar.
+// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+// https://github.com/dmitry-ai/antigravity-addons/issues/4
 [data-testid='conversation-list-sidebar'] [data-testid='section-header'][data-title='Outside of Project'] {
 	display: none !important;
 }
@@ -9,7 +8,6 @@
 [data-testid='conversation-list-sidebar'] {
 	--folder-indent-unit: @folder-indent;
 }
-/* Заголовки папок */
 [data-testid='section-header'][data-folder-id],
 [data-testid='section-header'][data-title*='📁'],
 [data-testid='section-header'][data-title^='📁'] {
@@ -29,7 +27,6 @@
 	padding: 0 !important;
 	margin: 0 !important;
 }
-/* Стрелка раскрытия папки (chevron): аккуратно видима для понимания состояния дерева */
 [data-testid='section-header'][data-folder-id] button svg,
 [data-testid='section-header'][data-title*='📁'] button svg,
 [data-testid='section-header'][data-title^='📁'] button svg {
@@ -41,10 +38,6 @@
 [data-testid='section-header'][data-title^='📁']:hover button svg {
 	opacity: 0.85 !important;
 }
-/* ========================================================
-   Project Folders UI (Способ 1 и 2 из ответа 13)
-   ======================================================== */
-/* Кнопка создания папки в заголовке Projects */
 .btn-create-folder {
 	cursor: pointer !important;
 	display: inline-flex !important;
@@ -64,7 +57,6 @@
 	color: var(--foreground, currentColor) !important;
 	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.12)) !important;
 }
-/* Кнопка добавления подпапки (+) и кнопка опций папки (...) */
 .antigravity-folder-actions {
 	display: none !important;
 }
@@ -72,7 +64,6 @@
 	width: 18px !important;
 	height: @tree-row-height !important;
 	min-height: @tree-row-height !important;
-	// Keep the native menu anchor for the right-click action, without hover controls.
 	visibility: hidden !important;
 	pointer-events: none !important;
 	opacity: 0 !important;
@@ -108,7 +99,6 @@
 	color: var(--foreground, currentColor) !important;
 	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.15)) !important;
 }
-/* Инлайн-поле переименования (F2) */
 .folder-rename-input {
 	background: var(--background, #ffffff) !important;
 	color: var(--foreground, #18181b) !important;
@@ -123,7 +113,6 @@
 	height: @tree-row-height !important;
 	box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3) !important;
 }
-/* Подсветка папки при Drag & Drop */
 .folder-drop-target {
 	outline: 2px dashed #3b82f6 !important;
 	outline-offset: -1px !important;
@@ -135,7 +124,6 @@
 .folder-drop-target .group\/section-header {
 	background-color: rgba(59, 130, 246, 0.25) !important;
 }
-/* Всплывающее контекстное меню */
 .antigravity-folder-menu {
 	position: fixed !important;
 	z-index: 100000 !important;
@@ -157,8 +145,14 @@
 	animation: antigravity-menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 @keyframes antigravity-menu-in {
-	from { opacity: 0; transform: scale(0.96) translateY(-4px); }
-	to { opacity: 1; transform: scale(1) translateY(0); }
+	from {
+		opacity: 0;
+		transform: scale(0.96) translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
 }
 .antigravity-folder-menu .antigravity-folder-menu-item {
 	display: flex !important;
@@ -182,6 +176,9 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+// https://github.com/dmitry-ai/antigravity-addons/issues/8
 .antigravity-folder-picker {
 	display: flex;
 	flex-direction: column;
@@ -239,7 +236,10 @@
 	width: 14px;
 	height: 14px;
 	color: var(--muted-foreground, #71717a);
-	svg { width: 14px; height: 14px; }
+	svg {
+		width: 14px;
+		height: 14px;
+	}
 }
 .antigravity-folder-target-label {
 	flex: 1;
@@ -276,7 +276,6 @@
 	opacity: 0.8 !important;
 	margin-left: auto !important;
 }
-/* Модальное окно создания папки */
 .antigravity-folder-modal-overlay {
 	position: fixed !important;
 	inset: 0 !important;
@@ -289,8 +288,12 @@
 	animation: antigravity-fade-in 120ms ease !important;
 }
 @keyframes antigravity-fade-in {
-	from { opacity: 0; }
-	to { opacity: 1; }
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
 }
 .antigravity-folder-modal {
 	background: var(--card, #ffffff) !important;
