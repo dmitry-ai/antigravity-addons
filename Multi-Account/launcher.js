@@ -1,12 +1,16 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+// 2026-11-02 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Preserve inherited shared skills during A6 profile preparation":
+// https://github.com/dmitry-ai/antigravity-addons/issues/19
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {readProfiles} = require('./profiles');
 const {CDP} = require('../Upgrade/cdp-client');
 const {bootstrap} = require('./main-bootstrap');
+const {ensureSharedSkills} = require('./skills-manifest');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
 const readChromeShortcut = profile => {
@@ -47,14 +51,7 @@ const prepareProfile = profile => {
 	const config = path.join(profile.homeDir, '.gemini/config');
 	fs.mkdirSync(config, {recursive: true});
 	const filename = path.join(config, 'skills.json');
-	const skills = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {entries: []};
-	if (!Array.isArray(skills.entries)) {
-		throw Error('Invalid skills.json');
-	}
-	if (!skills.entries.some(entry => path.resolve(entry.path).toLowerCase() === path.resolve(profile.skillsRoot).toLowerCase())) {
-		skills.entries.push({path: profile.skillsRoot});
-		fs.writeFileSync(filename, JSON.stringify(skills, null, 2));
-	}
+	ensureSharedSkills(filename, profile.skillsRoot);
 	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
 };
 // 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
