@@ -10,8 +10,11 @@ const {shellProbe, isShell} = require('./antigravity-shell');
 const {discoverEndpoints} = require('./profile-endpoints');
 const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
 const binding = '__antigravityToolsCall';
+// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+// https://github.com/dmitry-ai/antigravity-addons/issues/20
 const runtimeVersion = () => {
-	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json'].map(filename => path.join(__dirname, filename));
+	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json', '../Multi-Account/update-guard.js'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };

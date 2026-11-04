@@ -1,14 +1,19 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+// https://github.com/dmitry-ai/antigravity-addons/issues/20
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const {EventEmitter} = require('node:events');
 const {childEnvironment, prepareProfile} = require('./launcher');
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
+const {installUpdateGuard, activeSiblingProfiles, isLockfileHeld} = require('./update-guard');
 const fixture = context => {
 	const parent = os.tmpdir();
 	const r = fs.mkdtempSync(path.join(parent, 'antigravity-accounts-'));
@@ -21,7 +26,7 @@ const fixture = context => {
 // 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
-test('Account environment isolates Electron/Go home without changing the real user or inherited tools paths', () => {
+test('Account environment isolates secondary Electron/Go home while keeping real USERPROFILE for A0', () => {
 	const original = {USERPROFILE: 'real', APPDATA: 'roaming', LOCALAPPDATA: 'local', Path: 'tools', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '--require unwanted'};
 	const result = childEnvironment({homeDir: 'isolated', id: 'A6'}, original);
 	assert.equal(original.USERPROFILE, 'real');
@@ -32,8 +37,14 @@ test('Account environment isolates Electron/Go home without changing the real us
 	assert.equal(result.Path, 'tools');
 	assert.equal(result.ELECTRON_RUN_AS_NODE, undefined);
 	assert.equal(result.NODE_OPTIONS, undefined);
+	const primary = childEnvironment({homeDir: 'unused-a0-home', id: 'A0'}, original);
+	assert.equal(primary.USERPROFILE, 'real');
+	assert.equal(primary.ANTIGRAVITY_ORIGINAL_USERPROFILE, 'real');
+	assert.equal(primary.ANTIGRAVITY_ACCOUNT, 'A0');
+	assert.equal(primary.ELECTRON_RUN_AS_NODE, undefined);
+	assert.equal(primary.NODE_OPTIONS, undefined);
 });
-test('Shared skills stay at their source; existing account state and skill entries are preserved', context => {
+test('Shared skills stay at their source; existing account state and skill entries are preserved; A0 prepares logs without isolated home', context => {
 	const root = fixture(context);
 	const skillsRoot = path.join(root, 'skills');
 	const homeDir = path.join(root, 'account/home');
@@ -49,7 +60,10 @@ test('Shared skills stay at their source; existing account state and skill entri
 	assert.equal(JSON.parse(fs.readFileSync(filename)).entries.length, 1);
 	assert.equal(fs.readFileSync(path.join(config, 'auth-sentinel'), 'utf8'), 'do not copy or overwrite');
 	assert.equal(fs.existsSync(path.join(config, 'skills/upwork-init')), false);
-	assert.throws(() => prepareProfile({...profile, id: 'A0'}), /original A0/);
+	const a0Dir = path.join(root, 'a0');
+	prepareProfile({id: 'A0', skillsRoot, homeDir: path.join(a0Dir, 'home'), userDataDir: a0Dir});
+	assert.equal(fs.existsSync(path.join(a0Dir, 'logs')), true);
+	assert.equal(fs.existsSync(path.join(a0Dir, 'home/.gemini/config/skills.json')), false);
 });
 test('Unsafe and overlapping profile directories are rejected before launching', context => {
 	const root = fixture(context);
@@ -64,7 +78,7 @@ test('Unsafe and overlapping profile directories are rejected before launching',
 	fs.writeFileSync(filename, JSON.stringify(base));
 	assert.throws(() => readProfiles({roaming: root, filename}), /profile/);
 });
-test('Browser routing preserves the OAuth state and callback while selecting the configured Chrome identity', async context => {
+test('Browser routing preserves the OAuth state and callback while selecting the configured Chrome identity, and A0 bootstrap keeps native auth', async context => {
 	const root = fixture(context);
 	const events = {};
 	const opened = [];
@@ -81,7 +95,8 @@ test('Browser routing preserves the OAuth state and callback while selecting the
 		setAsDefaultProtocolClient: () => true,
 		on: (event, handler) => {
 			events[event] = handler;
-		}
+		},
+		removeListener: () => {}
 	};
 	const shell = {
 		openExternal: async url => {
@@ -117,17 +132,152 @@ test('Browser routing preserves the OAuth state and callback while selecting the
 	assert.equal(app.setAsDefaultProtocolClient('antigravity'), false);
 	await shell.openExternal('mailto:example@example.org');
 	assert.deepEqual(native, ['mailto:example@example.org']);
-	delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+	assert.equal(globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__.tokenStorage, 'server-headless-file-store');
+	assert.equal(globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__.updateGuard, true);
 	processes.spawn('C:/installed/language_server.exe', ['--standalone', '--https_server_port', '0'], {env: {Path: 'tools'}});
 	assert.ok(opened[1].args.includes('--headless'));
 	assert.ok(opened[1].args.includes('--gemini_dir=' + path.join(root, '.gemini')));
 	assert.equal(opened[1].options.env.USERPROFILE, root);
 	assert.equal(opened[1].options.env.ANTIGRAVITY_VSCODE_HOST, '1');
+	const a0Dir = path.join(root, 'a0-data');
+	fs.mkdirSync(a0Dir, {recursive: true});
+	const a0Result = bootstrap(fakeRequire, {id: 'A0', homeDir: path.join(a0Dir, 'home'), userDataDir: a0Dir, codeRoot: __dirname});
+	assert.equal(a0Result.id, 'A0');
+	assert.equal(a0Result.tokenStorage, 'native-credential-manager');
+	assert.equal(a0Result.updateGuard, true);
+	assert.equal(fs.existsSync(path.join(a0Dir, 'app_storage.json')), false);
+	globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
+	delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
 	delete globalThis.__ANTIGRAVITY_OAUTH_BRIDGES__;
 	delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
 });
+test('Cross-profile update guard blocks installation while sibling profile is active, preserves Ready state on transient errors, and installs when last profile quits', async context => {
+	const root = fixture(context);
+	const a0Dir = path.join(root, 'Antigravity');
+	const a6Dir = path.join(root, 'Antigravity-A6');
+	const pendingDir = path.join(root, 'pending');
+	fs.mkdirSync(a0Dir, {recursive: true});
+	fs.mkdirSync(a6Dir, {recursive: true});
+	fs.mkdirSync(pendingDir, {recursive: true});
+	const installerPath = path.join(pendingDir, 'Antigravity-x64.exe');
+	fs.writeFileSync(installerPath, 'installer-binary');
+	fs.writeFileSync(path.join(pendingDir, 'update-info.json'), JSON.stringify({fileName: 'Antigravity-x64.exe', isAdminRightsRequired: false}));
+	const profiles = [
+		{id: 'A0', userDataDir: a0Dir},
+		{id: 'A6', userDataDir: a6Dir}
+	];
+	let a6Alive = true;
+	fs.writeFileSync(path.join(a6Dir, 'main-runtime.json'), JSON.stringify({id: 'A6', pid: 66006, userDataDir: a6Dir}));
+	assert.equal(isLockfileHeld(a6Dir, {openSync: () => { const err = Error('busy'); err.code = 'EBUSY'; throw err; }}), true);
+	assert.equal(isLockfileHeld(a6Dir), false);
+	const siblings = activeSiblingProfiles({id: 'A0', userDataDir: a0Dir}, {profiles, isPidAlive: pid => 66006 === pid && a6Alive});
+	assert.equal(siblings.length, 1);
+	assert.equal(siblings[0].id, 'A6');
+	const app = new EventEmitter();
+	app.getVersion = () => '2.29.0';
+	const dialogs = [];
+	const dialog = {
+		showMessageBox: async (_win, box) => {
+			dialogs.push(box || _win);
+			return {response: 0};
+		}
+	};
+	const menuItem = {label: 'Check for Updates', enabled: true};
+	const Menu = {
+		getApplicationMenu: () => ({
+			getMenuItemById: id => 'check-for-updates' === id ? menuItem : null
+		})
+	};
+	let lastState = {type: 'idle'};
+	const updater = {
+		MenuUpdateStep: {RestartToUpdate: 'Restart to Update'},
+		getLastState: () => lastState,
+		broadcastState: state => {
+			lastState = state;
+		}
+	};
+	const autoUpdater = new EventEmitter();
+	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.installerPath = installerPath;
+	autoUpdater.quitAndInstallCalled = false;
+	autoUpdater.quitHandlerAdded = false;
+	let installCalls = 0;
+	let quitAndInstallCalls = 0;
+	autoUpdater.install = () => {
+		installCalls++;
+		autoUpdater.quitAndInstallCalled = true;
+		return true;
+	};
+	autoUpdater.quitAndInstall = () => {
+		quitAndInstallCalls++;
+		autoUpdater.quitAndInstallCalled = true;
+		return true;
+	};
+	const spawns = [];
+	const mockCp = {
+		spawn: (command, args, options) => {
+			spawns.push({command, args, options});
+			return {unref() {}};
+		}
+	};
+	const fakeRequire = name => 'electron' === name ? {app, dialog, BrowserWindow: {getFocusedWindow: () => null, getAllWindows: () => []}, Menu} : 'electron-updater' === name ? {autoUpdater} : './updater' === name ? updater : null;
+	const a0Guard = installUpdateGuard(fakeRequire, {id: 'A0', userDataDir: a0Dir}, {
+		profiles,
+		pendingDir,
+		cp: mockCp,
+		isPidAlive: pid => 66006 === pid && a6Alive
+	});
+	context.after(() => a0Guard.dispose());
+	// 1. While running (not quitting), autoInstallOnAppQuit stays true so BaseUpdater.addQuitHandler() registers
+	assert.equal(autoUpdater.autoInstallOnAppQuit, true);
+	autoUpdater.emit('update-downloaded', {version: '2.30.0'});
+	updater.broadcastState({type: 'ready', update: {version: '2.30.0'}});
+	autoUpdater.quitHandlerAdded = true;
+	assert.equal(fs.existsSync(path.join(pendingDir, 'deferred-update.json')), true);
+	// 2. Transient network error on subsequent hourly check must not wipe out Ready state ("Restart to Update" blue pill)
+	updater.broadcastState({type: 'idle'});
+	menuItem.label = 'Check for Updates';
+	autoUpdater.emit('error', Error('net::ERR_NAME_NOT_RESOLVED'));
+	await new Promise(resolve => setImmediate(resolve));
+	assert.deepEqual(lastState, {type: 'ready', update: {version: '2.30.0'}});
+	assert.equal(menuItem.label, 'Restart to Update');
+	// 3. Clicking "Restart to Update" (quitAndInstall) while A6 is open is blocked and informs the user
+	assert.equal(autoUpdater.quitAndInstall(false, false), false);
+	assert.equal(quitAndInstallCalls, 0);
+	assert.equal(dialogs.length, 1);
+	assert.match(dialogs[0].message, /A6/);
+	// 4. Closing A0 while A6 is open evaluates autoInstallOnAppQuit as false and blocks install()
+	app.emit('before-quit');
+	assert.equal(autoUpdater.autoInstallOnAppQuit, false);
+	assert.equal(autoUpdater.install(true, false), false);
+	assert.equal(installCalls, 0);
+	app.emit('quit', {}, 0);
+	assert.equal(spawns.length, 0);
+	a0Guard.dispose();
+	// 5. When A6 later closes as the last active profile, A6 spawns the deferred update installer
+	a6Alive = false;
+	const a6App = new EventEmitter();
+	a6App.getVersion = () => '2.29.0';
+	const a6AutoUpdater = new EventEmitter();
+	a6AutoUpdater.autoInstallOnAppQuit = true;
+	a6AutoUpdater.quitAndInstallCalled = false;
+	a6AutoUpdater.quitHandlerAdded = false;
+	const a6Require = name => 'electron' === name ? {app: a6App} : 'electron-updater' === name ? {autoUpdater: a6AutoUpdater} : null;
+	const a6Guard = installUpdateGuard(a6Require, {id: 'A6', userDataDir: a6Dir}, {
+		profiles,
+		pendingDir,
+		cp: mockCp,
+		isPidAlive: () => false
+	});
+	context.after(() => a6Guard.dispose());
+	a6App.emit('before-quit');
+	a6App.emit('quit', {}, 0);
+	assert.equal(spawns.length, 1);
+	assert.equal(spawns[0].command, installerPath);
+	assert.deepEqual(spawns[0].args, ['--updated', '/S']);
+	assert.equal(fs.existsSync(path.join(pendingDir, 'deferred-update.json')), false);
+});
 test('The native terminal OAuth bridge accepts only the matching state at the official callback and keeps stdin open', async () => {
-	const {EventEmitter} = require('node:events');
 	const {OAuthBridge, callbackCode} = require('./oauth-bridge');
 	const child = new EventEmitter();
 	const written = [];
@@ -158,7 +308,6 @@ test('The native terminal OAuth bridge accepts only the matching state at the of
 	bridge.dispose();
 });
 test('The official callback can clear its address bar; the original navigation still must match A6 OAuth state', async context => {
-	const {EventEmitter} = require('node:events');
 	const {OAuthBridge} = require('./oauth-bridge');
 	const {CDP} = require('../Upgrade/cdp-client');
 	const child = new EventEmitter();

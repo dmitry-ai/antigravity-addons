@@ -4,6 +4,9 @@
 // 2026-11-02 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Preserve inherited shared skills during A6 profile preparation":
 // https://github.com/dmitry-ai/antigravity-addons/issues/19
+// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+// https://github.com/dmitry-ai/antigravity-addons/issues/20
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
@@ -42,30 +45,30 @@ const readChromeShortcut = profile => {
 	};
 };
 const prepareProfile = profile => {
-	if ('A0' === profile.id) {
-		throw Error('Use the original A0 shortcut');
+	if ('A0' !== profile.id) {
+		if (!fs.existsSync(profile.skillsRoot) || !fs.readdirSync(profile.skillsRoot).some(name => fs.existsSync(path.join(profile.skillsRoot, name, 'SKILL.md')))) {
+			throw Error('The shared skills source is unavailable');
+		}
+		const config = path.join(profile.homeDir, '.gemini/config');
+		fs.mkdirSync(config, {recursive: true});
+		const filename = path.join(config, 'skills.json');
+		ensureSharedSkills(filename, profile.skillsRoot);
 	}
-	if (!fs.existsSync(profile.skillsRoot) || !fs.readdirSync(profile.skillsRoot).some(name => fs.existsSync(path.join(profile.skillsRoot, name, 'SKILL.md')))) {
-		throw Error('The shared skills source is unavailable');
-	}
-	const config = path.join(profile.homeDir, '.gemini/config');
-	fs.mkdirSync(config, {recursive: true});
-	const filename = path.join(config, 'skills.json');
-	ensureSharedSkills(filename, profile.skillsRoot);
 	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
 };
 // 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
 const childEnvironment = (profile, original = process.env) => {
+	const realHome = original.ANTIGRAVITY_ORIGINAL_USERPROFILE || original.USERPROFILE;
 	const r = {...original};
 	for (const key of Object.keys(r)) {
 		if (/^(USERPROFILE|ELECTRON_RUN_AS_NODE|NODE_OPTIONS)$/i.test(key)) {
 			delete r[key];
 		}
 	}
-	r.USERPROFILE = profile.homeDir;
-	r.ANTIGRAVITY_ORIGINAL_USERPROFILE = original.ANTIGRAVITY_ORIGINAL_USERPROFILE || original.USERPROFILE;
+	r.USERPROFILE = 'A0' === profile.id ? realHome : profile.homeDir;
+	r.ANTIGRAVITY_ORIGINAL_USERPROFILE = realHome;
 	r.ANTIGRAVITY_ACCOUNT = profile.id;
 	r.ANTIGRAVITY_VSCODE_HOST = '1';
 	return r;
@@ -76,7 +79,7 @@ const launch = async id => {
 		if (!profile) {
 			throw Error('Unknown profile: ' + id);
 		}
-		const chrome = readChromeShortcut(profile);
+		const chrome = 'A0' === profile.id ? null : readChromeShortcut(profile);
 		prepareProfile(profile);
 		const log = message => fs.appendFileSync(path.join(profile.userDataDir, 'launcher.log'), new Date().toISOString() + ' ' + message + '\n');
 		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -165,8 +168,8 @@ const launch = async id => {
 			}
 			await cdp.call('Debugger.resume');
 			resumed = true;
-			log('Isolated profile configured; browser shortcut ' + profile.chromeShortcut);
-			console.log(JSON.stringify({id, homeDir: profile.homeDir, userDataDir: profile.userDataDir, email: profile.email, chromeProfile: chrome.directory}));
+			log(chrome ? 'Isolated profile configured; browser shortcut ' + profile.chromeShortcut : 'Primary profile configured with update guard');
+			console.log(JSON.stringify({id, homeDir: 'A0' === profile.id ? process.env.ANTIGRAVITY_ORIGINAL_USERPROFILE || process.env.USERPROFILE : profile.homeDir, userDataDir: profile.userDataDir, email: profile.email || null, chromeProfile: chrome?.directory || null}));
 		}
 		catch (error) {
 			log('ERROR: ' + error.message);
@@ -202,7 +205,8 @@ const activateExisting = async profile => {
 		try {
 			cdp = await CDP.open(record.inspector);
 			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
-			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && 'server-headless-file-store' === state.account.tokenStorage) {
+			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
+			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
 				r = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
 			}
 		}
