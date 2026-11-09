@@ -7,6 +7,9 @@
 // 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
 // https://github.com/dmitry-ai/antigravity-addons/issues/20
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+// https://github.com/dmitry-ai/antigravity-addons/issues/21
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
@@ -14,6 +17,7 @@ const {readProfiles} = require('./profiles');
 const {CDP} = require('../Upgrade/cdp-client');
 const {bootstrap} = require('./main-bootstrap');
 const {ensureSharedSkills} = require('./skills-manifest');
+const {isLockfileHeld} = require('./update-guard');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
 const readChromeShortcut = profile => {
@@ -188,22 +192,21 @@ const launch = async id => {
 		}
 	}
 };
-const activateExisting = async profile => {
+const activateExisting = async (profile, options = {}) => {
 	let r = null;
-	result: {
-		let record;
-		try {
-			record = JSON.parse(fs.readFileSync(path.join(profile.userDataDir, 'main-runtime.json'), 'utf8'));
-		}
-		catch {
-			break result;
-		}
-		if (record.id !== profile.id || record.userDataDir !== profile.userDataDir || !/^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
-			break result;
-		}
+	const fileSystem = options.fs || fs;
+	const cdpClient = options.CDP || CDP;
+	const request = options.fetch || globalThis.fetch;
+	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
+	let record = null;
+	try {
+		record = JSON.parse(fileSystem.readFileSync(path.join(profile.userDataDir, 'main-runtime.json'), 'utf8'));
+	}
+	catch {}
+	if (record && record.id === profile.id && record.userDataDir === profile.userDataDir && /^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
 		let cdp;
 		try {
-			cdp = await CDP.open(record.inspector);
+			cdp = await cdpClient.open(record.inspector);
 			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
 			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
 			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
@@ -215,6 +218,34 @@ const activateExisting = async profile => {
 		}
 		finally {
 			cdp?.close();
+		}
+	}
+	if (!r && 'A0' === profile.id && locked(profile.userDataDir) && 'function' === typeof request) {
+		try {
+			const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
+			const port = Number(fileSystem.readFileSync(portFile, 'utf8').split(/\r?\n/)[0]);
+			if (Number.isInteger(port) && 0 < port && 65536 > port) {
+				const version = await (await request(`http://127.0.0.1:${port}/json/version`, {signal: AbortSignal.timeout(2000)})).json();
+				const targets = await (await request(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)})).json();
+				if (/Antigravity\//.test(version?.['User-Agent'] || '') && Array.isArray(targets)) {
+					const pages = targets.filter(target => 'page' === target?.type && /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(target.url || '') && /^ws:\/\/(127\.0\.0\.1|localhost):\d+\//.test(target.webSocketDebuggerUrl || ''));
+					for (const page of pages) {
+						const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
+						try {
+							await pageCdp.call('Page.bringToFront');
+						}
+						finally {
+							pageCdp.close();
+						}
+					}
+					if (pages.length) {
+						r = {id: profile.id, port, windows: pages.length};
+					}
+				}
+			}
+		}
+		catch {
+			r = null;
 		}
 	}
 	return r;

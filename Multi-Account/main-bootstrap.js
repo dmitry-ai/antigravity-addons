@@ -4,12 +4,17 @@
 // 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
 // https://github.com/dmitry-ai/antigravity-addons/issues/20
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+// https://github.com/dmitry-ai/antigravity-addons/issues/21
 const bootstrap = (require, config) => {
 	const {app, shell, BrowserWindow} = require('electron');
 	const path = require('node:path');
 	const fs = require('node:fs');
 	const os = require('node:os');
 	const processes = require('node:child_process');
+	const {installUpdateGuard, silenceBrokenStdio} = require(path.join(config.codeRoot, 'update-guard.js'));
+	silenceBrokenStdio(process);
 	const isPrimary = 'A0' === config.id;
 	if (!isPrimary && path.resolve(os.homedir()).toLowerCase() !== path.resolve(config.homeDir).toLowerCase()) {
 		throw Error(config.id + ' home isolation failed');
@@ -93,7 +98,7 @@ const bootstrap = (require, config) => {
 		items.autoCheckForUpdates = 'false';
 		fs.writeFileSync(storage, JSON.stringify(items));
 	}
-	require(path.join(config.codeRoot, 'update-guard.js')).installUpdateGuard(require, config);
+	installUpdateGuard(require, config);
 	globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__ = {
 		id: config.id,
 		email: config.email || null,
