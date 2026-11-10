@@ -10,6 +10,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
+// https://github.com/dmitry-ai/antigravity-addons/issues/23
 const bootstrap = (require, config) => {
 	const {app, shell, BrowserWindow, BaseWindow} = require('electron');
 	const path = require('node:path');
@@ -96,6 +99,9 @@ const bootstrap = (require, config) => {
 					win.__antigravityOriginalSetTitle = originalSetTitle;
 					win.__antigravityTitlePatched = true;
 					win.setTitle = title => {
+						if (win.isDestroyed?.()) {
+							return;
+						}
 						const text = String(title || '');
 						return originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
 					};
@@ -108,7 +114,7 @@ const bootstrap = (require, config) => {
 				}
 				if (win.webContents?.on && !win.__antigravityTitleListener) {
 					const onTitleUpdated = (event, title) => {
-						if ('string' === typeof title && !title.startsWith(prefix)) {
+						if ('string' === typeof title && !title.startsWith(prefix) && !win.isDestroyed?.()) {
 							event?.preventDefault?.();
 							win.setTitle?.(prefix + title);
 						}

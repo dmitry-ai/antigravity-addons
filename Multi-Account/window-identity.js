@@ -4,6 +4,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
+// https://github.com/dmitry-ai/antigravity-addons/issues/23
 const installWindowIdentity = (require, config) => {
 	if ('A0' === config.id || !/^A\d+$/.test(config.id || '')) {
 		throw Error('Window identity is only for secondary accounts');
@@ -46,6 +49,9 @@ const installWindowIdentity = (require, config) => {
 				win.__antigravityOriginalSetTitle = originalSetTitle;
 				win.__antigravityTitlePatched = true;
 				win.setTitle = title => {
+					if (win.isDestroyed?.()) {
+						return;
+					}
 					const text = String(title || '');
 					return originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
 				};
@@ -58,7 +64,7 @@ const installWindowIdentity = (require, config) => {
 			}
 			if (win.webContents?.on && !win.__antigravityTitleListener) {
 				const onTitleUpdated = (event, title) => {
-					if ('string' === typeof title && !title.startsWith(prefix)) {
+					if ('string' === typeof title && !title.startsWith(prefix) && !win.isDestroyed?.()) {
 						event?.preventDefault?.();
 						win.setTitle?.(prefix + title);
 					}
@@ -66,10 +72,11 @@ const installWindowIdentity = (require, config) => {
 				win.__antigravityTitleListener = onTitleUpdated;
 				win.webContents.on('page-title-updated', onTitleUpdated);
 			}
-			applied.set(win.id, {id: win.id, iconPath, appId});
+			const winId = win.id;
+			applied.set(winId, {id: winId, iconPath, appId});
 			if (!win.__antigravityIdentityClosedHook && 'function' === typeof win.once) {
 				win.__antigravityIdentityClosedHook = true;
-				win.once('closed', () => applied.delete(win.id));
+				win.once('closed', () => applied.delete(winId));
 			}
 		}
 	};

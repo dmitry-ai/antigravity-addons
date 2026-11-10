@@ -10,6 +10,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
+// https://github.com/dmitry-ai/antigravity-addons/issues/23
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -454,18 +457,29 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	class MockBaseWindow extends EventEmitter {
 		constructor(id, title = 'Antigravity', minimized = false) {
 			super();
-			this.id = id;
+			this._id = id;
 			this.title = title;
 			this.minimized = minimized;
 			this.shown = false;
 			this.focused = false;
+			this.destroyed = false;
 			this.icon = null;
 			this.appDetails = null;
 			this.webContents = new EventEmitter();
 			this.webContents.getURL = () => 'https://127.0.0.1:2890/';
 		}
+		get id() {
+			if (this.destroyed) {
+				throw new TypeError('Object has been destroyed');
+			}
+			return this._id;
+		}
 		isDestroyed() {
-			return false;
+			return this.destroyed;
+		}
+		destroy() {
+			this.destroyed = true;
+			this.emit('closed');
 		}
 		isMinimized() {
 			return this.minimized;
@@ -548,6 +562,13 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	assert.equal(baseWindows[0].appDetails?.appId, 'Google.Antigravity.A6');
 	assert.equal(baseWindows[0].getTitle(), '[A6] Antigravity');
 	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows.length, 2);
+	// Closing a BaseWindow cleans up applied registry without throwing 'Object has been destroyed' from win.id access
+	const closingWindow = baseWindows[0];
+	closingWindow.destroy();
+	assert.throws(() => closingWindow.id, /Object has been destroyed/);
+	assert.doesNotThrow(() => closingWindow.setTitle('Post destroy title update'));
+	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows.length, 1);
+	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows[0].id, 1);
 });
 test('The native terminal OAuth bridge accepts only the matching state at the official callback and keeps stdin open', async () => {
 	const {OAuthBridge, callbackCode} = require('./oauth-bridge');
