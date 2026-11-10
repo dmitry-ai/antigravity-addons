@@ -7,13 +7,16 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
 // https://github.com/dmitry-ai/antigravity-addons/issues/21
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 const bootstrap = (require, config) => {
-	const {app, shell, BrowserWindow} = require('electron');
+	const {app, shell, BrowserWindow, BaseWindow} = require('electron');
 	const path = require('node:path');
 	const fs = require('node:fs');
 	const os = require('node:os');
 	const processes = require('node:child_process');
-	const {installUpdateGuard, silenceBrokenStdio} = require(path.join(config.codeRoot, 'update-guard.js'));
+	const {installUpdateGuard, silenceBrokenStdio, resolveModule} = require(path.join(config.codeRoot, 'update-guard.js'));
 	silenceBrokenStdio(process);
 	const isPrimary = 'A0' === config.id;
 	if (!isPrimary && path.resolve(os.homedir()).toLowerCase() !== path.resolve(config.homeDir).toLowerCase()) {
@@ -85,14 +88,42 @@ const bootstrap = (require, config) => {
 			}
 			return r;
 		};
-		app.on('browser-window-created', (_event, win) => {
-			win.webContents.on('page-title-updated', (event, title) => {
-				if (!title.startsWith('[' + config.id + '] ')) {
-					event.preventDefault();
-					win.setTitle('[' + config.id + '] ' + title);
+		const prefixTitle = win => {
+			if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
+				const prefix = '[' + config.id + '] ';
+				if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
+					const originalSetTitle = win.setTitle.bind(win);
+					win.__antigravityOriginalSetTitle = originalSetTitle;
+					win.__antigravityTitlePatched = true;
+					win.setTitle = title => {
+						const text = String(title || '');
+						return originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
+					};
 				}
-			});
-		});
+				if ('function' === typeof win.getTitle && 'function' === typeof win.setTitle) {
+					const current = win.getTitle();
+					if (current && !current.startsWith(prefix)) {
+						win.setTitle(current);
+					}
+				}
+				if (win.webContents?.on && !win.__antigravityTitleListener) {
+					const onTitleUpdated = (event, title) => {
+						if ('string' === typeof title && !title.startsWith(prefix)) {
+							event?.preventDefault?.();
+							win.setTitle?.(prefix + title);
+						}
+					};
+					win.__antigravityTitleListener = onTitleUpdated;
+					win.webContents.on('page-title-updated', onTitleUpdated);
+				}
+			}
+		};
+		app.on('browser-window-created', (_event, win) => prefixTitle(win));
+		app.on('web-contents-created', () => setImmediate(() => {
+			for (const win of [...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
+				prefixTitle(win);
+			}
+		}));
 		const storage = path.join(config.userDataDir, 'app_storage.json');
 		const items = fs.existsSync(storage) ? JSON.parse(fs.readFileSync(storage, 'utf8')) : {};
 		items.autoCheckForUpdates = 'false';
@@ -107,14 +138,43 @@ const bootstrap = (require, config) => {
 		tokenStorage: isPrimary ? 'native-credential-manager' : 'server-headless-file-store',
 		updateGuard: true
 	};
-	globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__ = () => {
-		const windows = BrowserWindow.getAllWindows().filter(win => /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(win.webContents.getURL()));
-		for (const win of windows) {
-			if (win.isMinimized()) {
-				win.restore();
+	const listManagedWindows = () => {
+		const utils = resolveModule(require, './utils');
+		const hubWindows = utils?.getHubWindows?.() || [];
+		const seen = new Set();
+		const r = [];
+		for (const win of [...hubWindows, ...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
+			if (win && !seen.has(win) && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
+				seen.add(win);
+				const contents = utils?.getHubWebContents?.(win) ?? win.webContents;
+				const url = contents?.getURL?.() || '';
+				if (hubWindows.includes(win) || (BaseWindow && win instanceof BaseWindow) || /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url)) {
+					r.push(win);
+				}
 			}
-			win.show();
-			win.focus();
+		}
+		return r;
+	};
+	globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__ = () => {
+		let windows = listManagedWindows();
+		if (!windows.length) {
+			const utils = resolveModule(require, './utils');
+			const languageServer = resolveModule(require, './languageServer');
+			const port = languageServer?.getLsPort?.();
+			if (port && 'function' === typeof utils?.showOrCreateWindow) {
+				utils.showOrCreateWindow(port);
+				windows = listManagedWindows();
+			}
+		}
+		for (const win of windows) {
+			if (win.isMinimized?.()) {
+				win.restore?.();
+			}
+			win.show?.();
+			win.focus?.();
+		}
+		if (windows.length) {
+			app.focus?.({steal: true});
 		}
 		return {id: config.id, pid: process.pid, windows: windows.length};
 	};

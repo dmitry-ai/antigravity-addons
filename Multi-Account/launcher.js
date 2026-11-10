@@ -10,6 +10,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
 // https://github.com/dmitry-ai/antigravity-addons/issues/21
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
@@ -210,7 +213,10 @@ const activateExisting = async (profile, options = {}) => {
 			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
 			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
 			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
-				r = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
+				const activated = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
+				if (activated?.windows > 0) {
+					r = activated;
+				}
 			}
 		}
 		catch {

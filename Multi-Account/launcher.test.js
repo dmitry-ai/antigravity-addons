@@ -7,6 +7,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
 // https://github.com/dmitry-ai/antigravity-addons/issues/21
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -16,6 +19,7 @@ const {EventEmitter} = require('node:events');
 const {childEnvironment, prepareProfile, activateExisting} = require('./launcher');
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
+const {installWindowIdentity} = require('./window-identity');
 const {installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
 const fixture = context => {
 	const parent = os.tmpdir();
@@ -384,7 +388,7 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	assert.equal(parsedQuitCli.relaunchProfile, undefined);
 	assert.equal(fs.existsSync(path.join(pendingDir, 'deferred-update.json')), false);
 });
-test('activateExisting activates a running A0 window via DevToolsActivePort when main-runtime.json is absent', async context => {
+test('activateExisting activates a running A0 window via DevToolsActivePort when main-runtime.json is absent, and rejects main-runtime activation when 0 windows are restored', async context => {
 	const root = fixture(context);
 	fs.writeFileSync(path.join(root, 'DevToolsActivePort'), '63972\n/devtools/browser/1234');
 	const broughtToFront = [];
@@ -404,6 +408,146 @@ test('activateExisting activates a running A0 window via DevToolsActivePort when
 	});
 	assert.deepEqual(result, {id: 'A0', port: 63972, windows: 1});
 	assert.deepEqual(broughtToFront, [{wsUrl: 'ws://127.0.0.1:63972/devtools/page/w1', method: 'Page.bringToFront'}]);
+	const a6Dir = path.join(root, 'a6');
+	fs.mkdirSync(a6Dir, {recursive: true});
+	fs.writeFileSync(path.join(a6Dir, 'main-runtime.json'), JSON.stringify({id: 'A6', pid: 5472, inspector: 'ws://127.0.0.1:2884/73b4eb3c-066a-4c05-83c4-a249fe7ad5ef', userDataDir: a6Dir}));
+	let activateWindows = 0;
+	const zeroResult = await activateExisting({id: 'A6', userDataDir: a6Dir}, {
+		CDP: {
+			open: async () => ({
+				evaluate: async expr => expr.includes('__ANTIGRAVITY_MANAGED_ACTIVATE__') ? {id: 'A6', pid: 5472, windows: activateWindows} : {pid: 5472, account: {id: 'A6', userDataDir: a6Dir, tokenStorage: 'server-headless-file-store'}},
+				close: () => {}
+			})
+		}
+	});
+	assert.equal(zeroResult, null);
+	activateWindows = 4;
+	const fourResult = await activateExisting({id: 'A6', userDataDir: a6Dir}, {
+		CDP: {
+			open: async () => ({
+				evaluate: async expr => expr.includes('__ANTIGRAVITY_MANAGED_ACTIVATE__') ? {id: 'A6', pid: 5472, windows: activateWindows} : {pid: 5472, account: {id: 'A6', userDataDir: a6Dir, tokenStorage: 'server-headless-file-store'}},
+				close: () => {}
+			})
+		}
+	});
+	assert.deepEqual(fourResult, {id: 'A6', pid: 5472, windows: 4});
+});
+test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge icon, taskbar AppUserModelId, [A6] title prefix, and foreground activation', async context => {
+	const root = fixture(context);
+	const desktop = path.join(root, 'Desktop');
+	fs.mkdirSync(desktop, {recursive: true});
+	const app = new EventEmitter();
+	const paths = {desktop};
+	let focusOptions = null;
+	app.setPath = (key, value) => {
+		paths[key] = value;
+	};
+	app.getPath = key => paths[key];
+	app.setAppUserModelId = id => {
+		paths.appId = id;
+	};
+	app.setAsDefaultProtocolClient = () => true;
+	app.isReady = () => true;
+	app.focus = options => {
+		focusOptions = options;
+	};
+	class MockBaseWindow extends EventEmitter {
+		constructor(id, title = 'Antigravity', minimized = false) {
+			super();
+			this.id = id;
+			this.title = title;
+			this.minimized = minimized;
+			this.shown = false;
+			this.focused = false;
+			this.icon = null;
+			this.appDetails = null;
+			this.webContents = new EventEmitter();
+			this.webContents.getURL = () => 'https://127.0.0.1:2890/';
+		}
+		isDestroyed() {
+			return false;
+		}
+		isMinimized() {
+			return this.minimized;
+		}
+		restore() {
+			this.minimized = false;
+		}
+		show() {
+			this.shown = true;
+		}
+		focus() {
+			this.focused = true;
+		}
+		setIcon(icon) {
+			this.icon = icon;
+		}
+		setAppDetails(details) {
+			this.appDetails = details;
+		}
+		getTitle() {
+			return this.title;
+		}
+		setTitle(title) {
+			this.title = title;
+		}
+	}
+	const baseWindows = [new MockBaseWindow(1, '50 - smokeday.com - U.P.2...', true)];
+	MockBaseWindow.getAllWindows = () => baseWindows;
+	let showOrCreateCalls = 0;
+	const utils = {
+		getHubWindows: () => baseWindows,
+		getHubWebContents: win => win.webContents,
+		showOrCreateWindow: () => {
+			showOrCreateCalls++;
+			baseWindows.push(new MockBaseWindow(2, 'Antigravity', false));
+		}
+	};
+	const fakeRequire = name => 'electron' === name ? {
+		app,
+		shell: {openExternal: async () => {}, writeShortcutLink: () => true},
+		BrowserWindow: {getAllWindows: () => []},
+		BaseWindow: MockBaseWindow,
+		nativeImage: {createFromPath: () => ({isEmpty: () => false, getSize: () => ({width: 256, height: 256})})}
+	} : 'node:os' === name ? {homedir: () => root} : './utils' === name ? utils : './languageServer' === name ? {getLsPort: () => 2890} : require(name);
+	bootstrap(fakeRequire, {
+		id: 'A6',
+		email: 'admin6@mage2.pro',
+		homeDir: root,
+		userDataDir: root,
+		codeRoot: __dirname,
+		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222},
+		browserEnvironment: {USERPROFILE: 'real'}
+	});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose();
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
+		delete globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	// Existing BaseWindow gets A6 icon, AppUserModelId, and [A6] title prefix, and preserves [A6] across dist/utils.js handleTitleUpdate setTitle calls
+	assert.equal(baseWindows[0].appDetails?.appId, 'Google.Antigravity.A6');
+	assert.equal(baseWindows[0].getTitle(), '[A6] 50 - smokeday.com - U.P.2...');
+	baseWindows[0].setTitle('10 - Harness - Antigravit...');
+	assert.equal(baseWindows[0].getTitle(), '[A6] 10 - Harness - Antigravit...');
+	// Activating restores minimized BaseWindow and calls app.focus({steal: true})
+	const activated = globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__();
+	assert.equal(activated.windows, 1);
+	assert.equal(baseWindows[0].isMinimized(), false);
+	assert.equal(baseWindows[0].shown, true);
+	assert.equal(baseWindows[0].focused, true);
+	assert.deepEqual(focusOptions, {steal: true});
+	// If 0 windows are open in a running process, __ANTIGRAVITY_MANAGED_ACTIVATE__ creates one via utils.showOrCreateWindow and applies A6 identity on web-contents-created
+	baseWindows.length = 0;
+	const createdActivation = globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__();
+	assert.equal(showOrCreateCalls, 1);
+	assert.equal(createdActivation.windows, 1);
+	app.emit('web-contents-created', {}, baseWindows[0].webContents);
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(baseWindows[0].appDetails?.appId, 'Google.Antigravity.A6');
+	assert.equal(baseWindows[0].getTitle(), '[A6] Antigravity');
+	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows.length, 2);
 });
 test('The native terminal OAuth bridge accepts only the matching state at the official callback and keeps stdin open', async () => {
 	const {OAuthBridge, callbackCode} = require('./oauth-bridge');

@@ -4,6 +4,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
 // https://github.com/dmitry-ai/antigravity-addons/issues/21
+// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -266,7 +269,7 @@ const installUpdateGuard = (appRequire, config, options = {}) => {
 	const fileSystem = options.fs || fs;
 	const processes = options.cp || cp;
 	const electron = resolveModule(appRequire, 'electron') || {};
-	const {app, dialog, BrowserWindow, Menu} = electron;
+	const {app, dialog, BrowserWindow, BaseWindow, Menu} = electron;
 	const electronUpdater = resolveModule(appRequire, 'electron-updater');
 	const autoUpdater = options.autoUpdater || electronUpdater?.autoUpdater;
 	const getUpdater = () => options.updater || resolveModule(appRequire, './updater');
@@ -486,7 +489,7 @@ const installUpdateGuard = (appRequire, config, options = {}) => {
 							message: 'Antigravity update is ready and will be installed automatically when all profiles (' + names + ') are closed.',
 							buttons: ['OK']
 						};
-						const win = BrowserWindow?.getFocusedWindow?.() || BrowserWindow?.getAllWindows?.()?.[0];
+						const win = BaseWindow?.getFocusedWindow?.() || BrowserWindow?.getFocusedWindow?.() || BaseWindow?.getAllWindows?.()?.[0] || BrowserWindow?.getAllWindows?.()?.[0];
 						void (win ? dialog.showMessageBox(win, boxOptions) : dialog.showMessageBox(boxOptions));
 					}
 				}
@@ -524,9 +527,13 @@ const installUpdateGuard = (appRequire, config, options = {}) => {
 			}
 		}
 	};
+	const onWebContentsCreated = (_event, contents) => {
+		contents?.on?.('focus', clearQuitting);
+	};
 	app?.on?.('before-quit', markQuitting);
 	app?.on?.('will-quit', markQuitting);
 	app?.on?.('browser-window-focus', clearQuitting);
+	app?.on?.('web-contents-created', onWebContentsCreated);
 	app?.on?.('quit', onQuit);
 	const guard = {
 		id: config.id,
@@ -547,6 +554,7 @@ const installUpdateGuard = (appRequire, config, options = {}) => {
 			app?.removeListener?.('before-quit', markQuitting);
 			app?.removeListener?.('will-quit', markQuitting);
 			app?.removeListener?.('browser-window-focus', clearQuitting);
+			app?.removeListener?.('web-contents-created', onWebContentsCreated);
 			app?.removeListener?.('quit', onQuit);
 			if (autoUpdater) {
 				autoUpdater.removeListener?.('update-available', onUpdateAvailable);
@@ -621,6 +629,7 @@ module.exports = {
 	isLockfileHeld,
 	isPidAlive,
 	silenceBrokenStdio,
+	resolveModule,
 	repairShortcuts,
 	applyUpdate,
 	parseCliOptions
