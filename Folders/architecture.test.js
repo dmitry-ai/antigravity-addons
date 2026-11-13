@@ -7,6 +7,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
 // https://github.com/dmitry-ai/antigravity-addons/issues/30
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decompose installFoldersView into ES6 class FoldersView in Folders/folders-view.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/28
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -16,7 +19,7 @@ const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
 const {FoldersStore} = require('./folders-store');
-const {createReadConfig} = require('./folders-view');
+const {FoldersView, createReadConfig} = require('./folders-view');
 const config = () => ({
 	folders: [
 		{id: 'root', name: 'Work', parentId: null},
@@ -449,4 +452,77 @@ test('folders-manager CRUD operations delegate to folders-model and preserve met
 	assert.equal(after.folders.find(f => added.id === f.id).parentId, 'root');
 	assert.equal(manager.unassignProject('p9', filename), true);
 	assert.deepEqual(manager.readConfig(filename).futureMetadata, {preserve: true});
+});
+test('FoldersView class methods manage collapsed state, routes, status, reveal, and teardown in Node without Chromium', () => {
+	const persisted = [];
+	const data = config();
+	const win = {
+		location: {pathname: '/onboarding'},
+		__ANTIGRAVITY_TOOLS_REQUEST__: async (_tool, message) => {
+			persisted.push(message);
+			return {};
+		}
+	};
+	const client = {
+		data,
+		element: (tag, className = '', text = '') => ({
+			tag,
+			className,
+			textContent: text,
+			dataset: {},
+			style: {},
+			attributes: {},
+			setAttribute(key, value) {
+				this.attributes[key] = String(value);
+			},
+			remove() {
+				this.removed = true;
+			}
+		}),
+		getFolder: id => data.folders.find(item => id === item.id) || null,
+		notifyUpdate() {}
+	};
+	let adapterDisposed = false;
+	const view = new FoldersView(win, {
+		model,
+		client,
+		adapter: {
+			contract: {rpc: 'ok'},
+			dispose: () => {
+				adapterDisposed = true;
+			},
+			selection: () => ({})
+		}
+	});
+	win.__PROJECT_FOLDERS_VIEW__ = view;
+	view.storageReady = true;
+	assert.equal(view.isOnboardingRoute(), true);
+	view.updateStatus('mount', null);
+	assert.equal(win.__PROJECT_FOLDERS_STATUS__.state, 'deferred');
+	win.location.pathname = '/settings-standalone';
+	assert.equal(view.isStandaloneRoute(), true);
+	view.updateStatus('mount', null);
+	assert.equal(win.__PROJECT_FOLDERS_STATUS__.state, 'ready');
+	win.location.pathname = '/';
+	view.handleProjects(projects);
+	assert.deepEqual([...view.state.collapsed], ['project:p2', 'project:p1', 'project:p3']);
+	view.state.collapsed.add('folder:root');
+	view.state.collapsed.add('folder:two');
+	view.expandFolder('root');
+	assert.equal(view.state.collapsed.has('folder:root'), false);
+	assert.equal(persisted.at(-1).method, 'SET_VIEW_STATE');
+	view.state.rows = model.buildRows({data, projects, summaries: new Map()});
+	view.scroll = {scrollTop: 0};
+	view.reveal('p1', 'two');
+	assert.equal(view.state.collapsed.has('folder:two'), false);
+	assert.equal(view.state.collapsed.has('project:p1'), false);
+	assert.ok(0 < view.scroll.scrollTop);
+	view.reportAction('Temporary failure');
+	assert.equal(view.inspect().state, 'error');
+	view.reportAction(null);
+	view.scroll.scrollTop = 64;
+	view.dispose();
+	assert.equal(adapterDisposed, true);
+	assert.equal(win.__FOLDERS_RESTORE_SCROLL__, 64);
+	assert.equal(win.__PROJECT_FOLDERS_VIEW__, undefined);
 });
