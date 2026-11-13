@@ -4,9 +4,12 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/27
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
+const {FoldersClient, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
 const folders = [
 	{id: 'root', name: 'Work', parentId: null},
 	{id: 'initial', name: 'Initial', parentId: 'root'},
@@ -92,4 +95,28 @@ test('growing a menu near the lower-right corner keeps it inside the viewport', 
 	menu.offsetHeight = 350;
 	positionContextMenu(menu, viewport);
 	assert.equal(menu.style.top, '104px', 'Expanded tree must move up, rather than leave the window');
+});
+test('SidebarDragController validates cycle drops, sibling collisions, and valid folder/project drops', () => {
+	const client = new FoldersClient({__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}}});
+	const drag = new SidebarDragController(client);
+	client.draggedFolderId = 'initial';
+	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: false, blocked: true});
+	assert.deepEqual(drag.canDropOnTarget({}, 'root'), {allowed: false, blocked: true});
+	assert.deepEqual(drag.canDropOnTarget({}, 'proposals'), {allowed: true, blocked: false});
+	client.draggedFolderId = 'ten';
+	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: false, blocked: true});
+	client.draggedFolderId = null;
+	client.draggedProjectId = 'p1';
+	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: true, blocked: false});
+	client.dispose();
+});
+test('FoldersClient detectCurrentFolderId resolves hover, remembered folder, and remembered project in priority order', () => {
+	const client = new FoldersClient({__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}}});
+	client.lastActiveProjectId = 'p1';
+	assert.equal(client.detectCurrentFolderId(), 'proposals');
+	client.lastActiveFolderId = 'year';
+	assert.equal(client.detectCurrentFolderId(), 'year');
+	client.hoveredFolderId = 'month';
+	assert.equal(client.detectCurrentFolderId(), 'month');
+	client.dispose();
 });
