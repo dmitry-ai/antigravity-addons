@@ -1,6 +1,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 (factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -56,13 +59,13 @@
 			items.push({label: 'Open project', onClick: () => activeView.adapter.navigate({projectId})});
 			items.push({label: 'New conversation', onClick: () => activeView.adapter.navigate({projectId})});
 			items.push({label: 'Project settings…', onClick: () => activeView.adapter.openProjectSettings(projectId)});
-			items.push({label: 'Rename project…', onClick: () => (activeView.dialogs ? activeView.dialogs.openRenameProject(projectId) : activeView.renameProject(projectId))});
+			items.push({label: 'Rename project…', onClick: () => activeView.dialogs.openRenameProject(projectId)});
 			items.push({separator: true});
 		}
 		items.push({
 			icon: '➕',
 			label: 'Create folder…',
-			onClick: () => (showCreateFolderDialog || (id => activeView.dialogs ? activeView.dialogs.openCreateFolder(id) : activeView.showCreateFolderDialog(id)))(projectId)
+			onClick: () => (showCreateFolderDialog || (id => activeView.dialogs.openCreateFolder(id)))(projectId)
 		});
 		if (currentFolderId) {
 			items.push({
@@ -71,7 +74,7 @@
 				onClick: () => activeView.postAction('unassign-project', {projectId})
 			});
 		}
-		(showContextMenu || ((...args) => activeView.menus ? activeView.menus.show(...args) : activeView.showContextMenu(...args)))(e.clientX, e.clientY, items, 'Move project');
+		(showContextMenu || ((...args) => activeView.menus.show(...args)))(e.clientX, e.clientY, items, 'Move project');
 	};
 	const positionContextMenu = (menu, viewport = window) => {
 		const {x, y} = menu._folderAnchor;

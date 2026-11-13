@@ -19,6 +19,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 // https://github.com/dmitry-ai/antigravity-addons/issues/43
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
@@ -27,7 +30,7 @@ const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const manager = require('./folders-manager');
 const {applyAction, validateConfig} = require('./folders-model');
 const disposeExpression = 'window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;';
-const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folder-menu.js', 'folder-dialogs.js', 'folders-client.js'];
+const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folder-menu.js', 'folder-dialogs.js', 'folder-drag.js', 'folders-client.js'];
 const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'missing',reason:'Folders runtime is not attached'}";
 class FoldersStore extends EventEmitter {
 	constructor(filename) {
@@ -167,15 +170,16 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 			}
 			return r;
 		},
-		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {revision: store.revision}),
+		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {error: store.error, revision: store.revision}),
 		styleSheet
 	};
 };
-const rendererSource = (data, {revision = ''} = {}) => {
+const rendererSource = (data, {error = null, revision = ''} = {}) => {
 	const scripts = filenames.map(filename => fs.readFileSync(path.join(__dirname, filename), 'utf8')).join('\n;\n');
 	const version = crypto.createHash('sha256').update(scripts).digest('hex');
 	const revisionAssignment = revision ? `window.__FOLDERS_REVISION__=${JSON.stringify(revision)};` : '';
-	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
+	const errorAssignment = `window.__FOLDERS_CONFIG_ERROR__=${JSON.stringify(error)};`;
+	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(error)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
 const styleSheet = () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8');

@@ -16,9 +16,16 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {FolderDialogController, FolderMenuController, FoldersView, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
+const {FolderDialogController} = require('./folder-dialogs');
+const {SidebarDragController, hasDragType} = require('./folder-drag');
+const {FolderMenuController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folder-menu');
+const clientExports = require('./folders-client');
+const {FolderStorageClient, FolderTreeRenderer, FoldersView} = clientExports;
 const folders = [
 	{id: 'root', name: 'Work', parentId: null},
 	{id: 'initial', name: 'Initial', parentId: 'root'},
@@ -70,6 +77,7 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
 	const openedSettings = [];
+	const renamedProjects = [];
 	openProjectContextMenu(
 		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
 		'project-id',
@@ -84,7 +92,9 @@ test('project picker sends exact target IDs and keeps the current folder separat
 					navigate() {},
 					openProjectSettings: id => openedSettings.push(id)
 				},
-				renameProject() {}
+				dialogs: {
+					openRenameProject: id => renamedProjects.push(id)
+				}
 			},
 			win: {}
 		}
@@ -93,6 +103,8 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	assert.ok(settingsItem);
 	settingsItem.onClick();
 	assert.deepEqual(openedSettings, ['project-id']);
+	items.find(item => 'Rename project…' === item.label).onClick();
+	assert.deepEqual(renamedProjects, ['project-id']);
 });
 test('growing a menu near the lower-right corner keeps it inside the viewport', () => {
 	const menu = {_folderAnchor: {x: 299, y: 461}, offsetWidth: 250, offsetHeight: 230, style: {}};
@@ -289,5 +301,102 @@ test('FolderMenuController and FolderDialogController manage menu ARIA navigatio
 	assert.equal(posted[1].action, 'assign-project');
 	assert.equal(posted[1].folderId, 'created');
 	assert.equal(view.activeModal, null);
+	view.dispose();
+});
+test('FolderStorageClient, FolderTreeRenderer, narrowed MutationObserver, and folders-client exports exclude dead polling and re-exports', async () => {
+	assert.deepEqual(Object.keys(clientExports).sort(), ['FolderStorageClient', 'FolderTreeRenderer', 'FoldersView', 'createReadConfig', 'installFoldersView']);
+	assert.equal('refresh' in FoldersView.prototype, false);
+	assert.equal(hasDragType({types: ['application/antigravity-folder-id']}, 'application/antigravity-folder-id'), true);
+	const observed = [];
+	class FakeObserver {
+		disconnect() {
+			observed.length = 0;
+		}
+		observe(target, options) {
+			observed.push({target, options});
+		}
+	}
+	const makeEl = name => ({
+		name,
+		isConnected: true,
+		dataset: {},
+		style: {
+			paddingTop: '',
+			setProperty() {},
+			removeProperty() {}
+		},
+		children: [],
+		append(...items) {
+			for (const item of items) {
+				if ('object' === typeof item && item) {
+					item.parentElement = this;
+					item.isConnected = true;
+					this.children.push(item);
+				}
+			}
+		},
+		addEventListener() {},
+		setAttribute() {},
+		removeAttribute() {},
+		closest: sel => '[role="navigation"]' === sel ? nav : null,
+		contains: () => false,
+		querySelector: () => null,
+		remove() {
+			this.isConnected = false;
+		}
+	});
+	const documentElement = makeEl('html');
+	const body = makeEl('body');
+	body.parentElement = documentElement;
+	const nav = makeEl('nav');
+	nav.parentElement = body;
+	const nativeList = makeEl('sidebar');
+	nativeList.parentElement = nav;
+	let getCount = 0;
+	const win = {
+		MutationObserver: FakeObserver,
+		location: {pathname: '/'},
+		getComputedStyle: () => ({getPropertyValue: () => ''}),
+		__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {}},
+		__ANTIGRAVITY_TOOLS_REQUEST__: async (_tool, message) => {
+			if ('GET' === message.method) {
+				getCount++;
+			}
+			return 'GET_VIEW_STATE' === message.method ? {schemaVersion: 1} : {schemaVersion: 2, revision: 'r1', data: {folders, projectFolderMap: {}}};
+		}
+	};
+	const doc = {
+		documentElement,
+		body,
+		activeElement: null,
+		createElement: makeEl,
+		querySelectorAll: () => [nativeList],
+		querySelector: () => nav
+	};
+	const view = new FoldersView(win, {
+		document: doc,
+		adapter: {
+			contract: 'antigravity-local-rpc-v2',
+			dispose() {},
+			selection: () => ({}),
+			start: async () => {
+				view.handleProjects([{id: 'p1', name: 'One'}]);
+			}
+		}
+	});
+	assert.ok(view.storage instanceof FolderStorageClient);
+	assert.ok(view.renderer instanceof FolderTreeRenderer);
+	await view.start();
+	assert.equal(getCount, 1);
+	assert.equal(view.observedSubtree, false);
+	assert.equal(observed.some(entry => entry.target === documentElement), false);
+	assert.equal(observed.every(entry => !entry.options.subtree), true);
+	nativeList.isConnected = false;
+	view.unmountDetached();
+	view.retargetObserver();
+	assert.equal(view.observedSubtree, true);
+	assert.equal(observed.length, 1);
+	assert.equal(observed[0].target, documentElement);
+	assert.equal(observed[0].options.subtree, true);
 	view.dispose();
 });
