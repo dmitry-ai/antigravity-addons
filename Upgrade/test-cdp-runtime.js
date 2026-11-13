@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -77,6 +80,10 @@ test('Adding a module or changing its declared Node files changes the supervisor
 	assert.equal(runtimeVersion(), added);
 	fs.writeFileSync(helper, 'module.exports=2');
 	assert.notEqual(runtimeVersion(), added);
+	const readSpy = context.mock.method(fs, 'readFileSync');
+	runtimeVersion();
+	assert.equal(readSpy.mock.calls.some(call => String(call.arguments[0]).endsWith('profiles.json')), false);
+	readSpy.mock.restore();
 });
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under primary account A0":
@@ -440,11 +447,17 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	await runtime.tick();
 	assert.equal(styleReads, 1);
 	assert.equal(sourceReads, 1);
+	const firstStateRaw = fs.readFileSync(path.join(root, 'runtime.json'), 'utf8');
 	const evaluationsAfterAttach = cdp.expressions.length;
+	await new Promise(resolve => setTimeout(resolve, 15));
 	await runtime.tick();
 	assert.equal(styleReads, 1);
 	assert.equal(sourceReads, 1);
 	assert.equal(cdp.expressions.length, evaluationsAfterAttach);
+	assert.equal(fs.readFileSync(path.join(root, 'runtime.json'), 'utf8'), firstStateRaw);
+	runtime.lastStateWriteTime -= 10001;
+	await runtime.tick();
+	assert.notEqual(fs.readFileSync(path.join(root, 'runtime.json'), 'utf8'), firstStateRaw);
 	runtime.invalidate();
 	await runtime.tick();
 	assert.equal(styleReads, 2);

@@ -16,6 +16,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -24,7 +27,8 @@ const os = require('node:os');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
-const {FoldersStore} = require('./cdp-runtime');
+const createFoldersRuntime = require('./cdp-runtime');
+const {FoldersStore} = createFoldersRuntime;
 const {FoldersView, createReadConfig} = require('./folders-client');
 const config = () => ({
 	folders: [
@@ -552,4 +556,50 @@ test('FoldersView class methods manage collapsed state, routes, status, reveal, 
 	assert.equal(adapterDisposed, true);
 	assert.equal(win.__FOLDERS_RESTORE_SCROLL__, 64);
 	assert.equal(win.__PROJECT_FOLDERS_VIEW__, undefined);
+});
+test('Folders runtime persists GET_VIEW_STATE, short-circuits unchanged knownRevision GET polls, and deduplicates revision updates', async context => {
+	const {directory, filename} = scratch(context);
+	const broadcasts = [];
+	const runtime = createFoldersRuntime({
+		filename,
+		stateRoot: directory,
+		broadcast: expr => broadcasts.push(expr)
+	});
+	context.after(() => runtime.dispose());
+	assert.deepEqual(runtime.request({method: 'GET_VIEW_STATE'}), {schemaVersion: 1});
+	runtime.request({method: 'SET_VIEW_STATE', body: {collapsed: ['folder:root', 'project:p1']}});
+	assert.deepEqual(runtime.request({method: 'GET_VIEW_STATE'}), {schemaVersion: 1, collapsed: ['folder:root', 'project:p1']});
+	const fullGet = runtime.request({method: 'GET'});
+	assert.ok(fullGet.revision);
+	assert.ok(fullGet.data);
+	const notModified = runtime.request({method: 'GET', knownRevision: fullGet.revision});
+	assert.deepEqual(notModified, {schemaVersion: 2, notModified: true, revision: fullGet.revision});
+	assert.equal('data' in notModified, false);
+	let schedules = 0;
+	const win = {
+		__FOLDERS_REVISION__: fullGet.revision,
+		__PROJECT_FOLDERS_DATA__: fullGet.data,
+		__ANTIGRAVITY_TOOLS_REQUEST__: async (_tool, message) => runtime.request(message)
+	};
+	const view = new FoldersView(win, {
+		model,
+		document: {createElement: () => ({dataset: {}, style: {}, setAttribute() {}, remove() {}})},
+		adapter: {dispose() {}, selection: () => ({})}
+	});
+	view.schedule = () => {
+		schedules++;
+	};
+	await view.loadViewState();
+	assert.deepEqual([...view.state.collapsed], ['folder:root', 'project:p1']);
+	await view.readConfig();
+	assert.equal(schedules, 0);
+	const mutated = await view.postAction('rename-folder', {id: 'ten', newName: 'Ten'});
+	assert.equal(mutated.success, true);
+	assert.equal(schedules, 1);
+	view.notifyUpdate(mutated.data, mutated.revision);
+	assert.equal(schedules, 1);
+	await view.readConfig();
+	assert.equal(schedules, 1);
+	assert.ok(broadcasts.some(expr => expr.includes(mutated.revision)));
+	view.dispose();
 });

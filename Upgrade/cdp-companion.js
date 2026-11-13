@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -21,7 +24,7 @@ const binding = '__antigravityToolsCall';
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
 const runtimeVersion = () => {
-	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'registry.js', 'runtime-health.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json'].map(filename => path.join(__dirname, filename));
+	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'registry.js', 'runtime-health.js', '../Multi-Account/profiles.js'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
@@ -44,6 +47,8 @@ class Companion {
 		this.errors = {};
 		this.generation = 1;
 		this.instance = crypto.randomUUID();
+		this.lastStateSignature = '';
+		this.lastStateWriteTime = 0;
 		this.version = runtimeVersion();
 		this.stopped = false;
 	}
@@ -349,25 +354,38 @@ class Companion {
 				error,
 				windows: [...this.connections.values()].filter(connection => connection.profileId === id && connection.shell).length
 			}));
-			this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : pages.length ? 'waiting-for-shell' : 'waiting-for-antigravity');
+			this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : pages.length ? 'waiting-for-shell' : 'waiting-for-antigravity', {}, {throttleMs: 10000});
 		}
 	}
-	writeState(state, extra = {}) {
-		const record = {
-			schemaVersion: 1,
-			instance: this.instance,
-			version: this.version,
-			pid: process.pid,
-			runtimePath: __filename,
+	writeState(state, extra = {}, {throttleMs = 0} = {}) {
+		const signature = JSON.stringify({
 			state,
-			updated: new Date().toISOString(),
 			windows: this.connections.size,
 			profiles: this.profileStates || [],
 			tools: [...this.modules.keys()],
 			errors: this.errors,
-			...extra
-		};
-		writeFileAtomic(path.join(this.root, 'runtime.json'), JSON.stringify(record, null, 2));
+			extra
+		});
+		const now = Date.now();
+		if (0 >= throttleMs || signature !== this.lastStateSignature || throttleMs <= now - this.lastStateWriteTime) {
+			const record = {
+				schemaVersion: 1,
+				instance: this.instance,
+				version: this.version,
+				pid: process.pid,
+				runtimePath: __filename,
+				state,
+				updated: new Date(now).toISOString(),
+				windows: this.connections.size,
+				profiles: this.profileStates || [],
+				tools: [...this.modules.keys()],
+				errors: this.errors,
+				...extra
+			};
+			writeFileAtomic(path.join(this.root, 'runtime.json'), JSON.stringify(record, null, 2));
+			this.lastStateSignature = signature;
+			this.lastStateWriteTime = now;
+		}
 	}
 }
 if (module === require.main) {

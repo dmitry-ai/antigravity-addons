@@ -16,6 +16,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 (factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -30,7 +33,7 @@
 		: 'object' === typeof module && module.exports
 			? require('./folders-model')
 			: null;
-	const createReadConfig = ({window: win, model = defaultModel, state, view, onUpdate = data => view?.notifyUpdate?.(data), status}) => {
+	const createReadConfig = ({window: win, model = defaultModel, state, view, onUpdate = (data, revision) => view?.notifyUpdate?.(data, revision), status}) => {
 		let configPromise = null;
 		return () => {
 			if (!configPromise) {
@@ -38,20 +41,30 @@
 					if ('function' !== typeof win?.__ANTIGRAVITY_TOOLS_REQUEST__) {
 						throw Error('Folder storage bridge is unavailable; run Upg to reconnect');
 					}
-					const payload = await win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
+					const knownRevision = state.revision;
+					const payload = await win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', knownRevision ? {method: 'GET', knownRevision} : {method: 'GET'});
 					if (payload.error) {
 						throw Error(payload.error);
 					}
-					const data = 2 === payload.schemaVersion ? payload.data : payload;
-					model.validateConfig(data);
-					state.haveConfig = true;
-					if (payload.revision) {
-						win.__FOLDERS_REVISION__ = payload.revision;
+					if (payload.notModified) {
+						state.haveConfig = true;
+						if (payload.revision) {
+							state.revision = payload.revision;
+							win.__FOLDERS_REVISION__ = payload.revision;
+						}
 					}
-					const revision = payload.revision || JSON.stringify(data);
-					if (revision !== state.revision) {
-						state.revision = revision;
-						onUpdate(data);
+					else {
+						const data = 2 === payload.schemaVersion ? payload.data : payload;
+						model.validateConfig(data);
+						state.haveConfig = true;
+						if (payload.revision) {
+							win.__FOLDERS_REVISION__ = payload.revision;
+						}
+						const revision = payload.revision || JSON.stringify(data);
+						if (revision !== state.revision) {
+							onUpdate(data, payload.revision || '');
+							state.revision = revision;
+						}
 					}
 					status('folders', null);
 				})().finally(() => {
@@ -313,7 +326,8 @@
 			this.win = win;
 			this.doc = options.document || win?.document || ('undefined' !== typeof document ? document : undefined);
 			this.model = options.model || win?.AntigravityFoldersModel || defaultModel;
-			this.data = options.data || win?.__PROJECT_FOLDERS_DATA__ || {folders: [], projectFolderMap: {}};
+			const initialData = options.data || win?.__PROJECT_FOLDERS_DATA__;
+			this.data = initialData || {folders: [], projectFolderMap: {}};
 			this.state = {
 				projects: [],
 				projectRevision: '',
@@ -321,7 +335,7 @@
 				collapsed: new Set(),
 				rows: [],
 				errors: new Map(),
-				revision: '',
+				revision: initialData ? win?.__FOLDERS_REVISION__ || '' : '',
 				ready: false,
 				haveConfig: false,
 				haveProjects: false,
@@ -372,7 +386,7 @@
 				window: win,
 				model: this.model,
 				state: this.state,
-				onUpdate: data => this.notifyUpdate(data),
+				onUpdate: (data, revision) => this.notifyUpdate(data, revision),
 				status: (channel, error) => this.updateStatus(channel, error)
 			});
 		}
@@ -909,12 +923,23 @@
 		nativeSidebarPending() {
 			return this.mountDeadline > Date.now() && ((!this.doc.querySelector('[role="navigation"]') && !this.doc.querySelector('.agy-shell')) || !!this.doc.querySelector('[role="navigation"] [data-testid="sidebar-list-skeleton"]'));
 		}
-		notifyUpdate(newData) {
+		notifyUpdate(newData, revision = '') {
+			const alreadyApplied = Boolean(revision && revision === this.state.revision);
 			this.data = newData;
+			this.state.haveConfig = true;
+			const nextRevision = revision || this.win?.__FOLDERS_REVISION__ || '';
+			if (nextRevision) {
+				this.state.revision = nextRevision;
+			}
 			if (this.win) {
 				this.win.__PROJECT_FOLDERS_DATA__ = newData;
+				if (revision) {
+					this.win.__FOLDERS_REVISION__ = revision;
+				}
 			}
-			this.schedule();
+			if (!alreadyApplied) {
+				this.schedule();
+			}
 		}
 		openConversationMenu(event, row) {
 			event.preventDefault();
@@ -1047,13 +1072,13 @@
 				}
 				const result = await this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {
 					method: 'POST',
-					body: {action, ...payload, revision: this.win.__FOLDERS_REVISION__}
+					body: {action, ...payload, revision: this.state.revision || this.win.__FOLDERS_REVISION__}
 				});
 				if (result.revision) {
 					this.win.__FOLDERS_REVISION__ = result.revision;
 				}
-				if (result.success && result.data) {
-					this.notifyUpdate(result.data);
+				if (result.success && result.data && (!result.revision || result.revision !== this.state.revision)) {
+					this.notifyUpdate(result.data, result.revision || '');
 				}
 				this.reportAction(result.success ? null : result.error || 'Folder action failed');
 				r = result;

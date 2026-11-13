@@ -10,6 +10,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
@@ -101,8 +104,8 @@ class FoldersStore extends EventEmitter {
 		return r;
 	}
 }
-const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.join(__dirname, 'state')}) => {
-	const store = new FoldersStore(path.join(__dirname, 'folders.json'));
+const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folders.json'), invalidate, report, stateRoot = path.join(__dirname, 'state')}) => {
+	const store = new FoldersStore(filename);
 	const viewFile = path.join(stateRoot, 'folders-view.json');
 	const watchedNames = new Set([...filenames, 'folders-view.css']);
 	let watchTimer;
@@ -115,7 +118,7 @@ const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.j
 	assetWatcher.on('error', error => report?.(error.message));
 	store.on('change', snapshot => {
 		invalidate?.();
-		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
+		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})},${JSON.stringify(snapshot.revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
 	});
 	return {
 		dispose: () => {
@@ -129,7 +132,7 @@ const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.j
 		request(message) {
 			let r;
 			if ('GET_VIEW_STATE' === message.method) {
-				r = readJsonSafe(viewFile, {schemaVersion: 1});
+				r = readJsonSafe(viewFile) || {schemaVersion: 1};
 			}
 			else if ('POST' === message.method) {
 				r = store.dispatch(message.body);
@@ -139,7 +142,9 @@ const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.j
 				if (result.error) {
 					throw Error(result.error);
 				}
-				r = result;
+				r = message.knownRevision && message.knownRevision === result.revision
+					? {schemaVersion: 2, notModified: true, revision: result.revision}
+					: result;
 			}
 			else if ('SET_VIEW_STATE' === message.method) {
 				const collapsed = message.body?.collapsed;
@@ -156,15 +161,16 @@ const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.j
 			}
 			return r;
 		},
-		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {includeStyle: false}),
+		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {includeStyle: false, revision: store.revision}),
 		styleSheet: () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8')
 	};
 };
-const rendererSource = (data, {includeStyle = true} = {}) => {
+const rendererSource = (data, {includeStyle = true, revision = ''} = {}) => {
 	const scripts = filenames.map(filename => fs.readFileSync(path.join(__dirname, filename), 'utf8')).join('\n;\n');
 	const version = crypto.createHash('sha256').update(scripts).digest('hex');
+	const revisionAssignment = revision ? `window.__FOLDERS_REVISION__=${JSON.stringify(revision)};` : '';
 	const styleAssignment = includeStyle ? `window.__FOLDERS_STYLE__=${JSON.stringify(fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8'))};` : '';
-	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${styleAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
+	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${styleAssignment}${revisionAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
 Object.assign(createFoldersRuntime, {
