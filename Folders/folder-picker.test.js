@@ -10,9 +10,12 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
 // https://github.com/dmitry-ai/antigravity-addons/issues/30
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {FoldersClient, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
+const {FoldersView, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
 const folders = [
 	{id: 'root', name: 'Work', parentId: null},
 	{id: 'initial', name: 'Initial', parentId: 'root'},
@@ -40,17 +43,17 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	const actions = [];
 	let items;
 	let title;
-	const client = {getProjectFolderId: () => 'month', postAction: (...args) => actions.push(args)};
+	const view = {getProjectFolderId: () => 'month', postAction: (...args) => actions.push(args)};
 	openProjectContextMenu(
 		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
 		'project-id',
 		{
-			client,
 			showContextMenu: (_x, _y, value, label) => {
 				items = value;
 				title = label;
 			},
 			showCreateFolderDialog: () => {},
+			view,
 			win: {}
 		}
 	);
@@ -68,20 +71,19 @@ test('project picker sends exact target IDs and keeps the current folder separat
 		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
 		'project-id',
 		{
-			client,
 			showContextMenu: (_x, _y, value) => {
 				items = value;
 			},
 			showCreateFolderDialog: () => {},
-			win: {
-				__PROJECT_FOLDERS_VIEW__: {
-					adapter: {
-						navigate() {},
-						openProjectSettings: id => openedSettings.push(id)
-					},
-					renameProject() {}
-				}
-			}
+			view: {
+				...view,
+				adapter: {
+					navigate() {},
+					openProjectSettings: id => openedSettings.push(id)
+				},
+				renameProject() {}
+			},
+			win: {}
 		}
 	);
 	const settingsItem = items.find(item => 'Project settings…' === item.label);
@@ -100,23 +102,23 @@ test('growing a menu near the lower-right corner keeps it inside the viewport', 
 	assert.equal(menu.style.top, '104px', 'Expanded tree must move up, rather than leave the window');
 });
 test('SidebarDragController validates cycle drops, sibling collisions, and valid folder/project drops', () => {
-	const client = new FoldersClient({__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}}});
-	const drag = new SidebarDragController(client);
-	client.draggedFolderId = 'initial';
+	const view = new FoldersView({__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}}});
+	const drag = new SidebarDragController(view);
+	view.draggedFolderId = 'initial';
 	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: false, blocked: true});
 	assert.deepEqual(drag.canDropOnTarget({}, 'root'), {allowed: false, blocked: true});
 	assert.deepEqual(drag.canDropOnTarget({}, 'proposals'), {allowed: true, blocked: false});
-	client.draggedFolderId = 'ten';
+	view.draggedFolderId = 'ten';
 	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: false, blocked: true});
-	client.draggedFolderId = null;
-	client.draggedProjectId = 'p1';
+	view.draggedFolderId = null;
+	view.draggedProjectId = 'p1';
 	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: true, blocked: false});
-	client.dispose();
+	view.dispose();
 });
-test('FoldersClient detectCurrentFolderId resolves hover, active conversation selection, and remembered selection in priority order', async () => {
+test('FoldersView detectCurrentFolderId resolves hover, active conversation selection, and remembered selection in priority order', async () => {
 	const summaries = new Map([['c-active', {trajectoryMetadata: {projectId: 'p2'}}]]);
 	let currentSelection = {projectId: null, conversationId: 'c-active'};
-	const client = new FoldersClient({
+	const view = new FoldersView({
 		__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals', p2: 'year'}},
 		__PROJECT_FOLDERS_VIEW__: {
 			adapter: {selection: () => currentSelection},
@@ -124,16 +126,16 @@ test('FoldersClient detectCurrentFolderId resolves hover, active conversation se
 			reportAction() {}
 		}
 	});
-	client.lastActiveProjectId = 'p1';
-	assert.equal(client.detectCurrentFolderId(), 'year');
+	view.lastActiveProjectId = 'p1';
+	assert.equal(view.detectCurrentFolderId(), 'year');
 	currentSelection = {projectId: null, conversationId: null};
-	assert.equal(client.detectCurrentFolderId(), 'proposals');
-	client.lastActiveFolderId = 'two';
-	assert.equal(client.detectCurrentFolderId(), 'two');
-	client.hoveredFolderId = 'month';
-	assert.equal(client.detectCurrentFolderId(), 'month');
-	const res = await client.postAction('add-folder', {name: 'NoBridge'});
+	assert.equal(view.detectCurrentFolderId(), 'proposals');
+	view.lastActiveFolderId = 'two';
+	assert.equal(view.detectCurrentFolderId(), 'two');
+	view.hoveredFolderId = 'month';
+	assert.equal(view.detectCurrentFolderId(), 'month');
+	const res = await view.postAction('add-folder', {name: 'NoBridge'});
 	assert.equal(res.success, false);
 	assert.match(res.error, /Folder storage bridge is unavailable/);
-	client.dispose();
+	view.dispose();
 });

@@ -7,10 +7,13 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
 // https://github.com/dmitry-ai/antigravity-addons/issues/30
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../Upgrade/node_modules/playwright-core');
-const {rendererSource} = require('./renderer-source');
+const {rendererSource} = require('./cdp-runtime');
 const BROWSER_ARGS = [
 	'--disable-background-networking',
 	'--disable-renderer-backgrounding',

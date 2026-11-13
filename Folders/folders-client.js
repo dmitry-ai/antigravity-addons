@@ -13,7 +13,10 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
 // https://github.com/dmitry-ai/antigravity-addons/issues/34
-(function(factory) {
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
+(factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
 		module.exports = api;
@@ -27,7 +30,7 @@
 		: 'object' === typeof module && module.exports
 			? require('./folders-model')
 			: null;
-	const createReadConfig = ({window: win, model = defaultModel, state, client, onUpdate = data => client?.notifyUpdate?.(data), status}) => {
+	const createReadConfig = ({window: win, model = defaultModel, state, view, onUpdate = data => view?.notifyUpdate?.(data), status}) => {
 		let configPromise = null;
 		return () => {
 			if (!configPromise) {
@@ -40,7 +43,7 @@
 						throw Error(payload.error);
 					}
 					const data = 2 === payload.schemaVersion ? payload.data : payload;
-					model.validateFolders(data.folders);
+					model.validateConfig(data);
 					state.haveConfig = true;
 					if (payload.revision) {
 						win.__FOLDERS_REVISION__ = payload.revision;
@@ -61,7 +64,7 @@
 	// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 	// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/8
-	function folderPickerModel(foldersSource, selectedId, excludedIds = new Set()) {
+	const folderPickerModel = (foldersSource, selectedId, excludedIds = new Set()) => {
 		const raw = Array.isArray(foldersSource) ? foldersSource : foldersSource?.data?.folders || foldersSource?.folders || [];
 		const folders = raw.filter(folder => !excludedIds.has(folder.id));
 		const byId = new Map(folders.map(folder => [folder.id, folder]));
@@ -83,11 +86,9 @@
 			folder = byId.get(folder.parentId);
 		}
 		return {byId, children, expanded};
-	}
-	function hasDragType(dataTransfer, type) {
-		return Array.from(dataTransfer?.types || []).includes(type);
-	}
-	function installFoldersView() {
+	};
+	const hasDragType = (dataTransfer, type) => Array.from(dataTransfer?.types || []).includes(type);
+	const installFoldersView = () => {
 		let r;
 		if ('undefined' !== typeof window && !window.__PROJECT_FOLDERS_VIEW__) {
 			const view = new FoldersView(window);
@@ -97,17 +98,17 @@
 			r = view;
 		}
 		return r;
-	}
-	function openProjectContextMenu(e, projectId, {client, showContextMenu, showCreateFolderDialog, view, win = 'undefined' !== typeof window ? window : undefined}) {
+	};
+	const openProjectContextMenu = (e, projectId, {showContextMenu, showCreateFolderDialog, view, win = 'undefined' !== typeof window ? window : undefined}) => {
 		e.preventDefault();
 		e.stopPropagation();
 		const activeView = view || win?.__PROJECT_FOLDERS_VIEW__;
-		const currentFolderId = client.getProjectFolderId(projectId);
+		const currentFolderId = activeView.getProjectFolderId(projectId);
 		const items = [
 			{
 				folderTree: {
 					selectedId: currentFolderId,
-					onSelect: folderId => client.postAction('assign-project', {projectId, folderId})
+					onSelect: folderId => activeView.postAction('assign-project', {projectId, folderId})
 				}
 			},
 			{separator: true}
@@ -125,22 +126,22 @@
 		items.push({
 			icon: '➕',
 			label: 'Create folder…',
-			onClick: () => showCreateFolderDialog(projectId)
+			onClick: () => (showCreateFolderDialog || (id => activeView.showCreateFolderDialog(id)))(projectId)
 		});
 		if (currentFolderId) {
 			items.push({
 				icon: '↥',
 				label: 'Remove from folder',
-				onClick: () => client.postAction('unassign-project', {projectId})
+				onClick: () => activeView.postAction('unassign-project', {projectId})
 			});
 		}
-		showContextMenu(e.clientX, e.clientY, items, 'Move project');
-	}
-	function positionContextMenu(menu, viewport = window) {
+		(showContextMenu || ((...args) => activeView.showContextMenu(...args)))(e.clientX, e.clientY, items, 'Move project');
+	};
+	const positionContextMenu = (menu, viewport = window) => {
 		const {x, y} = menu._folderAnchor;
 		menu.style.left = `${Math.max(8, Math.min(x, viewport.innerWidth - menu.offsetWidth - 8))}px`;
 		menu.style.top = `${Math.max(8, Math.min(y, viewport.innerHeight - menu.offsetHeight - 8))}px`;
-	}
+	};
 	// 2026-10-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 	// "Restore Folders compatibility with Antigravity 2.25.0 and analyze architectural resilience against renderer bundle changes":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/9
@@ -465,13 +466,7 @@
 				const card = e.target.closest?.('button[data-project-card]');
 				const folderRow = card ? null : e.target.closest?.('[data-folders-row^="folder:"]');
 				if (card) {
-					openProjectContextMenu(e, card.dataset.projectId, {
-						client: this,
-						showContextMenu: (...args) => this.showContextMenu(...args),
-						showCreateFolderDialog: (...args) => this.showCreateFolderDialog(...args),
-						view: this,
-						win: this.win
-					});
+					openProjectContextMenu(e, card.dataset.projectId, {view: this, win: this.win});
 				}
 				else if (folderRow) {
 					const fid = folderRow.dataset.folderId;
@@ -1516,5 +1511,5 @@
 			}
 		}
 	}
-	return {FoldersClient: FoldersView, FoldersView, SidebarDragController, createReadConfig, folderPickerModel, hasDragType, installFoldersView, openProjectContextMenu, positionContextMenu};
+	return {FoldersView, SidebarDragController, createReadConfig, folderPickerModel, hasDragType, installFoldersView, openProjectContextMenu, positionContextMenu};
 });

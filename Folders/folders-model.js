@@ -4,7 +4,10 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
-(function(factory) {
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
+(factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
 		module.exports = api;
@@ -15,87 +18,7 @@
 })(() => {
 	const INTERNAL_PROJECT_ID = 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40';
 	const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
-	const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
 	const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
-	const getDescendantIds = (folderId, folders = []) => {
-		const r = new Set();
-		if (Array.isArray(folders)) {
-			const childrenMap = new Map();
-			for (const f of folders) {
-				const pid = f.parentId || null;
-				if (!childrenMap.has(pid)) {
-					childrenMap.set(pid, []);
-				}
-				childrenMap.get(pid).push(f.id);
-			}
-			const collect = id => {
-				for (const cid of childrenMap.get(id) || []) {
-					if (!r.has(cid)) {
-						r.add(cid);
-						collect(cid);
-					}
-				}
-			};
-			collect(folderId);
-		}
-		return r;
-	};
-	const getFolderPath = (folderId, folders = []) => {
-		const parts = [];
-		if (Array.isArray(folders)) {
-			const map = new Map(folders.map(f => [f.id, f]));
-			let curr = map.get(folderId);
-			const seen = new Set();
-			while (curr && !seen.has(curr.id)) {
-				seen.add(curr.id);
-				parts.unshift(curr.name);
-				curr = curr.parentId ? map.get(curr.parentId) : null;
-			}
-		}
-		return parts.join(' / ');
-	};
-	const timestamp = value => 'string' === typeof value
-		? Date.parse(value) || 0
-		: value && 'object' === typeof value
-			? Number(value.seconds || 0) * 1000 + Number(value.nanos || 0) / 1e6
-			: 0;
-	const validateFolders = folders => {
-		if (!Array.isArray(folders)) {
-			throw Error('folders must be an array');
-		}
-		const ids = new Map();
-		for (const folder of folders) {
-			if ('string' !== typeof folder.id || !folder.id || ids.has(folder.id)) {
-				throw Error('Invalid or duplicate folder id');
-			}
-			if ('string' !== typeof folder.name || !folder.name.trim()) {
-				throw Error('Folder name must not be empty');
-			}
-			ids.set(folder.id, folder);
-		}
-		const siblings = new Set();
-		for (const folder of folders) {
-			const visited = new Set([folder.id]);
-			let parent = folder.parentId;
-			while (parent) {
-				if (visited.has(parent)) {
-					throw Error('Cycle detected in folder hierarchy');
-				}
-				if (!ids.has(parent)) {
-					throw Error(`Missing parent folder: ${parent}`);
-				}
-				visited.add(parent);
-				parent = ids.get(parent).parentId;
-			}
-			const key = JSON.stringify([folder.parentId || null, folder.name.trim().toLowerCase()]);
-			if (siblings.has(key)) {
-				throw Error('Sibling folder name collision');
-			}
-			siblings.add(key);
-		}
-		return ids;
-	};
-	const summaryProject = summary => summary.trajectoryMetadata?.projectId || null;
 	const applyAction = (original, action) => {
 		const data = structuredClone('save-config' === action.action ? action.data : original);
 		const folder = id => {
@@ -114,8 +37,7 @@
 					id: action.id || `folder-${crypto.randomUUID()}`,
 					name: String(action.name || '').trim(),
 					parentId: action.parentId || null,
-					color: action.color || '#10b981',
-					...(undefined !== action.isExpanded ? {isExpanded: action.isExpanded} : {})
+					color: action.color || '#10b981'
 				});
 				break;
 			case 'rename-folder':
@@ -166,18 +88,9 @@
 			default:
 				throw Error('Unknown folder action');
 		}
-		const ids = validateFolders(data.folders);
-		if (!data.projectFolderMap || 'object' !== typeof data.projectFolderMap || Array.isArray(data.projectFolderMap)) {
-			throw Error('Invalid projectFolderMap');
-		}
-		for (const [projectId, folderId] of Object.entries(data.projectFolderMap)) {
-			if (!projectId || 'string' !== typeof folderId || !ids.has(folderId)) {
-				throw Error(`Invalid folder assignment: ${projectId}`);
-			}
-		}
+		validateConfig(data);
 		return data;
 	};
-	const summaryName = summary => summary.annotations?.title || summary.summary || 'New conversation';
 	const applySummaryUpdate = (current, message) => {
 		if (!message || 'object' !== typeof message || Array.isArray(message)) {
 			throw Error('Invalid conversation stream message');
@@ -368,5 +281,101 @@
 		}
 		return rows;
 	};
-	return {INTERNAL_PROJECT_ID, compare, validateFolders, applyAction, applySummaryUpdate, buildRows, getDescendantIds, getFolderPath, summaryProject, summaryName, active};
+	const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
+	const getDescendantIds = (folderId, folders = []) => {
+		const r = new Set();
+		if (Array.isArray(folders)) {
+			const childrenMap = new Map();
+			for (const f of folders) {
+				const pid = f.parentId || null;
+				if (!childrenMap.has(pid)) {
+					childrenMap.set(pid, []);
+				}
+				childrenMap.get(pid).push(f.id);
+			}
+			const collect = id => {
+				for (const cid of childrenMap.get(id) || []) {
+					if (!r.has(cid)) {
+						r.add(cid);
+						collect(cid);
+					}
+				}
+			};
+			collect(folderId);
+		}
+		return r;
+	};
+	const getFolderPath = (folderId, folders = []) => {
+		const parts = [];
+		if (Array.isArray(folders)) {
+			const map = new Map(folders.map(f => [f.id, f]));
+			let curr = map.get(folderId);
+			const seen = new Set();
+			while (curr && !seen.has(curr.id)) {
+				seen.add(curr.id);
+				parts.unshift(curr.name);
+				curr = curr.parentId ? map.get(curr.parentId) : null;
+			}
+		}
+		return parts.join(' / ');
+	};
+	const summaryName = summary => summary.annotations?.title || summary.summary || 'New conversation';
+	const summaryProject = summary => summary.trajectoryMetadata?.projectId || null;
+	const timestamp = value => 'string' === typeof value
+		? Date.parse(value) || 0
+		: value && 'object' === typeof value
+			? Number(value.seconds || 0) * 1000 + Number(value.nanos || 0) / 1e6
+			: 0;
+	const validateConfig = data => {
+		if (!data || 'object' !== typeof data || Array.isArray(data)) {
+			throw Error('Invalid folders configuration');
+		}
+		const ids = validateFolders(data.folders);
+		if (!data.projectFolderMap || 'object' !== typeof data.projectFolderMap || Array.isArray(data.projectFolderMap)) {
+			throw Error('Invalid projectFolderMap');
+		}
+		for (const [projectId, folderId] of Object.entries(data.projectFolderMap)) {
+			if (!projectId || 'string' !== typeof folderId || !ids.has(folderId)) {
+				throw Error(`Invalid folder assignment: ${projectId}`);
+			}
+		}
+		return ids;
+	};
+	const validateFolders = folders => {
+		if (!Array.isArray(folders)) {
+			throw Error('folders must be an array');
+		}
+		const ids = new Map();
+		for (const folder of folders) {
+			if ('string' !== typeof folder.id || !folder.id || ids.has(folder.id)) {
+				throw Error('Invalid or duplicate folder id');
+			}
+			if ('string' !== typeof folder.name || !folder.name.trim()) {
+				throw Error('Folder name must not be empty');
+			}
+			ids.set(folder.id, folder);
+		}
+		const siblings = new Set();
+		for (const folder of folders) {
+			const visited = new Set([folder.id]);
+			let parent = folder.parentId;
+			while (parent) {
+				if (visited.has(parent)) {
+					throw Error('Cycle detected in folder hierarchy');
+				}
+				if (!ids.has(parent)) {
+					throw Error(`Missing parent folder: ${parent}`);
+				}
+				visited.add(parent);
+				parent = ids.get(parent).parentId;
+			}
+			const key = JSON.stringify([folder.parentId || null, folder.name.trim().toLowerCase()]);
+			if (siblings.has(key)) {
+				throw Error('Sibling folder name collision');
+			}
+			siblings.add(key);
+		}
+		return ids;
+	};
+	return {INTERNAL_PROJECT_ID, active, applyAction, applySummaryUpdate, buildRows, compare, getDescendantIds, getFolderPath, summaryName, summaryProject, validateConfig, validateFolders};
 });

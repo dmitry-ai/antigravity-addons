@@ -4,26 +4,18 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
 // https://github.com/dmitry-ai/antigravity-addons/issues/34
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const {validateTree} = require('./folders-manager');
+const {rendererSource} = require('./cdp-runtime');
+const {validateConfig} = require('./folders-model');
 module.exports = async () => {
-	const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'folders.json'), 'utf8'));
-	validateTree(data.folders);
-	for (const filename of [
-		'cdp-runtime.js',
-		'folders-store.js',
-		'folders-model.js',
-		'antigravity-adapter.js',
-		'folders-client.js',
-		'folders-manager.js',
-		'renderer-source.js',
-		'runtime-health.js'
-	]) {
-		new vm.Script(fs.readFileSync(path.join(__dirname, filename), 'utf8'), {filename});
-	}
-	new vm.Script(require('./renderer-source').rendererSource(data));
-	const message = 'model, store, and standalone component verified; client main.js is unchanged.';
-	return {message};
+	const raw = fs.readFileSync(path.join(__dirname, 'folders.json'), 'utf8').replace(/^\uFEFF/, '');
+	const data = JSON.parse(raw);
+	validateConfig(data);
+	new vm.Script(rendererSource(data));
+	return {message: 'model, store, and standalone component verified; client main.js is unchanged.'};
 };

@@ -13,6 +13,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
 // https://github.com/dmitry-ai/antigravity-addons/issues/34
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -21,7 +24,7 @@ const os = require('node:os');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
-const {FoldersStore} = require('./folders-store');
+const {FoldersStore} = require('./cdp-runtime');
 const {FoldersView, createReadConfig} = require('./folders-client');
 const config = () => ({
 	folders: [
@@ -421,7 +424,7 @@ test('folders-view readConfig coalesces concurrent polls so a restarting compani
 		},
 		model,
 		state,
-		client: {notifyUpdate() {}},
+		view: {notifyUpdate() {}},
 		status: (channel, err) => statuses.push([channel, err])
 	});
 	const p1 = readConfig();
@@ -437,16 +440,18 @@ test('folders-view readConfig coalesces concurrent polls so a restarting compani
 	assert.equal(getCalls, 2, 'Subsequent poll after completion issues a fresh GET');
 	releaseGet();
 	await p4;
-	const disconnected = createReadConfig({window: {}, model, state, client: {notifyUpdate() {}}, status() {}});
+	const disconnected = createReadConfig({window: {}, model, state, view: {notifyUpdate() {}}, status() {}});
 	await assert.rejects(disconnected(), /Folder storage bridge is unavailable/);
 });
 test('folders-manager CRUD operations delegate to folders-model and preserve metadata and tree invariants', context => {
-	const {filename} = scratch(context);
+	const {filename, directory} = scratch(context);
 	const added = manager.addFolder({name: 'Child', parentId: 'two'}, filename);
 	assert.ok(added.id);
 	assert.equal(manager.getFolderPath(added.id, manager.readConfig(filename).folders), 'Work / 2 / Child');
 	assert.deepEqual([...manager.getDescendantIds('root', manager.readConfig(filename).folders)].sort(), [added.id, 'ten', 'two'].sort());
 	assert.equal(manager.renameFolder(added.id, 'Child Renamed', filename), true);
+	assert.equal(manager.renameFolder(added.id, 'missing-collision', filename), true);
+	assert.equal(manager.renameFolder('ten', '2', filename), false);
 	assert.equal(manager.moveFolder(added.id, 'ten', filename), true);
 	assert.throws(() => manager.moveFolder('root', added.id, filename), /cycle/i);
 	assert.equal(manager.assignProject('p9', added.id, filename), true);
@@ -455,6 +460,28 @@ test('folders-manager CRUD operations delegate to folders-model and preserve met
 	assert.equal(after.folders.find(f => added.id === f.id).parentId, 'root');
 	assert.equal(manager.unassignProject('p9', filename), true);
 	assert.deepEqual(manager.readConfig(filename).futureMetadata, {preserve: true});
+	const broken = manager.readConfig(filename);
+	broken.projectFolderMap.orphan = 'non-existent-folder';
+	assert.throws(() => manager.writeConfig(broken, filename), /Invalid folder assignment/);
+	const toolCopy = path.join(directory, 'tool.json');
+	fs.writeFileSync(toolCopy, JSON.stringify({enabled: true}));
+	assert.equal(manager.setEnabled(false, toolCopy), false);
+	assert.equal(JSON.parse(fs.readFileSync(toolCopy, 'utf8')).enabled, false);
+	const store = new FoldersStore(filename);
+	context.after(() => store.dispose());
+	let reloads = 0;
+	const origReload = store.reload.bind(store);
+	store.reload = () => {
+		reloads++;
+		return origReload();
+	};
+	assert.equal(store.reloadIfChanged().revision, store.revision);
+	assert.equal(reloads, 0);
+	const updated = manager.readConfig(filename);
+	updated.folders.push({id: 'extra', name: 'Extra', parentId: null});
+	fs.writeFileSync(filename, JSON.stringify(updated, null, '\t'));
+	assert.equal(store.reloadIfChanged().data.folders.some(f => 'extra' === f.id), true);
+	assert.equal(reloads, 1);
 });
 test('FoldersView class methods manage collapsed state, routes, status, reveal, and teardown in Node without Chromium', () => {
 	const persisted = [];
