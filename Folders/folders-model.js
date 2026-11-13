@@ -7,6 +7,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 (factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -18,79 +21,297 @@
 })(() => {
 	const INTERNAL_PROJECT_ID = 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40';
 	const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
-	const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
-	const applyAction = (original, action) => {
-		const data = structuredClone('save-config' === action.action ? action.data : original);
-		const folder = id => {
-			const result = data.folders.find(item => id === item.id);
-			if (!result) {
+	class FolderActionDispatcher {
+		constructor(original, action) {
+			this.data = structuredClone('save-config' === action.action ? action.data : original);
+			this.action = action;
+		}
+		addFolder() {
+			if (this.action.parentId) {
+				this.findFolder(this.action.parentId);
+			}
+			this.data.folders.push({
+				id: this.action.id || `folder-${crypto.randomUUID()}`,
+				name: String(this.action.name || '').trim(),
+				parentId: this.action.parentId || null,
+				color: this.action.color || '#10b981'
+			});
+		}
+		apply() {
+			switch (this.action.action) {
+				case 'add-folder':
+					this.addFolder();
+					break;
+				case 'assign-project':
+					this.assignProject();
+					break;
+				case 'move-folder':
+					this.moveFolder();
+					break;
+				case 'remove-folder':
+					this.removeFolder();
+					break;
+				case 'rename-folder':
+					this.renameFolder();
+					break;
+				case 'save-config':
+					break;
+				case 'unassign-project':
+					this.unassignProject();
+					break;
+				default:
+					throw Error('Unknown folder action');
+			}
+			validateConfig(this.data);
+			return this.data;
+		}
+		assignProject() {
+			this.requireProjectId();
+			this.findFolder(this.action.folderId);
+			this.data.projectFolderMap[this.action.projectId] = this.action.folderId;
+		}
+		findFolder(id) {
+			const r = this.data.folders.find(item => id === item.id);
+			if (!r) {
 				throw Error(`Folder id not found: ${id}`);
 			}
-			return result;
-		};
-		switch (action.action) {
-			case 'add-folder':
-				if (action.parentId) {
-					folder(action.parentId);
-				}
-				data.folders.push({
-					id: action.id || `folder-${crypto.randomUUID()}`,
-					name: String(action.name || '').trim(),
-					parentId: action.parentId || null,
-					color: action.color || '#10b981'
-				});
-				break;
-			case 'rename-folder':
-				folder(action.id).name = String(action.newName || '').trim();
-				break;
-			case 'move-folder':
-				if (action.newParentId) {
-					folder(action.newParentId);
-				}
-				folder(action.id).parentId = action.newParentId || null;
-				break;
-			case 'remove-folder': {
-				const target = folder(action.id);
-				const parentId = target.parentId || null;
-				for (const item of data.folders) {
-					if (target.id === item.parentId) {
-						item.parentId = parentId;
-					}
-				}
-				for (const [id, assigned] of Object.entries(data.projectFolderMap)) {
-					if (target.id === assigned) {
-						if (!parentId) {
-							delete data.projectFolderMap[id];
-						}
-						else {
-							data.projectFolderMap[id] = parentId;
-						}
-					}
-				}
-				data.folders = data.folders.filter(item => target.id !== item.id);
-				break;
-			}
-			case 'assign-project':
-				if ('string' !== typeof action.projectId || !action.projectId) {
-					throw Error('Exact project id is required');
-				}
-				folder(action.folderId);
-				data.projectFolderMap[action.projectId] = action.folderId;
-				break;
-			case 'unassign-project':
-				if ('string' !== typeof action.projectId || !action.projectId) {
-					throw Error('Exact project id is required');
-				}
-				delete data.projectFolderMap[action.projectId];
-				break;
-			case 'save-config':
-				break;
-			default:
-				throw Error('Unknown folder action');
+			return r;
 		}
-		validateConfig(data);
-		return data;
-	};
+		moveFolder() {
+			if (this.action.newParentId) {
+				this.findFolder(this.action.newParentId);
+			}
+			this.findFolder(this.action.id).parentId = this.action.newParentId || null;
+		}
+		removeFolder() {
+			const target = this.findFolder(this.action.id);
+			const parentId = target.parentId || null;
+			for (const item of this.data.folders) {
+				if (target.id === item.parentId) {
+					item.parentId = parentId;
+				}
+			}
+			for (const [id, assigned] of Object.entries(this.data.projectFolderMap)) {
+				if (target.id === assigned) {
+					if (!parentId) {
+						delete this.data.projectFolderMap[id];
+					}
+					else {
+						this.data.projectFolderMap[id] = parentId;
+					}
+				}
+			}
+			this.data.folders = this.data.folders.filter(item => target.id !== item.id);
+		}
+		renameFolder() {
+			this.findFolder(this.action.id).name = String(this.action.newName || '').trim();
+		}
+		requireProjectId() {
+			if ('string' !== typeof this.action.projectId || !this.action.projectId) {
+				throw Error('Exact project id is required');
+			}
+		}
+		unassignProject() {
+			this.requireProjectId();
+			delete this.data.projectFolderMap[this.action.projectId];
+		}
+	}
+	class FolderRowBuilder {
+		constructor({
+			collapsed = new Set(),
+			data,
+			hideOutsideProject = false,
+			hideStandaloneConversations = false,
+			projects,
+			summaries = new Map()
+		}) {
+			this.data = data;
+			this.projects = projects;
+			this.summaries = summaries;
+			this.collapsed = collapsed;
+			this.hideOutsideProject = hideOutsideProject;
+			this.hideStandaloneConversations = hideStandaloneConversations;
+			this.ids = null;
+			this.children = null;
+			this.assigned = new Map();
+			this.conversations = new Map();
+			this.pinned = [];
+			this.projectIds = new Set();
+			this.archivedProjectIds = new Set();
+			this.activeProjects = new Set();
+			this.activeFolders = new Set();
+			this.rows = [];
+		}
+		append(map, key, value) {
+			if (!map.has(key)) {
+				map.set(key, []);
+			}
+			map.get(key).push(value);
+		}
+		appendConversationRows(projectId, folderId, depth) {
+			for (const {id, summary} of this.conversations.get(projectId) || []) {
+				this.rows.push(this.conversationRow({depth, folderId, id, pinned: false, projectId, summary}));
+			}
+		}
+		appendPinnedSection() {
+			if (this.pinned.length) {
+				this.rows.push({kind: 'section', key: 'pinned', name: 'Pinned conversations', depth: 0});
+				for (const {id, summary, projectId} of this.pinned) {
+					this.rows.push(this.conversationRow({depth: 0, folderId: this.data.projectFolderMap?.[projectId], id, pinned: true, projectId, summary}));
+				}
+			}
+		}
+		appendProjectRows(folderId, depth) {
+			for (const project of this.assigned.get(folderId) || []) {
+				const key = `project:${project.id}`;
+				const expanded = !this.collapsed.has(key);
+				this.rows.push({
+					kind: 'project',
+					key,
+					id: project.id,
+					folderId,
+					depth,
+					name: project.name || project.id,
+					expanded,
+					running: this.activeProjects.has(project.id),
+					project
+				});
+				if (expanded) {
+					this.appendConversationRows(project.id, folderId, depth + 1);
+				}
+			}
+		}
+		appendStandaloneSection() {
+			if (!this.hideStandaloneConversations && this.conversations.has(null)) {
+				this.rows.push({kind: 'section', key: 'standalone', name: 'Conversations', depth: 0});
+				this.appendConversationRows(null, null, 0);
+			}
+		}
+		build() {
+			this.indexFolders();
+			this.indexProjects();
+			this.indexSummaries();
+			this.sortCollections();
+			this.markActiveFolders();
+			this.appendPinnedSection();
+			this.visitFolder(null, 0);
+			this.appendProjectRows(null, 0);
+			this.appendStandaloneSection();
+			return this.rows;
+		}
+		conversationRow({depth, folderId, id, pinned, projectId, summary}) {
+			return {
+				kind: 'conversation',
+				key: `conversation:${id}`,
+				id,
+				projectId,
+				folderId,
+				depth,
+				name: summaryName(summary),
+				status: summary.status || '',
+				running: active(summary),
+				summary,
+				...(pinned ? {pinned: true} : {})
+			};
+		}
+		indexFolders() {
+			const {byId, children} = indexTree(this.data.folders, {validate: true});
+			this.ids = byId;
+			this.children = children;
+		}
+		indexProjects() {
+			// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+			// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/12
+			for (const project of this.projects) {
+				if (!project.id || this.projectIds.has(project.id)) {
+					throw Error('Missing or duplicate native project id');
+				}
+				this.projectIds.add(project.id);
+				if (project.archived) {
+					this.archivedProjectIds.add(project.id);
+				}
+				else if (this.isVisibleProject(project)) {
+					const folderId = this.data.projectFolderMap?.[project.id];
+					this.append(this.assigned, this.ids.has(folderId) ? folderId : null, project);
+				}
+			}
+		}
+		indexSummaries() {
+			for (const [id, summary] of this.summaries) {
+				if (this.isVisibleSummary(id, summary)) {
+					const projectId = summaryProject(summary);
+					if (active(summary) && projectId) {
+						this.activeProjects.add(projectId);
+					}
+					if (summary.annotations?.pinned) {
+						this.pinned.push({id, summary, projectId});
+					}
+					else {
+						this.append(this.conversations, this.projectIds.has(projectId) ? projectId : null, {id, summary});
+					}
+				}
+			}
+		}
+		isVisibleProject(project) {
+			return !project.archived
+				&& !(this.hideOutsideProject && 'outside-of-project' === project.id)
+				&& !(INTERNAL_PROJECT_ID === project.id && 'project-folders/folders' === project.name);
+		}
+		isVisibleSummary(id, summary) {
+			return !summary.annotations?.archived
+				&& !summary.annotations?.isArchived
+				&& !summary.trajectoryMetadata?.parentConversationId
+				&& !(summary.trajectoryMetadata?.rootConversationId && id !== summary.trajectoryMetadata.rootConversationId)
+				&& !this.archivedProjectIds.has(summaryProject(summary));
+		}
+		markActiveFolders() {
+			for (const projectId of this.activeProjects) {
+				for (let folder = this.ids.get(this.data.projectFolderMap?.[projectId]); folder; folder = this.ids.get(folder.parentId)) {
+					this.activeFolders.add(folder.id);
+				}
+			}
+		}
+		sortCollections() {
+			for (const list of [...this.children.values(), ...this.assigned.values()]) {
+				list.sort(compare);
+			}
+			for (const list of [this.pinned, ...this.conversations.values()]) {
+				list.sort((a, b) => timestamp(b.summary.lastModifiedTime) - timestamp(a.summary.lastModifiedTime) || a.id.localeCompare(b.id));
+			}
+		}
+		visitFolder(parentId, depth) {
+			for (const folder of this.children.get(parentId) || []) {
+				const key = `folder:${folder.id}`;
+				const expanded = !this.collapsed.has(key);
+				this.rows.push({
+					kind: 'folder',
+					key,
+					id: folder.id,
+					folderId: folder.id,
+					depth,
+					name: folder.name,
+					expanded,
+					running: this.activeFolders.has(folder.id)
+				});
+				if (expanded) {
+					this.visitFolder(folder.id, depth + 1);
+					this.appendProjectRows(folder.id, depth + 1);
+					if (!this.children.has(folder.id) && !this.assigned.has(folder.id)) {
+						this.rows.push({
+							kind: 'empty',
+							key: `empty:${folder.id}`,
+							folderId: folder.id,
+							depth: depth + 1,
+							name: '(empty folder)'
+						});
+					}
+				}
+			}
+		}
+	}
+	const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
+	const applyAction = (original, action) => new FolderActionDispatcher(original, action).apply();
 	const applySummaryUpdate = (current, message) => {
 		if (!message || 'object' !== typeof message || Array.isArray(message)) {
 			throw Error('Invalid conversation stream message');
@@ -104,220 +325,97 @@
 		if (Object.keys(message).length && undefined === message.updates && undefined === message.deletes) {
 			throw Error('Conversation API contract changed: no updates/deletes');
 		}
-		const result = new Map(current);
+		const r = new Map(current);
 		for (const [id, value] of Object.entries(message.updates || {})) {
 			if (!id || !value || 'object' !== typeof value || Array.isArray(value)) {
 				throw Error('Invalid conversation identity');
 			}
-			result.set(id, value);
+			r.set(id, value);
 		}
 		for (const id of message.deletes || []) {
-			result.delete(id);
+			r.delete(id);
 		}
-		return result;
+		return r;
 	};
-	const buildRows = ({
-		data,
-		projects,
-		summaries = new Map(),
-		collapsed = new Set(),
-		hideOutsideProject = false,
-		hideStandaloneConversations = false
-	}) => {
-		const ids = validateFolders(data.folders);
-		const children = new Map();
-		const assigned = new Map();
-		const conversations = new Map();
-		const pinned = [];
-		const activeProjects = new Set();
-		const activeFolders = new Set();
-		const append = (map, key, value) => {
-			if (!map.has(key)) {
-				map.set(key, []);
-			}
-			map.get(key).push(value);
-		};
-		for (const folder of data.folders) {
-			append(children, folder.parentId || null, folder);
-		}
-		const projectIds = new Set();
-		const archivedProjectIds = new Set();
-		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/12
-		for (const project of projects) {
-			if (!project.id || projectIds.has(project.id)) {
-				throw Error('Missing or duplicate native project id');
-			}
-			projectIds.add(project.id);
-			if (project.archived) {
-				archivedProjectIds.add(project.id);
-				continue;
-			}
-			if (hideOutsideProject && 'outside-of-project' === project.id) {
-				continue;
-			}
-			if (INTERNAL_PROJECT_ID === project.id && 'project-folders/folders' === project.name) {
-				continue;
-			}
-			const folderId = data.projectFolderMap?.[project.id];
-			append(assigned, ids.has(folderId) ? folderId : null, project);
-		}
-		for (const [id, summary] of summaries) {
-			if (summary.annotations?.archived || summary.annotations?.isArchived || summary.trajectoryMetadata?.parentConversationId || (summary.trajectoryMetadata?.rootConversationId && id !== summary.trajectoryMetadata.rootConversationId)) {
-				continue;
-			}
-			const projectId = summaryProject(summary);
-			if (archivedProjectIds.has(projectId)) {
-				continue;
-			}
-			if (active(summary) && projectId) {
-				activeProjects.add(projectId);
-			}
-			if (summary.annotations?.pinned) {
-				pinned.push({id, summary, projectId});
-				continue;
-			}
-			append(conversations, projectIds.has(projectId) ? projectId : null, {id, summary});
-		}
-		for (const list of [...children.values(), ...assigned.values()]) {
-			list.sort(compare);
-		}
-		for (const list of [pinned, ...conversations.values()]) {
-			list.sort((a, b) => timestamp(b.summary.lastModifiedTime) - timestamp(a.summary.lastModifiedTime) || a.id.localeCompare(b.id));
-		}
-		for (const projectId of activeProjects) {
-			for (let folder = ids.get(data.projectFolderMap?.[projectId]); folder; folder = ids.get(folder.parentId)) {
-				activeFolders.add(folder.id);
-			}
-		}
-		const rows = [];
-		if (pinned.length) {
-			rows.push({kind: 'section', key: 'pinned', name: 'Pinned conversations', depth: 0});
-			for (const {id, summary, projectId} of pinned) {
-				rows.push({
-					kind: 'conversation',
-					key: `conversation:${id}`,
-					id,
-					summary,
-					projectId,
-					folderId: data.projectFolderMap?.[projectId],
-					depth: 0,
-					name: summaryName(summary),
-					status: summary.status || '',
-					running: active(summary),
-					pinned: true
-				});
-			}
-		}
-		const conversationRows = (projectId, folderId, depth) => {
-			for (const {id, summary} of conversations.get(projectId) || []) {
-				rows.push({
-					kind: 'conversation',
-					key: `conversation:${id}`,
-					id,
-					projectId,
-					folderId,
-					depth,
-					name: summaryName(summary),
-					status: summary.status || '',
-					running: active(summary),
-					summary
-				});
-			}
-		};
-		const projectRows = (folderId, depth) => {
-			for (const project of assigned.get(folderId) || []) {
-				const key = `project:${project.id}`;
-				rows.push({
-					kind: 'project',
-					key,
-					id: project.id,
-					folderId,
-					depth,
-					name: project.name || project.id,
-					expanded: !collapsed.has(key),
-					running: activeProjects.has(project.id),
-					project
-				});
-				if (!collapsed.has(key)) {
-					conversationRows(project.id, folderId, depth + 1);
-				}
-			}
-		};
-		const visit = (parentId, depth) => {
-			for (const folder of children.get(parentId) || []) {
-				const key = `folder:${folder.id}`;
-				rows.push({
-					kind: 'folder',
-					key,
-					id: folder.id,
-					folderId: folder.id,
-					depth,
-					name: folder.name,
-					expanded: !collapsed.has(key),
-					running: activeFolders.has(folder.id)
-				});
-				if (!collapsed.has(key)) {
-					visit(folder.id, depth + 1);
-					projectRows(folder.id, depth + 1);
-					if (!children.has(folder.id) && !assigned.has(folder.id)) {
-						rows.push({
-							kind: 'empty',
-							key: `empty:${folder.id}`,
-							folderId: folder.id,
-							depth: depth + 1,
-							name: '(empty folder)'
-						});
-					}
-				}
-			}
-		};
-		visit(null, 0);
-		projectRows(null, 0);
-		if (!hideStandaloneConversations && conversations.has(null)) {
-			rows.push({kind: 'section', key: 'standalone', name: 'Conversations', depth: 0});
-			conversationRows(null, null, 0);
-		}
-		return rows;
-	};
+	const buildRows = options => new FolderRowBuilder(options).build();
 	const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
 	const getDescendantIds = (folderId, folders = []) => {
 		const r = new Set();
-		if (Array.isArray(folders)) {
-			const childrenMap = new Map();
-			for (const f of folders) {
-				const pid = f.parentId || null;
-				if (!childrenMap.has(pid)) {
-					childrenMap.set(pid, []);
+		const {children} = indexTree(folders);
+		const collect = id => {
+			for (const child of children.get(id) || []) {
+				if (!r.has(child.id)) {
+					r.add(child.id);
+					collect(child.id);
 				}
-				childrenMap.get(pid).push(f.id);
 			}
-			const collect = id => {
-				for (const cid of childrenMap.get(id) || []) {
-					if (!r.has(cid)) {
-						r.add(cid);
-						collect(cid);
-					}
-				}
-			};
-			collect(folderId);
-		}
+		};
+		collect(folderId);
 		return r;
 	};
 	const getFolderPath = (folderId, folders = []) => {
 		const parts = [];
-		if (Array.isArray(folders)) {
-			const map = new Map(folders.map(f => [f.id, f]));
-			let curr = map.get(folderId);
-			const seen = new Set();
-			while (curr && !seen.has(curr.id)) {
-				seen.add(curr.id);
-				parts.unshift(curr.name);
-				curr = curr.parentId ? map.get(curr.parentId) : null;
-			}
+		const {byId} = indexTree(folders);
+		let curr = byId.get(folderId);
+		const seen = new Set();
+		while (curr && !seen.has(curr.id)) {
+			seen.add(curr.id);
+			parts.unshift(curr.name);
+			curr = curr.parentId ? byId.get(curr.parentId) : null;
 		}
 		return parts.join(' / ');
+	};
+	const indexTree = (folders = [], {excludedIds = null, sort = false, validate = false} = {}) => {
+		if (validate && !Array.isArray(folders)) {
+			throw Error('folders must be an array');
+		}
+		const list = Array.isArray(folders) ? (excludedIds ? folders.filter(f => !excludedIds.has(f.id)) : folders) : [];
+		const byId = new Map();
+		for (const folder of list) {
+			if (validate) {
+				if ('string' !== typeof folder.id || !folder.id || byId.has(folder.id)) {
+					throw Error('Invalid or duplicate folder id');
+				}
+				if ('string' !== typeof folder.name || !folder.name.trim()) {
+					throw Error('Folder name must not be empty');
+				}
+			}
+			byId.set(folder.id, folder);
+		}
+		const children = new Map();
+		const siblings = validate ? new Set() : null;
+		for (const folder of list) {
+			if (validate) {
+				const visited = new Set([folder.id]);
+				let parent = folder.parentId;
+				while (parent) {
+					if (visited.has(parent)) {
+						throw Error('Cycle detected in folder hierarchy');
+					}
+					if (!byId.has(parent)) {
+						throw Error(`Missing parent folder: ${parent}`);
+					}
+					visited.add(parent);
+					parent = byId.get(parent).parentId;
+				}
+				const key = JSON.stringify([folder.parentId || null, folder.name.trim().toLowerCase()]);
+				if (siblings.has(key)) {
+					throw Error('Sibling folder name collision');
+				}
+				siblings.add(key);
+			}
+			const parentId = validate ? folder.parentId || null : byId.has(folder.parentId) ? folder.parentId : null;
+			if (!children.has(parentId)) {
+				children.set(parentId, []);
+			}
+			children.get(parentId).push(folder);
+		}
+		if (sort) {
+			for (const items of children.values()) {
+				items.sort(compare);
+			}
+		}
+		return {byId, children};
 	};
 	const summaryName = summary => summary.annotations?.title || summary.summary || 'New conversation';
 	const summaryProject = summary => summary.trajectoryMetadata?.projectId || null;
@@ -341,41 +439,22 @@
 		}
 		return ids;
 	};
-	const validateFolders = folders => {
-		if (!Array.isArray(folders)) {
-			throw Error('folders must be an array');
-		}
-		const ids = new Map();
-		for (const folder of folders) {
-			if ('string' !== typeof folder.id || !folder.id || ids.has(folder.id)) {
-				throw Error('Invalid or duplicate folder id');
-			}
-			if ('string' !== typeof folder.name || !folder.name.trim()) {
-				throw Error('Folder name must not be empty');
-			}
-			ids.set(folder.id, folder);
-		}
-		const siblings = new Set();
-		for (const folder of folders) {
-			const visited = new Set([folder.id]);
-			let parent = folder.parentId;
-			while (parent) {
-				if (visited.has(parent)) {
-					throw Error('Cycle detected in folder hierarchy');
-				}
-				if (!ids.has(parent)) {
-					throw Error(`Missing parent folder: ${parent}`);
-				}
-				visited.add(parent);
-				parent = ids.get(parent).parentId;
-			}
-			const key = JSON.stringify([folder.parentId || null, folder.name.trim().toLowerCase()]);
-			if (siblings.has(key)) {
-				throw Error('Sibling folder name collision');
-			}
-			siblings.add(key);
-		}
-		return ids;
+	const validateFolders = folders => indexTree(folders, {validate: true}).byId;
+	return {
+		FolderActionDispatcher,
+		FolderRowBuilder,
+		INTERNAL_PROJECT_ID,
+		active,
+		applyAction,
+		applySummaryUpdate,
+		buildRows,
+		compare,
+		getDescendantIds,
+		getFolderPath,
+		indexTree,
+		summaryName,
+		summaryProject,
+		validateConfig,
+		validateFolders
 	};
-	return {INTERNAL_PROJECT_ID, active, applyAction, applySummaryUpdate, buildRows, compare, getDescendantIds, getFolderPath, summaryName, summaryProject, validateConfig, validateFolders};
 });

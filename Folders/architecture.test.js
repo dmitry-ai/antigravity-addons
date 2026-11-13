@@ -19,6 +19,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 // https://github.com/dmitry-ai/antigravity-addons/issues/38
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -602,4 +605,63 @@ test('Folders runtime persists GET_VIEW_STATE, short-circuits unchanged knownRev
 	assert.equal(schedules, 1);
 	assert.ok(broadcasts.some(expr => expr.includes(mutated.revision)));
 	view.dispose();
+});
+test('FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager isolate row predicates, mutations, project directory fixtures, and logger output', context => {
+	const {directory, filename} = scratch(context);
+	const projectsDir = path.join(directory, 'projects');
+	fs.mkdirSync(projectsDir);
+	fs.writeFileSync(path.join(projectsDir, 'alpha.json'), JSON.stringify({id: 'proj-alpha', name: 'Alpha Workspace'}));
+	fs.writeFileSync(path.join(projectsDir, 'beta.json'), JSON.stringify({id: 'proj-beta', name: 'Alpha Secondary'}));
+	fs.writeFileSync(path.join(projectsDir, 'internal.json'), JSON.stringify({id: model.INTERNAL_PROJECT_ID, name: 'project-folders/folders'}));
+	fs.writeFileSync(path.join(projectsDir, 'corrupt.json'), '{broken');
+	const builder = new model.FolderRowBuilder({
+		data: config(),
+		projects: [
+			...projects,
+			{id: 'archived-proj', name: 'Archived', archived: true},
+			{id: 'outside-of-project', name: 'Outside of Project'},
+			{id: model.INTERNAL_PROJECT_ID, name: 'project-folders/folders'}
+		],
+		summaries: new Map([
+			['visible-chat', summary('p1', 'Visible')],
+			['archived-chat', {...summary('p1'), annotations: {archived: true}}],
+			['archived-project-chat', summary('archived-proj', 'Hidden By Project')]
+		]),
+		hideOutsideProject: true
+	});
+	assert.equal(builder.isVisibleProject({id: 'outside-of-project', name: 'Outside of Project'}), false);
+	assert.equal(builder.isVisibleProject({id: model.INTERNAL_PROJECT_ID, name: 'project-folders/folders'}), false);
+	assert.equal(builder.isVisibleProject({id: 'p1', name: 'Project 2'}), true);
+	const builtRows = builder.build();
+	assert.equal(builder.isVisibleSummary('archived-chat', {annotations: {archived: true}}), false);
+	assert.equal(builder.isVisibleSummary('archived-project-chat', summary('archived-proj')), false);
+	assert.equal(builtRows.some(row => 'visible-chat' === row.id), true);
+	assert.equal(builtRows.some(row => 'archived-project-chat' === row.id), false);
+	const dispatched = new model.FolderActionDispatcher(config(), {action: 'add-folder', id: 'disp-1', name: 'Dispatched', parentId: 'root'}).apply();
+	assert.equal(dispatched.folders.some(folder => 'disp-1' === folder.id), true);
+	assert.throws(() => new model.FolderActionDispatcher(config(), {action: 'unknown'}).apply(), /Unknown folder action/);
+	const logs = [];
+	const warns = [];
+	const errors = [];
+	const cli = new manager.FoldersCliManager({
+		configPath: filename,
+		projectsDir,
+		logger: {
+			log: (...args) => logs.push(args.join(' ')),
+			warn: (...args) => warns.push(args.join(' ')),
+			error: (...args) => errors.push(args.join(' '))
+		}
+	});
+	assert.equal(cli.resolveProject('proj-alpha').name, 'Alpha Workspace');
+	assert.equal(cli.resolveProject('alpha').id, 'proj-alpha');
+	assert.equal(warns.length, 1);
+	const created = cli.addFolder('CLI Subfolder', 'Work');
+	assert.equal(created.parentId, 'root');
+	assert.equal(cli.assignProject('Alpha Secondary', 'CLI Subfolder'), true);
+	cli.listAll();
+	cli.listProjects();
+	assert.equal(errors.length, 0);
+	assert.ok(logs.some(line => line.includes('CLI Subfolder') && line.includes('1 projects')));
+	assert.ok(logs.some(line => line.includes('Alpha Secondary') && line.includes('Work / CLI Subfolder')));
+	assert.equal(logs.some(line => line.includes('project-folders/folders')), false);
 });
