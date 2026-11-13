@@ -13,6 +13,9 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
 // https://github.com/dmitry-ai/antigravity-addons/issues/23
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -155,7 +158,7 @@ test('Browser routing preserves the OAuth state and callback while selecting the
 			return r;
 		}
 	};
-	const fakeRequire = name => 'electron' === name ? {app, shell} : 'node:os' === name ? {homedir: () => root} : 'node:child_process' === name ? processes : path.join(__dirname, 'oauth-bridge.js') === name ? {OAuthBridge: class {}} : path.join(__dirname, 'window-identity.js') === name ? {installWindowIdentity: () => {}} : require(name);
+	const fakeRequire = name => 'electron' === name ? {app, shell} : 'node:os' === name ? {homedir: () => root} : 'node:child_process' === name ? processes : path.join(__dirname, 'oauth-bridge.js') === name ? {OAuthBridge: class {}} : path.join(__dirname, 'window-identity.js') === name ? {allWindows: () => [], installWindowIdentity: () => {}} : require(name);
 	bootstrap(fakeRequire, {id: 'A6', email: 'admin6@mage2.pro', homeDir: root, userDataDir: root, codeRoot: __dirname, chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8']}, browserEnvironment: {USERPROFILE: 'real'}});
 	await shell.openExternal('https://accounts.google.com/o/oauth2/auth?state=exact-state&redirect_uri=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback');
 	const url = new URL(opened[0].args.at(-1));
@@ -542,6 +545,10 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	});
 	// Existing BaseWindow gets A6 icon, AppUserModelId, and [A6] title prefix, and preserves [A6] across dist/utils.js handleTitleUpdate setTitle calls
 	assert.equal(baseWindows[0].appDetails?.appId, 'Google.Antigravity.A6');
+	assert.match(baseWindows[0].appDetails?.relaunchCommand || '', /launch\.vbs" A6$/);
+	assert.equal(app.listenerCount('browser-window-created'), 1);
+	assert.equal(app.listenerCount('web-contents-created'), 2);
+	assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'app_storage.json'), 'utf8')).autoCheckForUpdates, 'false');
 	assert.equal(baseWindows[0].getTitle(), '[A6] 50 - smokeday.com - U.P.2...');
 	baseWindows[0].setTitle('10 - Harness - Antigravit...');
 	assert.equal(baseWindows[0].getTitle(), '[A6] 10 - Harness - Antigravit...');
@@ -569,6 +576,10 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	assert.doesNotThrow(() => closingWindow.setTitle('Post destroy title update'));
 	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows.length, 1);
 	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows[0].id, 1);
+	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.dispose();
+	globalThis.__ANTIGRAVITY_UPDATE_GUARD__.dispose();
+	assert.equal(app.listenerCount('browser-window-created'), 0);
+	assert.equal(app.listenerCount('web-contents-created'), 0);
 });
 test('The native terminal OAuth bridge accepts only the matching state at the official callback and keeps stdin open', async () => {
 	const {OAuthBridge, callbackCode} = require('./oauth-bridge');
@@ -654,4 +665,18 @@ test('Post-login recovery refuses A0 and never reloads an app or a draft', async
 	});
 	await refreshInitialPage({id: 'A6', userDataDir: root});
 	assert.deepEqual(calls, [{id: 'blank', method: 'Page.reload'}]);
+});
+test('Parameterized launch.vbs and installer scripts read profiles.json without per-account wrapper duplication', () => {
+	assert.equal(fs.existsSync(path.join(__dirname, 'launch.vbs')), true);
+	for (const legacy of ['launch_A0.vbs', 'launch_A6.vbs', 'launch.ps1']) {
+		assert.equal(fs.existsSync(path.join(__dirname, legacy)), false);
+	}
+	const launchVbs = fs.readFileSync(path.join(__dirname, 'launch.vbs'), 'utf8');
+	assert.match(launchVbs, /launcher\.js/);
+	assert.doesNotMatch(launchVbs, /powershell\.exe/i);
+	for (const script of ['build-icon.ps1', 'install.ps1']) {
+		const source = fs.readFileSync(path.join(__dirname, script), 'utf8');
+		assert.match(source, /profiles\.json/);
+		assert.doesNotMatch(source, /launch_A0\.vbs|launch_A6\.vbs/);
+	}
 });

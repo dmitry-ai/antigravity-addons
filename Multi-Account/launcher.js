@@ -16,11 +16,15 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {readProfiles} = require('./profiles');
 const {CDP} = require('../Upgrade/cdp-client');
+const {readJsonSafe} = require('../Upgrade/process-io');
 const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const {bootstrap} = require('./main-bootstrap');
 const {ensureSharedSkills} = require('./skills-manifest');
@@ -43,8 +47,8 @@ const readChromeShortcut = profile => {
 	if (!Number.isInteger(debugPort) || 1 > debugPort || 65535 < debugPort) {
 		throw Error('Chrome shortcut must specify its CDP port for the OAuth callback');
 	}
-	const state = JSON.parse(fs.readFileSync(path.join(userData, 'Local State'), 'utf8'));
-	if (state.profile?.info_cache?.[directory]?.user_name?.toLowerCase() !== profile.email.toLowerCase()) {
+	const state = readJsonSafe(path.join(userData, 'Local State'));
+	if (state?.profile?.info_cache?.[directory]?.user_name?.toLowerCase() !== profile.email.toLowerCase()) {
 		throw Error('Chrome shortcut account does not match ' + profile.email);
 	}
 	return {
@@ -205,11 +209,7 @@ const activateExisting = async (profile, options = {}) => {
 	const cdpClient = options.CDP || CDP;
 	const request = options.fetch || globalThis.fetch;
 	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
-	let record = null;
-	try {
-		record = JSON.parse(fileSystem.readFileSync(path.join(profile.userDataDir, 'main-runtime.json'), 'utf8'));
-	}
-	catch {}
+	const record = readJsonSafe(path.join(profile.userDataDir, 'main-runtime.json'), fileSystem);
 	if (record && record.id === profile.id && record.userDataDir === profile.userDataDir && /^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
 		let cdp;
 		try {

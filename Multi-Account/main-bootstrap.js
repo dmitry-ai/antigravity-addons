@@ -13,13 +13,18 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
 // https://github.com/dmitry-ai/antigravity-addons/issues/23
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const bootstrap = (require, config) => {
 	const {app, shell, BrowserWindow, BaseWindow} = require('electron');
 	const path = require('node:path');
 	const fs = require('node:fs');
 	const os = require('node:os');
 	const processes = require('node:child_process');
+	const {readJsonSafe, writeFileAtomic} = require(path.join(config.codeRoot, '../Upgrade/process-io.js'));
 	const {installUpdateGuard, silenceBrokenStdio, resolveModule} = require(path.join(config.codeRoot, 'update-guard.js'));
+	const windowIdentity = require(path.join(config.codeRoot, 'window-identity.js'));
 	silenceBrokenStdio(process);
 	const isPrimary = 'A0' === config.id;
 	if (!isPrimary && path.resolve(os.homedir()).toLowerCase() !== path.resolve(config.homeDir).toLowerCase()) {
@@ -30,15 +35,16 @@ const bootstrap = (require, config) => {
 	app.setPath('logs', path.join(config.userDataDir, 'logs'));
 	if (!isPrimary) {
 		app.setAppUserModelId('Google.Antigravity.' + config.id);
-		require(path.join(config.codeRoot, 'window-identity.js')).installWindowIdentity(require, config);
+		windowIdentity.installWindowIdentity(require, config);
 		const originalSpawn = processes.spawn;
 		processes.spawn = function(executable, args, options) {
-			if ('language_server.exe' === path.basename(executable).toLowerCase() && Array.isArray(args) && args.includes('--standalone')) {
+			const isStandalone = 'language_server.exe' === path.basename(executable).toLowerCase() && Array.isArray(args) && args.includes('--standalone');
+			if (isStandalone) {
 				args = [...args, '--headless', '--gemini_dir=' + path.join(config.homeDir, '.gemini')];
 				options = {...options, env: {...options?.env, USERPROFILE: config.homeDir, ANTIGRAVITY_VSCODE_HOST: '1'}};
 			}
 			const r = originalSpawn.call(this, executable, args, options);
-			if ('language_server.exe' === path.basename(executable).toLowerCase() && Array.isArray(args) && args.includes('--standalone')) {
+			if (isStandalone) {
 				const {OAuthBridge, refreshInitialPage} = require(path.join(config.codeRoot, 'oauth-bridge.js'));
 				const bridge = new OAuthBridge({
 					child: r,
@@ -91,49 +97,11 @@ const bootstrap = (require, config) => {
 			}
 			return r;
 		};
-		const prefixTitle = win => {
-			if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
-				const prefix = '[' + config.id + '] ';
-				if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
-					const originalSetTitle = win.setTitle.bind(win);
-					win.__antigravityOriginalSetTitle = originalSetTitle;
-					win.__antigravityTitlePatched = true;
-					win.setTitle = title => {
-						if (win.isDestroyed?.()) {
-							return;
-						}
-						const text = String(title || '');
-						return originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
-					};
-				}
-				if ('function' === typeof win.getTitle && 'function' === typeof win.setTitle) {
-					const current = win.getTitle();
-					if (current && !current.startsWith(prefix)) {
-						win.setTitle(current);
-					}
-				}
-				if (win.webContents?.on && !win.__antigravityTitleListener) {
-					const onTitleUpdated = (event, title) => {
-						if ('string' === typeof title && !title.startsWith(prefix) && !win.isDestroyed?.()) {
-							event?.preventDefault?.();
-							win.setTitle?.(prefix + title);
-						}
-					};
-					win.__antigravityTitleListener = onTitleUpdated;
-					win.webContents.on('page-title-updated', onTitleUpdated);
-				}
-			}
-		};
-		app.on('browser-window-created', (_event, win) => prefixTitle(win));
-		app.on('web-contents-created', () => setImmediate(() => {
-			for (const win of [...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
-				prefixTitle(win);
-			}
-		}));
 		const storage = path.join(config.userDataDir, 'app_storage.json');
-		const items = fs.existsSync(storage) ? JSON.parse(fs.readFileSync(storage, 'utf8')) : {};
+		const existing = readJsonSafe(storage, fs);
+		const items = existing && 'object' === typeof existing && !Array.isArray(existing) ? existing : {};
 		items.autoCheckForUpdates = 'false';
-		fs.writeFileSync(storage, JSON.stringify(items));
+		writeFileAtomic(storage, JSON.stringify(items), {fs});
 	}
 	installUpdateGuard(require, config);
 	globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__ = {
@@ -147,16 +115,13 @@ const bootstrap = (require, config) => {
 	const listManagedWindows = () => {
 		const utils = resolveModule(require, './utils');
 		const hubWindows = utils?.getHubWindows?.() || [];
-		const seen = new Set();
+		const candidates = windowIdentity.allWindows ? windowIdentity.allWindows({BaseWindow, BrowserWindow, include: hubWindows}) : hubWindows;
 		const r = [];
-		for (const win of [...hubWindows, ...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
-			if (win && !seen.has(win) && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
-				seen.add(win);
-				const contents = utils?.getHubWebContents?.(win) ?? win.webContents;
-				const url = contents?.getURL?.() || '';
-				if (hubWindows.includes(win) || (BaseWindow && win instanceof BaseWindow) || /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url)) {
-					r.push(win);
-				}
+		for (const win of candidates) {
+			const contents = utils?.getHubWebContents?.(win) ?? win.webContents;
+			const url = contents?.getURL?.() || '';
+			if (hubWindows.includes(win) || (BaseWindow && win instanceof BaseWindow) || /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url)) {
+				r.push(win);
 			}
 		}
 		return r;
@@ -186,14 +151,11 @@ const bootstrap = (require, config) => {
 	};
 	if (config.inspector) {
 		const runtimeFile = path.join(config.userDataDir, 'main-runtime.json');
-		fs.writeFileSync(runtimeFile, JSON.stringify({id: config.id, pid: process.pid, inspector: config.inspector, userDataDir: config.userDataDir}));
+		writeFileAtomic(runtimeFile, JSON.stringify({id: config.id, pid: process.pid, inspector: config.inspector, userDataDir: config.userDataDir}), {fs});
 		app.on('will-quit', () => {
-			try {
-				if (JSON.parse(fs.readFileSync(runtimeFile, 'utf8')).pid === process.pid) {
-					fs.unlinkSync(runtimeFile);
-				}
+			if (readJsonSafe(runtimeFile, fs)?.pid === process.pid) {
+				fs.rmSync(runtimeFile, {force: true});
 			}
-			catch {}
 		});
 	}
 	return globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;

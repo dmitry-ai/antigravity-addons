@@ -4,44 +4,54 @@
 # 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 # "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
 # https://github.com/dmitry-ai/antigravity-addons/issues/20
+# 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+# https://github.com/dmitry-ai/antigravity-addons/issues/26
 $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'build-icon.ps1') | Out-Null
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 if (-not $desktopPath) {
 	$desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop
 }
-$wscriptPath = Join-Path $env:SystemRoot 'System32/wscript.exe'
-$exeIcon = (Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe') + ',0'
-$shell = New-Object -ComObject WScript.Shell
-$a0Targets = @(
-	(Join-Path $desktopPath 'A0.lnk')
-)
 $programsPath = [Environment]::GetFolderPath('Programs')
 if (-not $programsPath) {
 	$programsPath = Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs'
 }
-if ($programsPath) {
-	$startShortcut = Join-Path $programsPath 'Antigravity.lnk'
-	if (Test-Path -LiteralPath $startShortcut) {
-		$a0Targets += $startShortcut
+$wscriptPath = Join-Path $env:SystemRoot 'System32/wscript.exe'
+$launchScript = Join-Path $PSScriptRoot 'launch.vbs'
+$exeIcon = (Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe') + ',0'
+$dash = [char]0x2014
+$shell = New-Object -ComObject WScript.Shell
+$config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+foreach ($profile in $config.profiles) {
+	if ('A0' -ne $profile.id) {
+		$shortcutPath = Join-Path $desktopPath ($profile.id + '.lnk')
+		$shortcut = $shell.CreateShortcut($shortcutPath)
+		$shortcut.TargetPath = $wscriptPath
+		$shortcut.Arguments = '"' + $launchScript + '" ' + $profile.id
+		$shortcut.WorkingDirectory = $PSScriptRoot
+		$shortcut.Description = "Antigravity $($profile.id) $dash $($profile.email); Chrome $($profile.chromeShortcut); isolated account"
+		$shortcut.IconLocation = (Join-Path $PSScriptRoot ($profile.id + '.ico')) + ',0'
+		$shortcut.Save()
+		Write-Output $shortcutPath
+	}
+	else {
+		$targets = @((Join-Path $desktopPath 'A0.lnk'))
+		if ($programsPath) {
+			$startShortcut = Join-Path $programsPath 'Antigravity.lnk'
+			if (Test-Path -LiteralPath $startShortcut) {
+				$targets += $startShortcut
+			}
+		}
+		foreach ($target in $targets) {
+			$shortcut = $shell.CreateShortcut($target)
+			$shortcut.TargetPath = $wscriptPath
+			$shortcut.Arguments = '"' + $launchScript + '" A0'
+			$shortcut.WorkingDirectory = $PSScriptRoot
+			$shortcut.Description = "Antigravity A0 $dash primary account"
+			$shortcut.IconLocation = $exeIcon
+			$shortcut.Save()
+			Write-Output $target
+		}
 	}
 }
-foreach ($target in $a0Targets) {
-	$s = $shell.CreateShortcut($target)
-	$s.TargetPath = $wscriptPath
-	$s.Arguments = '"' + (Join-Path $PSScriptRoot 'launch_A0.vbs') + '"'
-	$s.WorkingDirectory = $PSScriptRoot
-	$s.Description = 'Antigravity A0 — primary account'
-	$s.IconLocation = $exeIcon
-	$s.Save()
-	Write-Output $target
-}
-$shortcutPath = Join-Path $desktopPath 'A6.lnk'
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $wscriptPath
-$shortcut.Arguments = '"' + (Join-Path $PSScriptRoot 'launch_A6.vbs') + '"'
-$shortcut.WorkingDirectory = $PSScriptRoot
-$shortcut.Description = 'Antigravity A6 — admin6@mage2.pro; Chrome 6; isolated account'
-$shortcut.IconLocation = (Join-Path $PSScriptRoot 'A6.ico') + ',0'
-$shortcut.Save()
-Write-Output $shortcutPath

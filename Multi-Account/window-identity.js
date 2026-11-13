@@ -7,6 +7,20 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
 // https://github.com/dmitry-ai/antigravity-addons/issues/23
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
+const allWindows = ({BaseWindow, BrowserWindow, include = []} = {}) => {
+	const seen = new Set();
+	const r = [];
+	for (const win of [...include, ...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
+		if (win && !seen.has(win) && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
+			seen.add(win);
+			r.push(win);
+		}
+	}
+	return r;
+};
 const installWindowIdentity = (require, config) => {
 	if ('A0' === config.id || !/^A\d+$/.test(config.id || '')) {
 		throw Error('Window identity is only for secondary accounts');
@@ -25,64 +39,21 @@ const installWindowIdentity = (require, config) => {
 	}
 	const appId = 'Google.Antigravity.' + config.id;
 	const prefix = '[' + config.id + '] ';
-	const launcher = path.join(config.codeRoot, 'launch_' + config.id + '.vbs');
-	const relaunchCommand = '"' + path.join(process.env.SystemRoot || 'C:/Windows', 'System32/wscript.exe') + '" "' + launcher + '"';
+	const launcher = path.join(config.codeRoot, 'launch.vbs');
+	const relaunchCommand = '"' + path.join(process.env.SystemRoot || 'C:/Windows', 'System32/wscript.exe') + '" "' + launcher + '" ' + config.id;
 	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose();
 	const applied = new Map();
-	const allWindows = () => {
-		const seen = new Set();
-		const r = [];
-		for (const win of [...(BaseWindow?.getAllWindows?.() || []), ...(BrowserWindow?.getAllWindows?.() || [])]) {
-			if (win && !seen.has(win) && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
-				seen.add(win);
-				r.push(win);
-			}
-		}
-		return r;
-	};
 	const apply = win => {
 		if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
 			win.setIcon?.(icon);
 			win.setAppDetails?.({appId, appIconPath: iconPath, appIconIndex: 0, relaunchCommand, relaunchDisplayName: 'Antigravity ' + config.id});
-			if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
-				const originalSetTitle = win.setTitle.bind(win);
-				win.__antigravityOriginalSetTitle = originalSetTitle;
-				win.__antigravityTitlePatched = true;
-				win.setTitle = title => {
-					if (win.isDestroyed?.()) {
-						return;
-					}
-					const text = String(title || '');
-					return originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
-				};
-			}
-			if ('function' === typeof win.getTitle && 'function' === typeof win.setTitle) {
-				const current = win.getTitle();
-				if (current && !current.startsWith(prefix)) {
-					win.setTitle(current);
-				}
-			}
-			if (win.webContents?.on && !win.__antigravityTitleListener) {
-				const onTitleUpdated = (event, title) => {
-					if ('string' === typeof title && !title.startsWith(prefix) && !win.isDestroyed?.()) {
-						event?.preventDefault?.();
-						win.setTitle?.(prefix + title);
-					}
-				};
-				win.__antigravityTitleListener = onTitleUpdated;
-				win.webContents.on('page-title-updated', onTitleUpdated);
-			}
+			patchWindowTitle(win, prefix);
 			const winId = win.id;
 			applied.set(winId, {id: winId, iconPath, appId});
 			if (!win.__antigravityIdentityClosedHook && 'function' === typeof win.once) {
 				win.__antigravityIdentityClosedHook = true;
 				win.once('closed', () => applied.delete(winId));
 			}
-		}
-	};
-	const syncWindows = () => {
-		for (const win of allWindows()) {
-			apply(win);
 		}
 	};
 	const created = (_event, win) => {
@@ -93,8 +64,6 @@ const installWindowIdentity = (require, config) => {
 		setImmediate(syncWindows);
 		contents?.once?.('did-finish-load', syncWindows);
 	};
-	app.on('browser-window-created', created);
-	app.on('web-contents-created', onWebContentsCreated);
 	const ready = () => {
 		const shortcutPath = path.join(app.getPath('desktop'), config.id + '.lnk');
 		if (fs.existsSync(shortcutPath)) {
@@ -104,6 +73,13 @@ const installWindowIdentity = (require, config) => {
 		}
 		syncWindows();
 	};
+	const syncWindows = () => {
+		for (const win of allWindows({BaseWindow, BrowserWindow})) {
+			apply(win);
+		}
+	};
+	app.on('browser-window-created', created);
+	app.on('web-contents-created', onWebContentsCreated);
 	if (app.isReady()) {
 		ready();
 	}
@@ -121,4 +97,37 @@ const installWindowIdentity = (require, config) => {
 	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__ = r;
 	return r;
 };
-module.exports = {installWindowIdentity};
+const patchWindowTitle = (win, prefix) => {
+	if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
+		if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
+			const originalSetTitle = win.setTitle.bind(win);
+			win.__antigravityOriginalSetTitle = originalSetTitle;
+			win.__antigravityTitlePatched = true;
+			win.setTitle = title => {
+				let r;
+				if (!win.isDestroyed?.()) {
+					const text = String(title || '');
+					r = originalSetTitle(text.startsWith(prefix) ? text : prefix + text);
+				}
+				return r;
+			};
+		}
+		if ('function' === typeof win.getTitle && 'function' === typeof win.setTitle) {
+			const current = win.getTitle();
+			if (current && !current.startsWith(prefix)) {
+				win.setTitle(current);
+			}
+		}
+		if (win.webContents?.on && !win.__antigravityTitleListener) {
+			const onTitleUpdated = (event, title) => {
+				if ('string' === typeof title && !title.startsWith(prefix) && !win.isDestroyed?.()) {
+					event?.preventDefault?.();
+					win.setTitle?.(prefix + title);
+				}
+			};
+			win.__antigravityTitleListener = onTitleUpdated;
+			win.webContents.on('page-title-updated', onTitleUpdated);
+		}
+	}
+};
+module.exports = {allWindows, installWindowIdentity, patchWindowTitle};

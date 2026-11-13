@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const callbackCode = (targets, pending) => {
 	let r = null;
 	result: {
@@ -35,7 +38,7 @@ const callbackCode = (targets, pending) => {
 	return r;
 };
 const {CDP} = require('../Upgrade/cdp-client');
-const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
+const {isLocalEndpointSocket, probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const refreshInitialPage = async ({id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
 		throw Error('Only a managed secondary profile can refresh its initial page');
@@ -144,18 +147,16 @@ class OAuthBridge {
 				if (!found) {
 					for (const target of targets) {
 						let url;
-						let socket;
 						try {
 							url = new URL(target.url);
-							socket = new URL(target.webSocketDebuggerUrl);
 						}
 						catch {
 							continue;
 						}
-						if ('page' !== target.type || url.origin !== this.pending.redirect.origin || url.pathname !== this.pending.redirect.pathname || 'ws:' !== socket.protocol || !['127.0.0.1', 'localhost'].includes(socket.hostname) || Number(socket.port) !== this.chromePort) {
+						if ('page' !== target.type || url.origin !== this.pending.redirect.origin || url.pathname !== this.pending.redirect.pathname || !isLocalEndpointSocket(target.webSocketDebuggerUrl, this.chromePort)) {
 							continue;
 						}
-						const cdp = await CDP.open(socket.href);
+						const cdp = await CDP.open(new URL(target.webSocketDebuggerUrl).href);
 						try {
 							const original = await cdp.evaluate("performance.getEntriesByType('navigation')[0]?.name");
 							found = callbackCode([{type: 'page', url: original}], this.pending);
