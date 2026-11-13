@@ -13,6 +13,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 // https://github.com/dmitry-ai/antigravity-addons/issues/38
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/39
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
@@ -21,7 +24,7 @@ const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const manager = require('./folders-manager');
 const {applyAction, validateConfig} = require('./folders-model');
 const disposeExpression = 'window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;';
-const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folders-client.js'];
+const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folder-menu.js', 'folder-dialogs.js', 'folders-client.js'];
 const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'missing',reason:'Folders runtime is not attached'}";
 class FoldersStore extends EventEmitter {
 	constructor(filename) {

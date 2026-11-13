@@ -6,6 +6,6 @@
 	"order": 20,
 	"dependsOn": ["css"],
 	"cdp": "cdp-runtime.js",
-	"runtimeFiles": ["folders-manager.js", "folders-model.js", "antigravity-adapter.js", "folders-client.js", "folders-view.css"],
+	"runtimeFiles": ["folders-manager.js", "folders-model.js", "antigravity-adapter.js", "folder-menu.js", "folder-dialogs.js", "folders-client.js", "folders-view.css"],
 	"validate": "verify.js"
 }

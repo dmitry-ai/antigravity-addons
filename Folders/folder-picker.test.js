@@ -13,9 +13,12 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/39
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {FoldersView, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
+const {FolderDialogController, FolderMenuController, FoldersView, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
 const folders = [
 	{id: 'root', name: 'Work', parentId: null},
 	{id: 'initial', name: 'Initial', parentId: 'root'},
@@ -137,5 +140,154 @@ test('FoldersView detectCurrentFolderId resolves hover, active conversation sele
 	const res = await view.postAction('add-folder', {name: 'NoBridge'});
 	assert.equal(res.success, false);
 	assert.match(res.error, /Folder storage bridge is unavailable/);
+	view.dispose();
+});
+test('FolderMenuController and FolderDialogController manage menu ARIA navigation, modal lifecycle, and FoldersView proxy getters in Node', async () => {
+	const makeNode = tag => {
+		const listeners = new Map();
+		const upper = tag.toUpperCase();
+		const node = {
+			tag: upper,
+			className: '',
+			textContent: '',
+			_value: undefined,
+			get value() {
+				return undefined !== this._value ? this._value : 'SELECT' === upper ? this.children.find(opt => opt.selected)?.value || '' : '';
+			},
+			set value(v) {
+				this._value = v;
+			},
+			dataset: {},
+			style: {},
+			attributes: {},
+			children: [],
+			isConnected: true,
+			offsetWidth: 180,
+			offsetHeight: 120,
+			append(...items) {
+				for (const item of items) {
+					if ('object' === typeof item && item) {
+						this.children.push(item);
+					}
+				}
+			},
+			appendChild(child) {
+				this.children.push(child);
+				return child;
+			},
+			replaceChildren(...items) {
+				this.children = items.filter(item => 'object' === typeof item && item);
+			},
+			setAttribute(key, val) {
+				this.attributes[key] = String(val);
+			},
+			addEventListener(type, fn) {
+				if (!listeners.has(type)) {
+					listeners.set(type, []);
+				}
+				listeners.get(type).push(fn);
+			},
+			dispatch(type, event = {}) {
+				for (const fn of listeners.get(type) || []) {
+					fn({
+						preventDefault() {},
+						stopPropagation() {},
+						target: node,
+						...event
+					});
+				}
+			},
+			click() {
+				this.dispatch('click');
+			},
+			focus() {
+				doc.activeElement = node;
+			},
+			scrollIntoView() {},
+			setCustomValidity(msg) {
+				this.validationMessage = msg;
+			},
+			reportValidity() {},
+			remove() {
+				this.removed = true;
+			},
+			querySelectorAll(selector) {
+				const out = [];
+				const match = el => (selector.includes('treeitem') && 'treeitem' === el.attributes?.role)
+					|| (selector.includes('menuitem') && 'menuitem' === el.attributes?.role)
+					|| (selector.includes('button') && 'button' === el.attributes?.role);
+				const walk = el => {
+					for (const child of el.children || []) {
+						if (match(child)) {
+							out.push(child);
+						}
+						walk(child);
+					}
+				};
+				walk(this);
+				return out;
+			},
+			querySelector(selector) {
+				let r = null;
+				if (selector.includes('aria-selected=true')) {
+					r = this.querySelectorAll('treeitem').find(el => 'true' === el.attributes['aria-selected']) || null;
+				}
+				else {
+					r = this.querySelectorAll(selector)[0] || null;
+				}
+				return r;
+			}
+		};
+		return node;
+	};
+	const doc = {activeElement: null, body: makeNode('body'), createElement: makeNode};
+	const posted = [];
+	const win = {
+		innerWidth: 640,
+		innerHeight: 480,
+		__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}},
+		__ANTIGRAVITY_TOOLS_REQUEST__: async (_tool, message) => {
+			posted.push(message.body);
+			return {
+				success: true,
+				revision: 'rev-2',
+				data: {
+					folders: [...folders, {id: 'created', name: message.body.name || 'Sub', parentId: message.body.parentId || null}],
+					projectFolderMap: {p1: 'proposals'}
+				}
+			};
+		}
+	};
+	const view = new FoldersView(win, {document: doc, adapter: {dispose() {}, selection: () => ({})}});
+	assert.ok(view.menus instanceof FolderMenuController);
+	assert.ok(view.dialogs instanceof FolderDialogController);
+	assert.equal(view.activeMenu, null);
+	assert.equal(view.activeModal, null);
+	let picked = null;
+	view.menus.show(120, 80, [{folderTree: {selectedId: 'proposals', onSelect: id => {
+		picked = id;
+	}}}], 'Move project');
+	assert.equal(view.activeMenu, view.menus.activeMenu);
+	const itemsBefore = view.activeMenu.querySelectorAll('treeitem');
+	const proposalsRow = itemsBefore.find(el => 'proposals' === el.dataset.folderTarget);
+	proposalsRow.dispatch('keydown', {key: 'ArrowRight'});
+	const twoRow = view.activeMenu.querySelectorAll('treeitem').find(el => 'two' === el.dataset.folderTarget);
+	assert.ok(twoRow);
+	twoRow.dispatch('keydown', {key: 'Enter'});
+	assert.equal(picked, 'two');
+	assert.equal(view.activeMenu, null);
+	view.dialogs.openCreateFolder('p1');
+	assert.equal(view.activeModal, view.dialogs.activeModal);
+	const form = view.activeModal.children[0];
+	const nameInput = form.children.find(el => 'folder-name-input' === el.className);
+	nameInput.value = 'Archive';
+	form.dispatch('submit');
+	await new Promise(resolve => setImmediate(resolve));
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(posted[0].action, 'add-folder');
+	assert.equal(posted[0].parentId, 'proposals');
+	assert.equal(posted[1].action, 'assign-project');
+	assert.equal(posted[1].folderId, 'created');
+	assert.equal(view.activeModal, null);
 	view.dispose();
 });
