@@ -1,7 +1,115 @@
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
 // https://github.com/dmitry-ai/antigravity-addons/issues/4
-(function initAntigravityFoldersClient() {
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
+(function(factory) {
+	const api = factory();
+	if ('object' === typeof module && module.exports) {
+		module.exports = api;
+	}
+	else {
+		api.initAntigravityFoldersClient();
+	}
+})(() => {
+	function hasDragType(dataTransfer, type) {
+		let r;
+		result: {
+			if (!dataTransfer || !dataTransfer.types) {
+				r = false;
+				break result;
+			}
+			if ('function' === typeof dataTransfer.types.includes) {
+				r = dataTransfer.types.includes(type);
+				break result;
+			}
+			if ('function' === typeof dataTransfer.types.contains) {
+				r = dataTransfer.types.contains(type);
+				break result;
+			}
+			try {
+				r = Array.from(dataTransfer.types).includes(type);
+			}
+			catch (_) {
+				r = false;
+			}
+		}
+		return r;
+	}
+	// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/8
+	function folderPickerModel(foldersSource, selectedId, excludedIds = new Set()) {
+		const raw = Array.isArray(foldersSource) ? foldersSource : foldersSource?.data?.folders || foldersSource?.folders || [];
+		const folders = raw.filter(folder => !excludedIds.has(folder.id));
+		const byId = new Map(folders.map(folder => [folder.id, folder]));
+		const children = new Map();
+		for (const folder of folders) {
+			const parentId = byId.has(folder.parentId) ? folder.parentId : null;
+			if (!children.has(parentId)) {
+				children.set(parentId, []);
+			}
+			children.get(parentId).push(folder);
+		}
+		for (const siblings of children.values()) {
+			siblings.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}) || a.id.localeCompare(b.id));
+		}
+		const expanded = new Set();
+		let folder = byId.get(selectedId);
+		while (folder && !expanded.has(folder.id)) {
+			expanded.add(folder.id);
+			folder = byId.get(folder.parentId);
+		}
+		return {byId, children, expanded};
+	}
+	function positionContextMenu(menu, viewport = window) {
+		const {x, y} = menu._folderAnchor;
+		menu.style.left = `${Math.max(8, Math.min(x, viewport.innerWidth - menu.offsetWidth - 8))}px`;
+		menu.style.top = `${Math.max(8, Math.min(y, viewport.innerHeight - menu.offsetHeight - 8))}px`;
+	}
+	function openProjectContextMenu(e, projectId, {client, showContextMenu, showCreateFolderDialog, win = 'undefined' !== typeof window ? window : undefined}) {
+		e.preventDefault();
+		e.stopPropagation();
+		const currentFolderId = client.getProjectFolderId(projectId);
+		const items = [
+			{
+				folderTree: {
+					selectedId: currentFolderId,
+					onSelect: folderId => client.postAction('assign-project', {projectId, folderId})
+				}
+			},
+			{separator: true}
+		];
+		if (win?.__PROJECT_FOLDERS_VIEW__) {
+			items.push({label: 'Open project', onClick: () => win.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
+			items.push({label: 'New conversation', onClick: () => win.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
+			// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+			// "Add Project settings action to project context menu in Folders":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/17
+			items.push({label: 'Project settings…', onClick: () => win.__PROJECT_FOLDERS_VIEW__.adapter.openProjectSettings(projectId)});
+			items.push({label: 'Rename project…', onClick: () => win.__PROJECT_FOLDERS_VIEW__.renameProject(projectId)});
+			items.push({separator: true});
+		}
+		items.push({
+			icon: '➕',
+			label: 'Create folder…',
+			onClick: () => {
+				showCreateFolderDialog(projectId);
+			}
+		});
+		if (currentFolderId) {
+			items.push({
+				icon: '↥',
+				label: 'Remove from folder',
+				onClick: () => {
+					client.postAction('unassign-project', {projectId});
+				}
+			});
+		}
+		showContextMenu(e.clientX, e.clientY, items, 'Move project');
+	}
+	function initAntigravityFoldersClient() {
 	let r;
 	result: {
 		if ('undefined' === typeof window || window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__) {
@@ -10,6 +118,7 @@
 		}
 		window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__ = true;
 		const lifetime = new AbortController();
+		let rootAbort = null;
 		const listen = (type, listener, capture = false) => window.addEventListener(type, listener, {capture, signal: lifetime.signal});
 		console.log('[folders-client] Initializing Hierarchical Project Folders UI Controller...');
 		function escapeHtml(str) {
@@ -24,30 +133,6 @@
 					.replace(/</g, '&lt;')
 					.replace(/>/g, '&gt;')
 					.replace(/"/g, '&quot;');
-			}
-			return r;
-		}
-		function hasDragType(dataTransfer, type) {
-			let r;
-			result: {
-				if (!dataTransfer || !dataTransfer.types) {
-					r = false;
-					break result;
-				}
-				if ('function' === typeof dataTransfer.types.includes) {
-					r = dataTransfer.types.includes(type);
-					break result;
-				}
-				if ('function' === typeof dataTransfer.types.contains) {
-					r = dataTransfer.types.contains(type);
-					break result;
-				}
-				try {
-					r = Array.from(dataTransfer.types).includes(type);
-				}
-				catch (_) {
-					r = false;
-				}
 			}
 			return r;
 		}
@@ -144,52 +229,10 @@
 				return this.data?.projectFolderMap?.[projectId] || null;
 			},
 			getFolderPath(folderId) {
-				let r;
-				result: {
-					if (!this.data || !Array.isArray(this.data.folders)) {
-						r = '';
-						break result;
-					}
-					const map = new Map(this.data.folders.map(f => [f.id, f]));
-					const parts = [];
-					let curr = map.get(folderId);
-					const seen = new Set();
-					while (curr && !seen.has(curr.id)) {
-						seen.add(curr.id);
-						parts.unshift(curr.name);
-						curr = curr.parentId ? map.get(curr.parentId) : null;
-					}
-					r = parts.join(' / ');
-				}
-				return r;
+				return window.AntigravityFoldersModel.getFolderPath(folderId, this.data?.folders);
 			},
 			getDescendantIds(folderId) {
-				let r;
-				result: {
-					if (!this.data || !Array.isArray(this.data.folders)) {
-						r = new Set();
-						break result;
-					}
-					const childrenMap = new Map();
-					for (const f of this.data.folders) {
-						const pid = f.parentId || null;
-						if (!childrenMap.has(pid)) {
-							childrenMap.set(pid, []);
-						}
-						childrenMap.get(pid).push(f.id);
-					}
-					const descendants = new Set();
-					function collect(id) {
-						const children = childrenMap.get(id) || [];
-						for (const cid of children) {
-							descendants.add(cid);
-							collect(cid);
-						}
-					}
-					collect(folderId);
-					r = descendants;
-				}
-				return r;
+				return window.AntigravityFoldersModel.getDescendantIds(folderId, this.data?.folders);
 			},
 			detectCurrentFolderId() {
 				let r;
@@ -345,16 +388,217 @@
 			closeContextMenu
 		};
 		client.bindRoot = root => {
-			observer.disconnect();
-			observer.observe(root, {childList: true, subtree: true});
-			enhanceSidebarElements();
+			rootAbort?.abort();
+			rootAbort = new AbortController();
+			const on = (type, listener, capture = false) => root.addEventListener(type, listener, {capture, signal: rootAbort.signal});
+			let activeDropEl = null;
+			let draggedElement = null;
+			const setDropTarget = el => {
+				if (el !== activeDropEl) {
+					activeDropEl?.classList.remove('folder-drop-target');
+					activeDropEl = el;
+					activeDropEl?.classList.add('folder-drop-target');
+				}
+			};
+			const resolveDropZone = target => {
+				const el = target && 1 === target.nodeType ? target : target?.parentElement;
+				const toolbar = el?.closest('.fg-toolbar');
+				const folderRow = toolbar ? null : el?.closest('[data-folders-row^="folder:"]');
+				const emptyRow = toolbar || folderRow ? null : el?.closest('[data-folders-row^="empty:"]');
+				return toolbar
+					? {el: toolbar, folderId: null}
+					: folderRow
+						? {el: folderRow, folderId: folderRow.dataset.folderId}
+						: emptyRow
+							? {el: emptyRow, folderId: emptyRow.dataset.folderId}
+							: null;
+			};
+			const canDropOnTarget = (e, targetFolderId) => {
+				let r;
+				result: {
+					const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
+					const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
+					if (!isProjectDrag && !isFolderDrag) {
+						r = {allowed: false, blocked: false};
+						break result;
+					}
+					if (isProjectDrag) {
+						r = {allowed: true, blocked: false};
+						break result;
+					}
+					const draggedFolderId = client.draggedFolderId || e.dataTransfer?.getData('application/antigravity-folder-id');
+					const df = draggedFolderId ? client.getFolder(draggedFolderId) : null;
+					if (!df) {
+						r = {allowed: false, blocked: false};
+						break result;
+					}
+					const targetParent = targetFolderId || null;
+					if (targetParent === df.id || targetParent === (df.parentId || null)) {
+						r = {allowed: false, blocked: null !== targetParent};
+						break result;
+					}
+					if (targetParent && client.getDescendantIds(df.id).has(targetParent)) {
+						r = {allowed: false, blocked: true};
+						break result;
+					}
+					const siblings = (client.data?.folders || []).filter(item => targetParent === (item.parentId || null));
+					const collision = siblings.some(item => df.id !== item.id && df.name.toLowerCase() === item.name.toLowerCase());
+					r = {allowed: !collision, blocked: collision};
+				}
+				return r;
+			};
+			on('mouseover', e => {
+				const folderRow = e.target.closest?.('[data-folders-row^="folder:"]');
+				if (folderRow) {
+					const fid = folderRow.dataset.folderId;
+					client.hoveredFolderId = fid;
+					client.hoveredFolderEl = folderRow;
+					client.lastHoveredFolderId = fid;
+					client.lastHoveredFolderTime = Date.now();
+				}
+			});
+			on('mouseout', e => {
+				const folderRow = e.target.closest?.('[data-folders-row^="folder:"]');
+				if (folderRow && !folderRow.contains(e.relatedTarget) && folderRow.dataset.folderId === client.hoveredFolderId) {
+					client.hoveredFolderId = null;
+					client.hoveredFolderEl = null;
+				}
+			});
+			on('contextmenu', e => {
+				const card = e.target.closest?.('button[data-project-card]');
+				const folderRow = card ? null : e.target.closest?.('[data-folders-row^="folder:"]');
+				if (card) {
+					showProjectContextMenu(e, card, card.dataset.projectId, card.textContent.trim());
+				}
+				else if (folderRow) {
+					const fid = folderRow.dataset.folderId;
+					showFolderContextMenu(e, folderRow, fid, client.getFolder(fid)?.name || '');
+				}
+			});
+			on('click', e => {
+				if (client.isDragging && e.target.closest?.('[data-folders-row^="folder:"]')) {
+					e.preventDefault();
+					e.stopPropagation();
+				}
+			}, true);
+			on('click', e => {
+				const card = e.target.closest?.('button[data-project-card]');
+				const folderRow = card ? null : e.target.closest?.('[data-folders-row^="folder:"]');
+				const convoRow = card || folderRow ? null : e.target.closest?.("[data-testid^='conversation-row-']");
+				if (card?.dataset.projectId) {
+					client.lastActiveProjectId = card.dataset.projectId;
+					client.lastActiveFolderId = client.getProjectFolderId(card.dataset.projectId);
+				}
+				else if (folderRow?.dataset.folderId) {
+					client.lastActiveFolderId = folderRow.dataset.folderId;
+				}
+				else if (convoRow) {
+					const pid = convoRow.closest('[data-group-id]')?.dataset.groupId;
+					if (pid) {
+						client.lastActiveProjectId = pid;
+						client.lastActiveFolderId = client.getProjectFolderId(pid);
+					}
+				}
+			});
+			on('pointerdown', e => {
+				if (!e.altKey && 0 === e.button && !e.target.closest?.('input, .folder-rename-input') && e.target.closest?.('[data-folders-row^="folder:"], button[data-project-card]')) {
+					e.stopPropagation();
+				}
+			});
+			on('dragstart', e => {
+				if (e.altKey || e.target.closest?.('input, .folder-rename-input')) {
+					e.preventDefault();
+				}
+				else {
+					const card = e.target.closest?.('button[data-project-card]');
+					const folderRow = card ? null : e.target.closest?.('[data-folders-row^="folder:"]');
+					if (card?.dataset.projectId) {
+						e.stopPropagation();
+						client.isDragging = true;
+						client.draggedProjectId = card.dataset.projectId;
+						client.draggedFolderId = null;
+						draggedElement = card;
+						e.dataTransfer.setData('application/antigravity-project-id', card.dataset.projectId);
+						e.dataTransfer.setData('text/plain', card.dataset.projectId);
+						e.dataTransfer.effectAllowed = 'move';
+						card.style.opacity = '0.5';
+					}
+					else if (folderRow?.dataset.folderId) {
+						e.stopPropagation();
+						client.isDragging = true;
+						client.draggedFolderId = folderRow.dataset.folderId;
+						client.draggedProjectId = null;
+						draggedElement = folderRow;
+						e.dataTransfer.setData('application/antigravity-folder-id', folderRow.dataset.folderId);
+						e.dataTransfer.setData('text/plain', folderRow.dataset.folderId);
+						e.dataTransfer.effectAllowed = 'move';
+						folderRow.style.opacity = '0.5';
+					}
+				}
+			});
+			on('dragend', () => {
+				if (draggedElement) {
+					draggedElement.style.opacity = '';
+					draggedElement = null;
+				}
+				setDropTarget(null);
+				client.draggedFolderId = null;
+				client.draggedProjectId = null;
+				setTimeout(() => {
+					client.isDragging = false;
+				}, 100);
+			});
+			on('dragover', e => {
+				const zone = resolveDropZone(e.target);
+				if (!zone) {
+					setDropTarget(null);
+				}
+				else {
+					const check = canDropOnTarget(e, zone.folderId);
+					if (!check.allowed) {
+						setDropTarget(null);
+						if (check.blocked && e.dataTransfer) {
+							e.dataTransfer.dropEffect = 'none';
+						}
+					}
+					else {
+						e.preventDefault();
+						e.stopPropagation();
+						if (e.dataTransfer) {
+							e.dataTransfer.dropEffect = 'move';
+						}
+						setDropTarget(zone.el);
+					}
+				}
+			});
+			on('dragleave', e => {
+				if (!root.contains(e.relatedTarget) || !resolveDropZone(e.relatedTarget)) {
+					setDropTarget(null);
+				}
+			});
+			on('drop', async e => {
+				const zone = resolveDropZone(e.target);
+				setDropTarget(null);
+				if (zone) {
+					e.preventDefault();
+					e.stopPropagation();
+					const projId = e.dataTransfer?.getData('application/antigravity-project-id') || client.draggedProjectId;
+					const draggedFolderId = e.dataTransfer?.getData('application/antigravity-folder-id') || client.draggedFolderId;
+					if (projId) {
+						await client.postAction(zone.folderId ? 'assign-project' : 'unassign-project', zone.folderId ? {projectId: projId, folderId: zone.folderId} : {projectId: projId});
+					}
+					else if (draggedFolderId && canDropOnTarget(e, zone.folderId).allowed) {
+						const res = await client.postAction('move-folder', {id: draggedFolderId, newParentId: zone.folderId});
+						if (res?.success && zone.folderId) {
+							window.__PROJECT_FOLDERS_VIEW__?.expandFolder?.(zone.folderId);
+						}
+					}
+				}
+			});
 		};
 		client.dispose = () => {
 			lifetime.abort();
-			observer.disconnect();
-			if (enhanceFrame) {
-				cancelAnimationFrame(enhanceFrame);
-			}
+			rootAbort?.abort();
 			closeContextMenu();
 			client.activeModal?.remove();
 			window.__PROJECT_FOLDERS_CLIENT_INITIALIZED__ = false;
@@ -366,35 +610,9 @@
 				client.activeMenu.parentNode.removeChild(client.activeMenu);
 			}
 			client.activeMenu = null;
-			document.querySelectorAll('.btn-folder-options.is-active').forEach(b => b.classList.remove('is-active'));
-		}
-		// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/8
-		function folderPickerModel(selectedId, excludedIds = new Set()) {
-			const folders = (client.data?.folders || []).filter(folder => !excludedIds.has(folder.id));
-			const byId = new Map(folders.map(folder => [folder.id, folder]));
-			const children = new Map();
-			for (const folder of folders) {
-				const parentId = byId.has(folder.parentId) ? folder.parentId : null;
-				if (!children.has(parentId)) {
-					children.set(parentId, []);
-				}
-				children.get(parentId).push(folder);
-			}
-			for (const siblings of children.values()) {
-				siblings.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}) || a.id.localeCompare(b.id));
-			}
-			const expanded = new Set();
-			let folder = byId.get(selectedId);
-			while (folder && !expanded.has(folder.id)) {
-				expanded.add(folder.id);
-				folder = byId.get(folder.parentId);
-			}
-			return {byId, children, expanded};
 		}
 		function appendFolderTree(menu, {selectedId, excludedIds, onSelect}) {
-			const {children, expanded} = folderPickerModel(selectedId, excludedIds);
+			const {children, expanded} = folderPickerModel(client.data?.folders, selectedId, excludedIds);
 			const tree = document.createElement('div');
 			tree.className = 'antigravity-folder-targets';
 			tree.setAttribute('role', 'tree');
@@ -528,11 +746,6 @@
 			};
 			render();
 			menu.appendChild(tree);
-		}
-		function positionContextMenu(menu) {
-			const {x, y} = menu._folderAnchor;
-			menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
-			menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
 		}
 		function showContextMenu(x, y, items, title = '') {
 			closeContextMenu();
@@ -694,11 +907,7 @@
 								}
 							}
 							if (chosenParentId) {
-								const parentHeader = document.querySelector(`[data-testid='section-header'][data-folder-id='${chosenParentId}']`);
-								const toggleBtn = parentHeader?.querySelector('h2 button') || parentHeader?.querySelector('button');
-								if (toggleBtn && 'false' === toggleBtn.getAttribute('aria-expanded')) {
-									toggleBtn.click();
-								}
+								window.__PROJECT_FOLDERS_VIEW__?.expandFolder?.(chosenParentId);
 							}
 							closeModal();
 						}
@@ -867,46 +1076,8 @@
 				}
 			]);
 		}
-		function showProjectContextMenu(e, projectCardEl, projectId, projectName) {
-			e.preventDefault();
-			e.stopPropagation();
-			const currentFolderId = client.getProjectFolderId(projectId);
-			const items = [
-				{
-					folderTree: {
-						selectedId: currentFolderId,
-						onSelect: folderId => client.postAction('assign-project', {projectId, folderId})
-					}
-				},
-				{separator: true}
-			];
-			if (window.__PROJECT_FOLDERS_VIEW__) {
-				items.push({label: 'Open project', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
-				items.push({label: 'New conversation', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.navigate({projectId})});
-				// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-				// "Add Project settings action to project context menu in Folders":
-				// https://github.com/dmitry-ai/antigravity-addons/issues/17
-				items.push({label: 'Project settings…', onClick: () => window.__PROJECT_FOLDERS_VIEW__.adapter.openProjectSettings(projectId)});
-				items.push({label: 'Rename project…', onClick: () => window.__PROJECT_FOLDERS_VIEW__.renameProject(projectId)});
-				items.push({separator: true});
-			}
-			items.push({
-				icon: '➕',
-				label: 'Create folder…',
-				onClick: () => {
-					showCreateFolderDialog(projectId);
-				}
-			});
-			if (currentFolderId) {
-				items.push({
-					icon: '↥',
-					label: 'Remove from folder',
-					onClick: () => {
-						client.postAction('unassign-project', {projectId});
-					}
-				});
-			}
-			showContextMenu(e.clientX, e.clientY, items, 'Move project');
+		function showProjectContextMenu(e, _projectCardEl, projectId) {
+			openProjectContextMenu(e, projectId, {client, showContextMenu, showCreateFolderDialog, win: window});
 		}
 		listen('click', e => {
 			if (client.activeMenu && !client.activeMenu.contains(e.target)) {
@@ -924,7 +1095,7 @@
 				}
 			}
 			// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-			// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md/P.Bash.md, and link source files to GitHub Issues":
+			// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md, and link source files to GitHub Issues":
 			// https://github.com/dmitry-ai/antigravity-addons/issues/16
 			else if (('Insert' === e.key || (e.altKey && ('KeyN' === e.code || 'n' === e.key || 'N' === e.key))) && !client.activeModal) {
 				const isInput = e.target && ('INPUT' === e.target.tagName || 'TEXTAREA' === e.target.tagName || e.target.isContentEditable);
@@ -944,561 +1115,12 @@
 				}
 			}
 		}, true);
-		function extractFolderInfo(headerEl) {
-			let r;
-			result: {
-				const title = headerEl.getAttribute('data-title') || '';
-				if (!title.includes('📁')) {
-					r = null;
-					break result;
-				}
-				let fid = headerEl.getAttribute('data-folder-id');
-				if (!fid) {
-					const parentRow = headerEl.closest('[data-folder-id]');
-					if (parentRow) {
-						fid = parentRow.getAttribute('data-folder-id');
-					}
-				}
-				if (!fid) {
-					const cleanName = title.replace(/^📁\s*/, '').replace(/\s*\(\d+\)$/, '').trim();
-					const match = client.data?.folders?.find(f => cleanName.toLowerCase() === f.name.toLowerCase());
-					if (match) {
-						fid = match.id;
-					}
-				}
-				const cleanName = title.replace(/^📁\s*/, '').replace(/\s*\(\d+\)$/, '').trim();
-				r = {folderId: fid, folderName: cleanName};
-			}
-			return r;
-		}
-		function extractProjectInfo(cardEl) {
-			const labelSpan = cardEl.querySelector('span.truncate') || cardEl.querySelector('span');
-			const label = labelSpan ? labelSpan.textContent.trim() : '';
-			return {projectId: cardEl.getAttribute('data-project-id'), projectName: label};
-		}
 		// 2026-10-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 		// "Restore Folders compatibility with Antigravity 2.25.0 and analyze architectural resilience against renderer bundle changes":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/9
-		function enhanceSidebarElements() {
-			if (!lifetime.signal.aborted && (!window.__FOLDERS_STANDALONE__ || window.__PROJECT_FOLDERS_VIEW__?.root)) {
-				const sidebarRoot = window.__PROJECT_FOLDERS_VIEW__?.root || document;
-				const mainHeader = sidebarRoot.querySelector("[data-testid='section-header'][data-title='Projects'], [data-testid='section-header'][data-title='Workspaces'], [data-testid='section-header'][data-title*='Project']");
-				if (mainHeader) {
-					const actionsContainer = mainHeader.querySelector('.group\\/section-header > div:last-child') || mainHeader.querySelector('div:last-child');
-					if (actionsContainer && !actionsContainer.querySelector('.btn-create-folder')) {
-						const btn = document.createElement('button');
-						btn.type = 'button';
-						btn.className = 'btn-create-folder';
-						btn.title = 'Create new folder (defaults to active folder)';
-						btn.setAttribute('aria-label', 'Create new folder');
-						btn.innerHTML = '📁<span style="font-size:10px;font-weight:bold;margin-left:1px;">+</span>';
-						btn.addEventListener('click', e => {
-							e.stopPropagation();
-							showCreateFolderDialog();
-						});
-						actionsContainer.insertBefore(btn, actionsContainer.firstChild);
-					}
-					if (!mainHeader._foldersDragHooked) {
-						mainHeader._foldersDragHooked = true;
-						let mainDragCounter = 0;
-						mainHeader.addEventListener('dragenter', e => {
-							const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
-							const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
-							if (isProjectDrag || isFolderDrag) {
-								mainDragCounter++;
-								mainHeader.classList.add('folder-drop-target');
-							}
-						});
-						mainHeader.addEventListener('dragover', e => {
-							let r;
-							result: {
-								const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
-								const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
-								if (!isProjectDrag && !isFolderDrag) {
-									r = undefined;
-									break result;
-								}
-								const draggedFolderId = client.draggedFolderId || e.dataTransfer.getData('application/antigravity-folder-id');
-								if (isFolderDrag && draggedFolderId) {
-									const f = client.getFolder(draggedFolderId);
-									if ((f && null === f.parentId) || null) {
-										r = undefined;
-										break result;
-									}
-									if (f) {
-										const rootSiblings = (client.data?.folders || []).filter(item => null === item.parentId || null);
-										if (rootSiblings.some(item => f.id !== item.id && f.name.toLowerCase() === item.name.toLowerCase())) {
-											e.dataTransfer.dropEffect = 'none';
-											r = undefined;
-											break result;
-										}
-									}
-								}
-								e.preventDefault();
-								e.stopPropagation();
-								e.dataTransfer.dropEffect = 'move';
-								mainHeader.classList.add('folder-drop-target');
-							}
-							return r;
-						});
-						mainHeader.addEventListener('dragleave', () => {
-							mainDragCounter--;
-							if (0 >= mainDragCounter) {
-								mainDragCounter = 0;
-								mainHeader.classList.remove('folder-drop-target');
-							}
-						});
-						mainHeader.addEventListener('drop', e => {
-							mainDragCounter = 0;
-							mainHeader.classList.remove('folder-drop-target');
-							e.preventDefault();
-							e.stopPropagation();
-							const projId = e.dataTransfer.getData('application/antigravity-project-id') || client.draggedProjectId;
-							const folderId = e.dataTransfer.getData('application/antigravity-folder-id') || client.draggedFolderId;
-							if (projId) {
-								client.postAction('unassign-project', {projectId: projId});
-							}
-							else if (folderId) {
-								client.postAction('move-folder', {id: folderId, newParentId: null});
-							}
-						});
-					}
-				}
-				const folderHeaders = sidebarRoot.querySelectorAll("[data-testid='section-header'][data-title*='📁']");
-				folderHeaders.forEach(headerEl => {
-					const info = extractFolderInfo(headerEl);
-					if (info && info.folderId) {
-						headerEl.setAttribute('data-folder-id', info.folderId);
-						const innerButton = headerEl.querySelector('h2 button') || headerEl.querySelector('button');
-						if (!headerEl._foldersHoverHooked) {
-							headerEl._foldersHoverHooked = true;
-							headerEl.addEventListener('mouseenter', () => {
-								client.hoveredFolderId = info.folderId;
-								client.hoveredFolderEl = headerEl;
-								client.lastHoveredFolderId = info.folderId;
-								client.lastHoveredFolderTime = Date.now();
-							});
-							headerEl.addEventListener('mouseleave', () => {
-								if (info.folderId === client.hoveredFolderId) {
-									client.hoveredFolderId = null;
-									client.hoveredFolderEl = null;
-								}
-							});
-							headerEl.addEventListener('contextmenu', e => {
-								showFolderContextMenu(e, headerEl, info.folderId, client.getFolder(info.folderId)?.name || info.folderName);
-							});
-						}
-						if (!headerEl._foldersClickHooked) {
-							headerEl._foldersClickHooked = true;
-							headerEl.addEventListener('click', e => {
-								if (client.isDragging) {
-									e.preventDefault();
-									e.stopPropagation();
-								}
-								else {
-									client.lastActiveFolderId = info.folderId;
-								}
-							}, true);
-						}
-						let actionsContainer = headerEl.querySelector('.antigravity-folder-actions');
-						if (!actionsContainer) {
-							const innerHeader = headerEl.querySelector('.group\\/section-header') || headerEl;
-							actionsContainer = document.createElement('div');
-							actionsContainer.className = 'antigravity-folder-actions';
-							innerHeader.appendChild(actionsContainer);
-						}
-						if (!actionsContainer.querySelector('.btn-folder-add')) {
-							const addBtn = document.createElement('button');
-							addBtn.type = 'button';
-							addBtn.className = 'btn-folder-add';
-							const currentFolderName = client.getFolder(info.folderId)?.name || info.folderName;
-							addBtn.title = `Create subfolder in “${currentFolderName}”`;
-							addBtn.setAttribute('aria-label', `Create subfolder in “${currentFolderName}”`);
-							addBtn.innerHTML = '📁<span style="font-size:10px;font-weight:bold;margin-left:1px;">+</span>';
-							addBtn.addEventListener('click', e => {
-								e.stopPropagation();
-								showCreateFolderDialog(null, info.folderId);
-							});
-							actionsContainer.appendChild(addBtn);
-						}
-						if (!actionsContainer.querySelector('.btn-folder-options')) {
-							const optBtn = document.createElement('button');
-							optBtn.type = 'button';
-							optBtn.className = 'btn-folder-options';
-							optBtn.title = 'Folder options (Subfolder, Move, Rename, Delete)';
-							optBtn.setAttribute('aria-label', 'Folder options');
-							optBtn.innerHTML = '⋯';
-							optBtn.addEventListener('click', e => {
-								e.stopPropagation();
-								optBtn.classList.add('is-active');
-								const rect = optBtn.getBoundingClientRect();
-								showFolderContextMenu({
-									clientX: rect.left,
-									clientY: rect.bottom + 4,
-									preventDefault: () => {},
-									stopPropagation: () => {}
-								}, headerEl, info.folderId, client.getFolder(info.folderId)?.name || info.folderName);
-							});
-							actionsContainer.appendChild(optBtn);
-						}
-						const handleFolderPointerDown = e => {
-							let r;
-							result: {
-								if (e.altKey || 0 !== e.button) {
-									r = undefined;
-									break result;
-								}
-								if (e.target.closest('.btn-folder-options') || e.target.closest('.btn-folder-add') || e.target.closest('.folder-rename-input') || e.target.closest('input')) {
-									r = undefined;
-									break result;
-								}
-								e.stopPropagation();
-							}
-							return r;
-						};
-						if (!headerEl._foldersPointerHooked) {
-							headerEl._foldersPointerHooked = true;
-							headerEl.addEventListener('pointerdown', handleFolderPointerDown);
-						}
-						if (innerButton && !innerButton._foldersPointerHooked) {
-							innerButton._foldersPointerHooked = true;
-							innerButton.addEventListener('pointerdown', handleFolderPointerDown);
-						}
-						headerEl.setAttribute('draggable', 'true');
-						if (innerButton) {
-							innerButton.setAttribute('draggable', 'true');
-						}
-						const handleFolderDragStart = e => {
-							let r;
-							result: {
-								if (e.target.closest('.btn-folder-options') || e.target.closest('.btn-folder-add') || e.target.closest('.folder-rename-input') || e.target.closest('input')) {
-									e.preventDefault();
-									r = undefined;
-									break result;
-								}
-								if (e.altKey) {
-									r = undefined;
-									break result;
-								}
-								e.stopPropagation();
-								client.isDragging = true;
-								client.draggedFolderId = info.folderId;
-								client.draggedProjectId = null;
-								e.dataTransfer.setData('application/antigravity-folder-id', info.folderId);
-								e.dataTransfer.setData('text/plain', info.folderId);
-								e.dataTransfer.effectAllowed = 'move';
-								headerEl.style.opacity = '0.5';
-							}
-							return r;
-						};
-						const handleFolderDragEnd = () => {
-							headerEl.style.opacity = '';
-							client.draggedFolderId = null;
-							client.draggedProjectId = null;
-							document.querySelectorAll('.folder-drop-target').forEach(el => el.classList.remove('folder-drop-target'));
-							setTimeout(() => {
-								client.isDragging = false;
-							}, 100);
-						};
-						if (!headerEl._foldersDragStartHooked) {
-							headerEl._foldersDragStartHooked = true;
-							headerEl.addEventListener('dragstart', handleFolderDragStart);
-							headerEl.addEventListener('dragend', handleFolderDragEnd);
-						}
-						if (innerButton && !innerButton._foldersDragStartHooked) {
-							innerButton._foldersDragStartHooked = true;
-							innerButton.addEventListener('dragstart', handleFolderDragStart);
-							innerButton.addEventListener('dragend', handleFolderDragEnd);
-						}
-						if (!headerEl._foldersDropHooked) {
-							headerEl._foldersDropHooked = true;
-							headerEl._dragCounter = 0;
-							headerEl.addEventListener('dragenter', e => {
-								let r;
-								result: {
-									const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
-									const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
-									if (!isProjectDrag && !isFolderDrag) {
-										r = undefined;
-										break result;
-									}
-									const draggedFolderId = client.draggedFolderId || e.dataTransfer.getData('application/antigravity-folder-id');
-									if (isFolderDrag && draggedFolderId) {
-										if (info.folderId === draggedFolderId) {
-											r = undefined;
-											break result;
-										}
-										const descendants = client.getDescendantIds(draggedFolderId);
-										if (descendants.has(info.folderId)) {
-											r = undefined;
-											break result;
-										}
-										const df = client.getFolder(draggedFolderId);
-										if (df && info.folderId === (df.parentId || null)) {
-											r = undefined;
-											break result;
-										}
-									}
-									headerEl._dragCounter++;
-									headerEl.classList.add('folder-drop-target');
-								}
-								return r;
-							});
-							headerEl.addEventListener('dragover', e => {
-								let r;
-								result: {
-									const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
-									const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
-									if (!isProjectDrag && !isFolderDrag) {
-										r = undefined;
-										break result;
-									}
-									const draggedFolderId = client.draggedFolderId || e.dataTransfer.getData('application/antigravity-folder-id');
-									if (isFolderDrag && draggedFolderId) {
-										if (info.folderId === draggedFolderId) {
-											e.dataTransfer.dropEffect = 'none';
-											r = undefined;
-											break result;
-										}
-										const descendants = client.getDescendantIds(draggedFolderId);
-										if (descendants.has(info.folderId)) {
-											e.dataTransfer.dropEffect = 'none';
-											r = undefined;
-											break result;
-										}
-										const df = client.getFolder(draggedFolderId);
-										if (df && info.folderId === (df.parentId || null)) {
-											e.dataTransfer.dropEffect = 'none';
-											r = undefined;
-											break result;
-										}
-										if (df) {
-											const targetSiblings = (client.data?.folders || []).filter(f => info.folderId === (f.parentId || null));
-											if (targetSiblings.some(f => df.id !== f.id && df.name.toLowerCase() === f.name.toLowerCase())) {
-												e.dataTransfer.dropEffect = 'none';
-												r = undefined;
-												break result;
-											}
-										}
-									}
-									e.preventDefault();
-									e.stopPropagation();
-									e.dataTransfer.dropEffect = 'move';
-									headerEl.classList.add('folder-drop-target');
-								}
-								return r;
-							});
-							headerEl.addEventListener('dragleave', () => {
-								headerEl._dragCounter--;
-								if (0 >= headerEl._dragCounter) {
-									headerEl._dragCounter = 0;
-									headerEl.classList.remove('folder-drop-target');
-								}
-							});
-							headerEl.addEventListener('drop', async e => {
-								headerEl._dragCounter = 0;
-								headerEl.classList.remove('folder-drop-target');
-								e.preventDefault();
-								e.stopPropagation();
-								const projId = e.dataTransfer.getData('application/antigravity-project-id') || client.draggedProjectId;
-								const draggedFolderId = e.dataTransfer.getData('application/antigravity-folder-id') || client.draggedFolderId;
-								if (projId) {
-									await client.postAction('assign-project', {projectId: projId, folderId: info.folderId});
-								}
-								else if (draggedFolderId && info.folderId !== draggedFolderId) {
-									const descendants = client.getDescendantIds(draggedFolderId);
-									if (!descendants.has(info.folderId)) {
-										const res = await client.postAction('move-folder', {id: draggedFolderId, newParentId: info.folderId});
-										if (res && res.success) {
-											const toggleBtn = headerEl.querySelector('h2 button') || headerEl.querySelector('button');
-											if (toggleBtn && 'false' === toggleBtn.getAttribute('aria-expanded')) {
-												toggleBtn.click();
-											}
-										}
-									}
-								}
-							});
-						}
-					}
-				});
-				const placeholders = sidebarRoot.querySelectorAll("[data-testid='empty-placeholder'], [data-group-id^='folder-']");
-				placeholders.forEach(ph => {
-					let r;
-					result: {
-						if (ph._foldersDropHooked) {
-							r = undefined;
-							break result;
-						}
-						const groupId = ph.getAttribute('data-group-id') || '';
-						let targetFolderId = ph.getAttribute('data-folder-id');
-						if (!targetFolderId && groupId.startsWith('folder-')) {
-							targetFolderId = groupId.slice(7);
-						}
-						if (!targetFolderId) {
-							r = undefined;
-							break result;
-						}
-						ph._foldersDropHooked = true;
-						ph.addEventListener('dragover', e => {
-							let r;
-							result: {
-								const isProjectDrag = hasDragType(e.dataTransfer, 'application/antigravity-project-id') || !!client.draggedProjectId;
-								const isFolderDrag = hasDragType(e.dataTransfer, 'application/antigravity-folder-id') || !!client.draggedFolderId;
-								if (!isProjectDrag && !isFolderDrag) {
-									r = undefined;
-									break result;
-								}
-								const draggedFolderId = client.draggedFolderId || e.dataTransfer.getData('application/antigravity-folder-id');
-								if (isFolderDrag && draggedFolderId) {
-									if (targetFolderId === draggedFolderId) {
-										r = undefined;
-										break result;
-									}
-									const descendants = client.getDescendantIds(draggedFolderId);
-									if (descendants.has(targetFolderId)) {
-										r = undefined;
-										break result;
-									}
-									const df = client.getFolder(draggedFolderId);
-									if (df && targetFolderId === (df.parentId || null)) {
-										r = undefined;
-										break result;
-									}
-									if (df) {
-										const targetSiblings = (client.data?.folders || []).filter(f => targetFolderId === (f.parentId || null));
-										if (targetSiblings.some(f => df.id !== f.id && df.name.toLowerCase() === f.name.toLowerCase())) {
-											r = undefined;
-											break result;
-										}
-									}
-								}
-								e.preventDefault();
-								e.stopPropagation();
-								e.dataTransfer.dropEffect = 'move';
-								ph.classList.add('folder-drop-target');
-							}
-							return r;
-						});
-						ph.addEventListener('dragleave', () => {
-							ph.classList.remove('folder-drop-target');
-						});
-						ph.addEventListener('drop', async e => {
-							ph.classList.remove('folder-drop-target');
-							e.preventDefault();
-							e.stopPropagation();
-							const projId = e.dataTransfer.getData('application/antigravity-project-id') || client.draggedProjectId;
-							const draggedFolderId = e.dataTransfer.getData('application/antigravity-folder-id') || client.draggedFolderId;
-							if (projId) {
-								await client.postAction('assign-project', {projectId: projId, folderId: targetFolderId});
-							}
-							else if (draggedFolderId && targetFolderId !== draggedFolderId) {
-								const descendants = client.getDescendantIds(draggedFolderId);
-								if (!descendants.has(targetFolderId)) {
-									const df = client.getFolder(draggedFolderId);
-									if (df && targetFolderId !== (df.parentId || null)) {
-										const targetSiblings = (client.data?.folders || []).filter(f => targetFolderId === (f.parentId || null));
-										if (!targetSiblings.some(f => df.id !== f.id && df.name.toLowerCase() === f.name.toLowerCase())) {
-											await client.postAction('move-folder', {id: draggedFolderId, newParentId: targetFolderId});
-										}
-									}
-								}
-							}
-						});
-					}
-					return r;
-				});
-				const projectCards = sidebarRoot.querySelectorAll('button[data-project-card]');
-				projectCards.forEach(card => {
-					let r;
-					result: {
-						if (card._foldersProjectHooked) {
-							r = undefined;
-							break result;
-						}
-						const info = extractProjectInfo(card);
-						if (!info.projectId) {
-							r = undefined;
-							break result;
-						}
-						card._foldersProjectHooked = true;
-						card.addEventListener('pointerdown', e => {
-							if (!e.altKey && 0 === e.button) {
-								e.stopPropagation();
-							}
-						});
-						card.addEventListener('dragstart', e => {
-							if (e.altKey) {
-								e.preventDefault();
-							}
-						});
-						card.setAttribute('draggable', 'true');
-						card.addEventListener('dragstart', e => {
-							const curInfo = extractProjectInfo(card);
-							client.isDragging = true;
-							client.draggedProjectId = curInfo.projectId;
-							client.draggedFolderId = null;
-							e.dataTransfer.setData('application/antigravity-project-id', curInfo.projectId);
-							e.dataTransfer.setData('text/plain', curInfo.projectId);
-							e.dataTransfer.effectAllowed = 'move';
-							card.style.opacity = '0.5';
-						});
-						card.addEventListener('dragend', () => {
-							card.style.opacity = '';
-							client.draggedProjectId = null;
-							client.draggedFolderId = null;
-							document.querySelectorAll('.folder-drop-target').forEach(el => el.classList.remove('folder-drop-target'));
-							setTimeout(() => {
-								client.isDragging = false;
-							}, 100);
-						});
-						card.addEventListener('click', () => {
-							const curInfo = extractProjectInfo(card);
-							if (curInfo.projectId) {
-								client.lastActiveProjectId = curInfo.projectId;
-								client.lastActiveFolderId = client.getProjectFolderId(curInfo.projectId);
-							}
-						});
-						card.addEventListener('contextmenu', e => {
-							const curInfo = extractProjectInfo(card);
-							showProjectContextMenu(e, card, curInfo.projectId, curInfo.projectName);
-						});
-					}
-					return r;
-				});
-				const convoRows = sidebarRoot.querySelectorAll("[data-testid^='conversation-row-']");
-				convoRows.forEach(row => {
-					if (!row._foldersConvoHooked) {
-						row._foldersConvoHooked = true;
-						row.addEventListener('click', () => {
-							const pid = row.closest('[data-group-id]')?.getAttribute('data-group-id');
-							if (pid) {
-								client.lastActiveProjectId = pid;
-								client.lastActiveFolderId = client.getProjectFolderId(pid);
-							}
-						});
-					}
-				});
-			}
-		}
-		let enhanceFrame = null;
-		const observer = new MutationObserver(() => {
-			if (!enhanceFrame) {
-				enhanceFrame = requestAnimationFrame(() => {
-					enhanceFrame = null;
-					enhanceSidebarElements();
-				});
-			}
-		});
-		if (!window.__FOLDERS_STANDALONE__) {
-			observer.observe(document.documentElement, {childList: true, subtree: true});
-		}
-		if ('loading' === document.readyState) {
-			document.addEventListener('DOMContentLoaded', enhanceSidebarElements, {once: true, signal: lifetime.signal});
-		}
-		else {
-			enhanceSidebarElements();
-		}
 		console.log('[folders-client] Hierarchical Project Folders UI Controller successfully loaded and active.');
 	}
 	return r;
-})();
+	}
+	return {folderPickerModel, hasDragType, initAntigravityFoldersClient, openProjectContextMenu, positionContextMenu};
+});

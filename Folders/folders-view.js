@@ -1,8 +1,55 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
-(function installFoldersView() {
-	if (!window.__PROJECT_FOLDERS_VIEW__) {
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
+(function(factory) {
+	const api = factory();
+	if ('object' === typeof module && module.exports) {
+		module.exports = api;
+	}
+	else {
+		api.installFoldersView();
+	}
+})(() => {
+	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// "Add Project settings action to project context menu in Folders":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/17
+	const createReadConfig = ({window: win, model, state, client, status}) => {
+		let configPromise = null;
+		return () => {
+			if (!configPromise) {
+				configPromise = (async () => {
+					const response = win.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await (win.fetch || fetch)('/api/project-folders');
+					if (response && !response.ok) {
+						throw Error(`Folder storage: HTTP ${response.status}; run Upg to reconnect the loader`);
+					}
+					const payload = response ? await response.json() : await win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
+					if (payload.error) {
+						throw Error(payload.error);
+					}
+					const data = 2 === payload.schemaVersion ? payload.data : payload;
+					model.validateFolders(data.folders);
+					state.haveConfig = true;
+					if (payload.revision) {
+						win.__FOLDERS_REVISION__ = payload.revision;
+					}
+					const revision = payload.revision || JSON.stringify(data);
+					if (revision !== state.revision) {
+						state.revision = revision;
+						client.notifyUpdate(data);
+					}
+					status('folders', null);
+				})().finally(() => {
+					configPromise = null;
+				});
+			}
+			return configPromise;
+		};
+	};
+	function installFoldersView() {
+	if ('undefined' !== typeof window && !window.__PROJECT_FOLDERS_VIEW__) {
 		const model = window.AntigravityFoldersModel;
 		const client = window.__PROJECT_FOLDERS_CLIENT__;
 		const state = {
@@ -160,39 +207,7 @@
 			},
 			onStatus: status
 		});
-		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Add Project settings action to project context menu in Folders":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/17
-		let configPromise = null;
-		const readConfig = () => {
-			if (!configPromise) {
-				configPromise = (async () => {
-					const response = window.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await fetch('/api/project-folders');
-					if (response && !response.ok) {
-						throw Error(`Folder storage: HTTP ${response.status}; run Upg to reconnect the loader`);
-					}
-					const payload = response ? await response.json() : await window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
-					if (payload.error) {
-						throw Error(payload.error);
-					}
-					const data = 2 === payload.schemaVersion ? payload.data : payload;
-					model.validateFolders(data.folders);
-					state.haveConfig = true;
-					if (payload.revision) {
-						window.__FOLDERS_REVISION__ = payload.revision;
-					}
-					const revision = payload.revision || JSON.stringify(data);
-					if (revision !== state.revision) {
-						state.revision = revision;
-						client.notifyUpdate(data);
-					}
-					status('folders', null);
-				})().finally(() => {
-					configPromise = null;
-				});
-			}
-			return configPromise;
-		};
+		const readConfig = createReadConfig({window, model, state, client, status});
 		const rowElement = (row, index) => {
 			const el = element('div', 'fg-row');
 			el.dataset.foldersRow = row.key;
@@ -223,9 +238,7 @@
 				el.append(collapse);
 			}
 			if ('folder' === row.kind) {
-				el.dataset.testid = 'section-header';
-				el.dataset.title = `📁 ${row.name}`;
-				el.dataset.collapsed = !row.expanded;
+				el.draggable = true;
 				const h2 = element('h2');
 				const button = element('button', 'fg-label');
 				button.setAttribute('aria-expanded', row.expanded);
@@ -239,6 +252,7 @@
 			}
 			else if ('project' === row.kind) {
 				const button = element('button', 'fg-label');
+				button.draggable = true;
 				button.dataset.projectCard = 'true';
 				button.dataset.projectId = row.id;
 				if (row.folderId) {
@@ -345,9 +359,18 @@
 						root.dataset.testid = 'folders-tree';
 						root.setAttribute('aria-label', 'Folders and projects');
 						const toolbar = element('div', 'fg-toolbar');
-						toolbar.dataset.testid = 'section-header';
-						toolbar.dataset.title = 'Projects';
 						toolbar.append(element('strong', '', 'Projects'));
+						const folderButton = element('button', 'btn-create-folder');
+						folderButton.type = 'button';
+						folderButton.title = 'Create new folder (defaults to active folder)';
+						folderButton.setAttribute('aria-label', 'Create new folder');
+						const folderPlus = element('span', '', '+');
+						folderPlus.style.cssText = 'font-size:10px;font-weight:bold;margin-left:1px;';
+						folderButton.append('📁', folderPlus);
+						folderButton.onclick = event => {
+							event.stopPropagation();
+							client.ui.showCreateFolderDialog();
+						};
 						const nativeButton = element('button', 'fg-native', '⋯');
 						nativeButton.title = 'List view';
 						nativeButton.onclick = () => {
@@ -374,7 +397,7 @@
 						projectButton.setAttribute('aria-label', 'Create project');
 						projectButton.onclick = () => createProjectDialog(client.detectCurrentFolderId());
 						const actions = element('div', 'fg-actions');
-						actions.append(nativeButton, projectButton);
+						actions.append(folderButton, nativeButton, projectButton);
 						toolbar.append(actions);
 						const message = element('div', 'fg-state');
 						message.setAttribute('role', 'alert');
@@ -575,6 +598,12 @@
 					});
 				}
 			},
+			expandFolder(folderId) {
+				if (folderId && state.collapsed.delete(`folder:${folderId}`)) {
+					persist();
+					render();
+				}
+			},
 			reveal(projectId, folderId) {
 				for (let folder = client.getFolder(folderId); folder; folder = client.getFolder(folder.parentId)) {
 					state.collapsed.delete(`folder:${folder.id}`);
@@ -697,4 +726,6 @@
 			}, 2000);
 		})();
 	}
-})();
+	}
+	return {createReadConfig, installFoldersView};
+});

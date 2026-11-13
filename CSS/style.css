@@ -204,35 +204,18 @@ button[data-project-card] svg {
 [data-testid='conversation-list-sidebar'] {
 	--folder-indent-unit: 14px;
 }
-[data-testid='section-header'][data-folder-id],
-[data-testid='section-header'][data-title*='📁'],
-[data-testid='section-header'][data-title^='📁'] {
+.fg-row[data-folders-row^='folder:'] {
 	cursor: pointer;
 	margin-top: 0 !important;
 	opacity: 0.95 !important;
 }
-[data-testid='section-header'][data-folder-id] h2,
-[data-testid='section-header'][data-title*='📁'] h2,
-[data-testid='section-header'][data-title^='📁'] h2 {
+.fg-row[data-folders-row^='folder:'] h2 {
 	font-weight: 600 !important;
 	font-size: 11.5px !important;
 }
-[data-testid='section-header'][data-folder-id] button,
-[data-testid='section-header'][data-title*='📁'] button,
-[data-testid='section-header'][data-title^='📁'] button {
+.fg-row[data-folders-row^='folder:'] button {
 	padding: 0 !important;
 	margin: 0 !important;
-}
-[data-testid='section-header'][data-folder-id] button svg,
-[data-testid='section-header'][data-title*='📁'] button svg,
-[data-testid='section-header'][data-title^='📁'] button svg {
-	opacity: 0.45 !important;
-	transition: transform 150ms ease, opacity 150ms ease !important;
-}
-[data-testid='section-header'][data-folder-id]:hover button svg,
-[data-testid='section-header'][data-title*='📁']:hover button svg,
-[data-testid='section-header'][data-title^='📁']:hover button svg {
-	opacity: 0.85 !important;
 }
 .btn-create-folder {
 	cursor: pointer !important;
@@ -252,48 +235,6 @@ button[data-project-card] svg {
 .btn-create-folder:hover {
 	color: var(--foreground, currentColor) !important;
 	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.12)) !important;
-}
-.antigravity-folder-actions {
-	display: none !important;
-}
-[data-folder-create-project] {
-	width: 18px !important;
-	height: 16px !important;
-	min-height: 16px !important;
-	visibility: hidden !important;
-	pointer-events: none !important;
-	opacity: 0 !important;
-}
-.btn-folder-add,
-.btn-folder-options {
-	cursor: pointer !important;
-	display: inline-flex !important;
-	align-items: center !important;
-	justify-content: center !important;
-	width: 18px !important;
-	height: 16px !important;
-	border-radius: 4px !important;
-	border: none !important;
-	background: transparent !important;
-	color: var(--muted-foreground, #8e8e93) !important;
-	font-size: 12px !important;
-	line-height: 14px !important;
-	line-height: 1 !important;
-	padding: 0 !important;
-	opacity: 0 !important;
-	transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease !important;
-}
-[data-testid='section-header']:hover .btn-folder-add,
-[data-testid='section-header']:hover .btn-folder-options,
-[data-testid='section-header']:focus-within .btn-folder-add,
-[data-testid='section-header']:focus-within .btn-folder-options,
-.btn-folder-options.is-active {
-	opacity: 1 !important;
-}
-.btn-folder-add:hover,
-.btn-folder-options:hover {
-	color: var(--foreground, currentColor) !important;
-	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.15)) !important;
 }
 .folder-rename-input {
 	background: var(--background, #ffffff) !important;

@@ -1,6 +1,9 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 (function(factory) {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -10,9 +13,47 @@
 		window.AntigravityFoldersModel = api;
 	}
 })(() => {
+	const INTERNAL_PROJECT_ID = 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40';
 	const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
 	const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
 	const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
+	const getDescendantIds = (folderId, folders = []) => {
+		const r = new Set();
+		if (Array.isArray(folders)) {
+			const childrenMap = new Map();
+			for (const f of folders) {
+				const pid = f.parentId || null;
+				if (!childrenMap.has(pid)) {
+					childrenMap.set(pid, []);
+				}
+				childrenMap.get(pid).push(f.id);
+			}
+			const collect = id => {
+				for (const cid of childrenMap.get(id) || []) {
+					if (!r.has(cid)) {
+						r.add(cid);
+						collect(cid);
+					}
+				}
+			};
+			collect(folderId);
+		}
+		return r;
+	};
+	const getFolderPath = (folderId, folders = []) => {
+		const parts = [];
+		if (Array.isArray(folders)) {
+			const map = new Map(folders.map(f => [f.id, f]));
+			let curr = map.get(folderId);
+			const seen = new Set();
+			while (curr && !seen.has(curr.id)) {
+				seen.add(curr.id);
+				parts.unshift(curr.name);
+				curr = curr.parentId ? map.get(curr.parentId) : null;
+			}
+		}
+		return parts.join(' / ');
+	};
 	const timestamp = value => 'string' === typeof value
 		? Date.parse(value) || 0
 		: value && 'object' === typeof value
@@ -73,7 +114,8 @@
 					id: action.id || `folder-${crypto.randomUUID()}`,
 					name: String(action.name || '').trim(),
 					parentId: action.parentId || null,
-					color: action.color || '#10b981'
+					color: action.color || '#10b981',
+					...(undefined !== action.isExpanded ? {isExpanded: action.isExpanded} : {})
 				});
 				break;
 			case 'rename-folder':
@@ -202,7 +244,7 @@
 			if (hideOutsideProject && 'outside-of-project' === project.id) {
 				continue;
 			}
-			if ('cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40' === project.id && 'project-folders/folders' === project.name) {
+			if (INTERNAL_PROJECT_ID === project.id && 'project-folders/folders' === project.name) {
 				continue;
 			}
 			const folderId = data.projectFolderMap?.[project.id];
@@ -326,5 +368,5 @@
 		}
 		return rows;
 	};
-	return {compare, validateFolders, applyAction, applySummaryUpdate, buildRows, summaryProject, summaryName, active};
+	return {INTERNAL_PROJECT_ID, compare, validateFolders, applyAction, applySummaryUpdate, buildRows, getDescendantIds, getFolderPath, summaryProject, summaryName, active};
 });

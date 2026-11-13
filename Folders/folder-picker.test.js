@@ -1,20 +1,12 @@
 // 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
 // https://github.com/dmitry-ai/antigravity-addons/issues/8
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const path = require('node:path');
-const walk = require('../Upgrade/node_modules/acorn-walk');
-const {parse} = require('../Upgrade/node_modules/acorn');
-const source = fs.readFileSync(path.join(__dirname, 'folders-client.js'), 'utf8');
-const functions = new Map();
-walk.simple(parse(source, {ecmaVersion: 'latest'}), {
-	FunctionDeclaration(node) {
-		functions.set(node.id.name, source.slice(node.start, node.end));
-	}
-});
+const {folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
 const folders = [
 	{id: 'root', name: 'Work', parentId: null},
 	{id: 'initial', name: 'Initial', parentId: 'root'},
@@ -24,10 +16,7 @@ const folders = [
 	{id: 'ten', name: '10', parentId: 'proposals'},
 	{id: 'two', name: '2', parentId: 'proposals'}
 ];
-const modelFor = (selectedId, excludedIds) => vm.compileFunction(
-	functions.get('folderPickerModel') + '\nreturn folderPickerModel(selectedId, excludedIds);',
-	['client', 'selectedId', 'excludedIds']
-)({data: {folders}}, selectedId, excludedIds);
+const modelFor = (selectedId, excludedIds) => folderPickerModel(folders, selectedId, excludedIds);
 test('picker expands the current branch and leaves unrelated branches collapsed', () => {
 	const model = modelFor('month');
 	assert.deepEqual([...model.expanded], ['month', 'year', 'initial', 'root']);
@@ -46,18 +35,18 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	let items;
 	let title;
 	const client = {getProjectFolderId: () => 'month', postAction: (...args) => actions.push(args)};
-	vm.compileFunction(
-		functions.get('showProjectContextMenu') + '\nshowProjectContextMenu(event, null, "project-id", "Same name");',
-		['client', 'showContextMenu', 'event', 'showCreateFolderDialog', 'window']
-	)(
-		client,
-		(_x, _y, value, label) => {
-			items = value;
-			title = label;
-		},
+	openProjectContextMenu(
 		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
-		() => {},
-		{}
+		'project-id',
+		{
+			client,
+			showContextMenu: (_x, _y, value, label) => {
+				items = value;
+				title = label;
+			},
+			showCreateFolderDialog: () => {},
+			win: {}
+		}
 	);
 	assert.equal(title, 'Move project');
 	assert.equal(items[0].folderTree.selectedId, 'month');
@@ -69,23 +58,23 @@ test('project picker sends exact target IDs and keeps the current folder separat
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
 	const openedSettings = [];
-	vm.compileFunction(
-		functions.get('showProjectContextMenu') + '\nshowProjectContextMenu(event, null, "project-id", "Same name");',
-		['client', 'showContextMenu', 'event', 'showCreateFolderDialog', 'window']
-	)(
-		client,
-		(_x, _y, value) => {
-			items = value;
-		},
+	openProjectContextMenu(
 		{preventDefault() {}, stopPropagation() {}, clientX: 1, clientY: 1},
-		() => {},
+		'project-id',
 		{
-			__PROJECT_FOLDERS_VIEW__: {
-				adapter: {
-					navigate() {},
-					openProjectSettings: id => openedSettings.push(id)
-				},
-				renameProject() {}
+			client,
+			showContextMenu: (_x, _y, value) => {
+				items = value;
+			},
+			showCreateFolderDialog: () => {},
+			win: {
+				__PROJECT_FOLDERS_VIEW__: {
+					adapter: {
+						navigate() {},
+						openProjectSettings: id => openedSettings.push(id)
+					},
+					renameProject() {}
+				}
 			}
 		}
 	);
@@ -96,15 +85,11 @@ test('project picker sends exact target IDs and keeps the current folder separat
 });
 test('growing a menu near the lower-right corner keeps it inside the viewport', () => {
 	const menu = {_folderAnchor: {x: 299, y: 461}, offsetWidth: 250, offsetHeight: 230, style: {}};
-	const position = vm.compileFunction(
-		functions.get('positionContextMenu') + '\npositionContextMenu(menu);',
-		['window', 'menu']
-	);
-	const window = {innerWidth: 300, innerHeight: 462};
-	position(window, menu);
+	const viewport = {innerWidth: 300, innerHeight: 462};
+	positionContextMenu(menu, viewport);
 	assert.equal(menu.style.left, '42px');
 	assert.equal(menu.style.top, '224px');
 	menu.offsetHeight = 350;
-	position(window, menu);
+	positionContextMenu(menu, viewport);
 	assert.equal(menu.style.top, '104px', 'Expanded tree must move up, rather than leave the window');
 });

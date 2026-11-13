@@ -1,12 +1,17 @@
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement left-sidebar project folders (Folders), CLI manager, installer scripts, and remove right-panel sidecar prototype":
 // https://github.com/dmitry-ai/antigravity-addons/issues/3
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 const fs = require('fs');
+const os = require('node:os');
 const path = require('path');
 const crypto = require('node:crypto');
+const model = require('./folders-model');
 const revisions = new WeakMap();
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
-const PROJECTS_DIR = path.join(process.env.USERPROFILE || 'C:/Users/dfedi', '.gemini/config/projects').replace(/\\/g, '/');
+const PROJECTS_DIR = path.join(process.env.USERPROFILE || os.homedir(), '.gemini/config/projects').replace(/\\/g, '/');
 function loadAntigravityProjects() {
 	const r = [];
 	try {
@@ -118,42 +123,16 @@ function writeConfig(data, configPath = DEFAULT_CONFIG_PATH, {expectedHash = rev
 	}
 }
 function validateTree(folders) {
-	return require('./folders-model').validateFolders(folders);
+	return model.validateFolders(folders);
 }
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
 // https://github.com/dmitry-ai/antigravity-addons/issues/4
 function getDescendantIds(folderId, folders) {
-	const childrenMap = new Map();
-	for (const f of folders) {
-		const pid = f.parentId || null;
-		if (!childrenMap.has(pid)) {
-			childrenMap.set(pid, []);
-		}
-		childrenMap.get(pid).push(f.id);
-	}
-	const r = new Set();
-	function collect(id) {
-		const children = childrenMap.get(id) || [];
-		for (const cid of children) {
-			r.add(cid);
-			collect(cid);
-		}
-	}
-	collect(folderId);
-	return r;
+	return model.getDescendantIds(folderId, folders);
 }
 function getFolderPath(folderId, folders) {
-	const map = new Map(folders.map(f => [f.id, f]));
-	const parts = [];
-	let curr = map.get(folderId);
-	const seen = new Set();
-	while (curr && !seen.has(curr.id)) {
-		seen.add(curr.id);
-		parts.unshift(curr.name);
-		curr = curr.parentId ? map.get(curr.parentId) : null;
-	}
-	return parts.join(' / ');
+	return model.getFolderPath(folderId, folders);
 }
 function resolveFolder(query, configPath = DEFAULT_CONFIG_PATH) {
 	let r;
@@ -281,11 +260,10 @@ function addFolder(arg1, arg2 = null, arg3 = null, arg4 = '#10b981', configPath 
 		while (data.folders.some(f => id === f.id)) {
 			id = `${customId || slugify(name)}-${idCounter++}`;
 		}
-		const newFolder = {id, name, parentId, color, isExpanded: true};
-		data.folders.push(newFolder);
-		writeConfig(data, targetConfig);
+		const next = model.applyAction(data, {action: 'add-folder', id, name, parentId, color, isExpanded: true});
+		writeConfig(next, targetConfig, {expectedHash: revisions.get(data)});
 		console.log(`✅ Created folder "${name}" (ID: ${id}, Parent: ${parentId || 'root'}).`);
-		r = newFolder;
+		r = next.folders.find(f => id === f.id);
 	}
 	return r;
 }
@@ -299,23 +277,16 @@ function renameFolder(query, newName, configPath = DEFAULT_CONFIG_PATH) {
 			r = false;
 			break result;
 		}
-		const folder = data.folders.find(f => target.id === f.id);
-		if (!folder) {
-			console.error(`❌ Folder "${query}" not found.`);
-			r = false;
-			break result;
-		}
 		const cleanName = newName.trim();
-		const collision = data.folders.find(f => folder.id !== f.id && (folder.parentId || null) === (f.parentId || null) && cleanName.toLowerCase() === f.name.toLowerCase());
+		const collision = data.folders.find(f => target.id !== f.id && (target.parentId || null) === (f.parentId || null) && cleanName.toLowerCase() === f.name.toLowerCase());
 		if (collision) {
 			console.error(`❌ A folder named "${cleanName}" already exists in the same branch.`);
 			r = false;
 			break result;
 		}
-		const oldName = folder.name;
-		folder.name = cleanName;
-		writeConfig(data, configPath);
-		console.log(`✅ Folder "${oldName}" renamed to "${cleanName}" (ID: ${folder.id}).`);
+		const next = model.applyAction(data, {action: 'rename-folder', id: target.id, newName: cleanName});
+		writeConfig(next, configPath, {expectedHash: revisions.get(data)});
+		console.log(`✅ Folder "${target.name}" renamed to "${cleanName}" (ID: ${target.id}).`);
 		r = true;
 	}
 	return r;
@@ -344,8 +315,7 @@ function moveFolder(query, newParentQuery, configPath = DEFAULT_CONFIG_PATH) {
 			console.error(`❌ Cannot move folder "${folder.name}" into itself.`);
 			throw new Error('Cannot move folder into itself');
 		}
-		const descendants = getDescendantIds(folder.id, data.folders);
-		if (descendants.has(newParentId)) {
+		if (getDescendantIds(folder.id, data.folders).has(newParentId)) {
 			console.error(`❌ Cannot move folder "${folder.name}" into its own subfolder (cycle detected).`);
 			throw new Error('Cannot move folder into its own descendant (cycle detected)');
 		}
@@ -354,16 +324,9 @@ function moveFolder(query, newParentQuery, configPath = DEFAULT_CONFIG_PATH) {
 			console.error(`❌ Target folder already contains an item named "${folder.name}".`);
 			throw new Error(`Sibling folder name collision in destination: "${folder.name}"`);
 		}
-		const oldParent = folder.parentId;
-		const targetFolder = data.folders.find(f => folder.id === f.id);
-		if (!targetFolder) {
-			console.error(`❌ Folder "${query}" not found in configuration.`);
-			r = false;
-			break result;
-		}
-		targetFolder.parentId = newParentId;
-		writeConfig(data, configPath);
-		console.log(`✅ Folder "${folder.name}" moved: ${oldParent || 'root'} ➔ ${newParentId || 'root'}.`);
+		const next = model.applyAction(data, {action: 'move-folder', id: folder.id, newParentId});
+		writeConfig(next, configPath, {expectedHash: revisions.get(data)});
+		console.log(`✅ Folder "${folder.name}" moved: ${folder.parentId || 'root'} ➔ ${newParentId || 'root'}.`);
 		r = true;
 	}
 	return r;
@@ -379,30 +342,11 @@ function removeFolder(query, configPath = DEFAULT_CONFIG_PATH) {
 			break result;
 		}
 		const id = folder.id;
-		const name = folder.name;
-		const parentId = folder.parentId || null;
-		let promotedFoldersCount = 0;
-		for (const f of data.folders) {
-			if (id === f.parentId) {
-				f.parentId = parentId;
-				promotedFoldersCount++;
-			}
-		}
-		let promotedProjectsCount = 0;
-		for (const [projId, fId] of Object.entries(data.projectFolderMap)) {
-			if (id === fId) {
-				if (!parentId) {
-					delete data.projectFolderMap[projId];
-				}
-				else {
-					data.projectFolderMap[projId] = parentId;
-				}
-				promotedProjectsCount++;
-			}
-		}
-		data.folders = data.folders.filter(f => id !== f.id);
-		writeConfig(data, configPath);
-		console.log(`✅ Folder "${name}" (${id}) deleted. Promoted subfolders: ${promotedFoldersCount}, projects: ${promotedProjectsCount}.`);
+		const promotedFoldersCount = data.folders.filter(f => id === f.parentId).length;
+		const promotedProjectsCount = Object.values(data.projectFolderMap).filter(fId => id === fId).length;
+		const next = model.applyAction(data, {action: 'remove-folder', id});
+		writeConfig(next, configPath, {expectedHash: revisions.get(data)});
+		console.log(`✅ Folder "${folder.name}" (${id}) deleted. Promoted subfolders: ${promotedFoldersCount}, projects: ${promotedProjectsCount}.`);
 		r = true;
 	}
 	return r;
@@ -423,8 +367,8 @@ function assignProject(projQuery, folderQuery, configPath = DEFAULT_CONFIG_PATH)
 			break result;
 		}
 		const data = readConfig(configPath);
-		data.projectFolderMap[project.id] = folder.id;
-		writeConfig(data, configPath);
+		const next = model.applyAction(data, {action: 'assign-project', projectId: project.id, folderId: folder.id});
+		writeConfig(next, configPath, {expectedHash: revisions.get(data)});
 		console.log(`✅ Project "${project.name}" added to folder "${folder.name}".`);
 		r = true;
 	}
@@ -447,8 +391,8 @@ function unassignProject(projQuery, configPath = DEFAULT_CONFIG_PATH) {
 		}
 		const oldFolderId = data.projectFolderMap[project.id];
 		const oldFolder = data.folders.find(f => oldFolderId === f.id);
-		delete data.projectFolderMap[project.id];
-		writeConfig(data, configPath);
+		const next = model.applyAction(data, {action: 'unassign-project', projectId: project.id});
+		writeConfig(next, configPath, {expectedHash: revisions.get(data)});
 		console.log(`✅ Project "${project.name}" removed from folder "${oldFolder?.name || oldFolderId}" (moved to root).`);
 		r = true;
 	}
@@ -476,8 +420,8 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
 	console.log('\n📁 Antigravity 2.0 Folder Hierarchy:\n');
 	function printBranch(folder, depth = 0) {
 		const indent = '    '.repeat(depth);
-		const projs = (projectsInFolder.get(folder.id) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'}));
-		const subs = (childrenMap.get(folder.id) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'}));
+		const projs = (projectsInFolder.get(folder.id) || []).slice().sort(model.compare);
+		const subs = (childrenMap.get(folder.id) || []).slice().sort(model.compare);
 		console.log(`${indent}▾ 📁 ${folder.name} [ID: ${folder.id}] (${projs.length} projects)`);
 		for (const sub of subs) {
 			printBranch(sub, depth + 1);
@@ -489,14 +433,14 @@ function listAll(configPath = DEFAULT_CONFIG_PATH) {
 			console.log(`${indent}    (empty folder)`);
 		}
 	}
-	const roots = (childrenMap.get(null) || []).slice().sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'}));
+	const roots = (childrenMap.get(null) || []).slice().sort(model.compare);
 	for (const rootFolder of roots) {
 		printBranch(rootFolder, 0);
 	}
 	const assigned = new Set(Object.keys(data.projectFolderMap));
 	const unassigned = allProjects
-		.filter(p => !assigned.has(p.id) && 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40' !== p.id)
-		.sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'}));
+		.filter(p => !assigned.has(p.id) && model.INTERNAL_PROJECT_ID !== p.id)
+		.sort(model.compare);
 	if (0 < unassigned.length) {
 		console.log(`\n📂 Unassigned projects (at root, ${unassigned.length}):`);
 		unassigned.forEach(p => console.log(`    ↳ ${p.name}`));
@@ -508,8 +452,8 @@ function listProjects(configPath = DEFAULT_CONFIG_PATH) {
 	const allProjects = loadAntigravityProjects();
 	console.log('\n📋 All Antigravity Projects:\n');
 	allProjects
-		.filter(p => 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40' !== p.id)
-		.sort((a, b) => (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'}))
+		.filter(p => model.INTERNAL_PROJECT_ID !== p.id)
+		.sort(model.compare)
 		.forEach(p => {
 			const fId = data.projectFolderMap[p.id];
 			const folderPathStr = fId ? `📁 ${getFolderPath(fId, data.folders)}` : '— (unassigned)';

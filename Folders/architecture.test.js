@@ -1,6 +1,9 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -10,6 +13,7 @@ const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
 const {FoldersStore} = require('./folders-store');
+const {createReadConfig} = require('./folders-view');
 const config = () => ({
 	folders: [
 		{id: 'root', name: 'Work', parentId: null},
@@ -391,14 +395,11 @@ test('Subagent snapshots do not appear as duplicate root conversations in the pr
 // "Add Project settings action to project context menu in Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/17
 test('folders-view readConfig coalesces concurrent polls so a restarting companion never queues duplicate 15s requests', async () => {
-	const vm = require('node:vm');
-	const viewSource = fs.readFileSync(path.join(__dirname, 'folders-view.js'), 'utf8');
-	const match = /let configPromise = null;[\s\S]*?return configPromise;\s*\};/.exec(viewSource);
-	assert.ok(match, 'folders-view.js must define coalesced readConfig');
 	let getCalls = 0;
 	let releaseGet;
 	const statuses = [];
-	const sandbox = {
+	const state = {haveConfig: false, revision: ''};
+	const readConfig = createReadConfig({
 		window: {
 			__ANTIGRAVITY_TOOLS_REQUEST__: (_tool, message) => {
 				if ('GET' === message.method) {
@@ -410,23 +411,37 @@ test('folders-view readConfig coalesces concurrent polls so a restarting compani
 			}
 		},
 		model,
-		state: {haveConfig: false, revision: ''},
+		state,
 		client: {notifyUpdate() {}},
 		status: (channel, err) => statuses.push([channel, err])
-	};
-	vm.createContext(sandbox);
-	const readConfig = vm.runInContext(`${match[0]}\nreadConfig;`, sandbox);
+	});
 	const p1 = readConfig();
 	const p2 = readConfig();
 	const p3 = readConfig();
 	assert.equal(getCalls, 1, 'Concurrent polls while GET is in-flight must share one storage request');
 	releaseGet();
 	await Promise.all([p1, p2, p3]);
-	assert.equal(sandbox.state.haveConfig, true);
-	assert.equal(sandbox.state.revision, 'rev-coalesced');
+	assert.equal(state.haveConfig, true);
+	assert.equal(state.revision, 'rev-coalesced');
 	assert.deepEqual(statuses, [['folders', null]]);
 	const p4 = readConfig();
 	assert.equal(getCalls, 2, 'Subsequent poll after completion issues a fresh GET');
 	releaseGet();
 	await p4;
+});
+test('folders-manager CRUD operations delegate to folders-model and preserve metadata and tree invariants', context => {
+	const {filename} = scratch(context);
+	const added = manager.addFolder({name: 'Child', parentId: 'two'}, filename);
+	assert.ok(added.id);
+	assert.equal(manager.getFolderPath(added.id, manager.readConfig(filename).folders), 'Work / 2 / Child');
+	assert.deepEqual([...manager.getDescendantIds('root', manager.readConfig(filename).folders)].sort(), [added.id, 'ten', 'two'].sort());
+	assert.equal(manager.renameFolder(added.id, 'Child Renamed', filename), true);
+	assert.equal(manager.moveFolder(added.id, 'ten', filename), true);
+	assert.throws(() => manager.moveFolder('root', added.id, filename), /cycle/i);
+	assert.equal(manager.assignProject('p9', added.id, filename), true);
+	assert.equal(manager.removeFolder('ten', filename), true);
+	const after = manager.readConfig(filename);
+	assert.equal(after.folders.find(f => added.id === f.id).parentId, 'root');
+	assert.equal(manager.unassignProject('p9', filename), true);
+	assert.deepEqual(manager.readConfig(filename).futureMetadata, {preserve: true});
 });
