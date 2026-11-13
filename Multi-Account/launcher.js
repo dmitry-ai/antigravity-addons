@@ -13,11 +13,15 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {readProfiles} = require('./profiles');
 const {CDP} = require('../Upgrade/cdp-client');
+const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const {bootstrap} = require('./main-bootstrap');
 const {ensureSharedSkills} = require('./skills-manifest');
 const {isLockfileHeld} = require('./update-guard');
@@ -227,31 +231,23 @@ const activateExisting = async (profile, options = {}) => {
 		}
 	}
 	if (!r && 'A0' === profile.id && locked(profile.userDataDir) && 'function' === typeof request) {
-		try {
-			const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
-			const port = Number(fileSystem.readFileSync(portFile, 'utf8').split(/\r?\n/)[0]);
-			if (Number.isInteger(port) && 0 < port && 65536 > port) {
-				const version = await (await request(`http://127.0.0.1:${port}/json/version`, {signal: AbortSignal.timeout(2000)})).json();
-				const targets = await (await request(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)})).json();
-				if (/Antigravity\//.test(version?.['User-Agent'] || '') && Array.isArray(targets)) {
-					const pages = targets.filter(target => 'page' === target?.type && /^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(target.url || '') && /^ws:\/\/(127\.0\.0\.1|localhost):\d+\//.test(target.webSocketDebuggerUrl || ''));
-					for (const page of pages) {
-						const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
-						try {
-							await pageCdp.call('Page.bringToFront');
-						}
-						finally {
-							pageCdp.close();
-						}
+		const endpoint = await probeProfileEndpoint(profile, {fetch: request, fs: fileSystem});
+		if ('available' === endpoint.state && endpoint.pages.length) {
+			try {
+				for (const page of endpoint.pages) {
+					const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
+					try {
+						await pageCdp.call('Page.bringToFront');
 					}
-					if (pages.length) {
-						r = {id: profile.id, port, windows: pages.length};
+					finally {
+						pageCdp.close();
 					}
 				}
+				r = {id: profile.id, port: endpoint.port, windows: endpoint.pages.length};
 			}
-		}
-		catch {
-			r = null;
+			catch {
+				r = null;
+			}
 		}
 	}
 	return r;

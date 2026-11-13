@@ -1,9 +1,13 @@
 // 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const path = require('node:path');
 const less = require('../Upgrade/node_modules/less');
+const {writeFileAtomic} = require('../Upgrade/process-io');
 const input = path.join(__dirname, 'style.less');
 const output = path.join(__dirname, 'style.css');
 let queue = Promise.resolve();
@@ -14,14 +18,7 @@ const build = ({dryRun = false} = {}) => {
 		const css = header + compiled.css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^(?: {2})+/gm, indentation => '\t'.repeat(indentation.length / 2)).split('\n').filter(line => line.trim()).join('\n') + '\n';
 		const changed = !fs.existsSync(output) || css !== fs.readFileSync(output, 'utf8');
 		if (!dryRun && changed) {
-			const temporary = `${output}.${process.pid}.tmp`;
-			try {
-				fs.writeFileSync(temporary, css, 'utf8');
-				fs.renameSync(temporary, output);
-			}
-			finally {
-				fs.rmSync(temporary, {force: true});
-			}
+			writeFileAtomic(output, css);
 		}
 		return {changed, css, inputs: [input, ...compiled.imports], output};
 	};

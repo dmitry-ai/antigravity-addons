@@ -1,10 +1,14 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {CDP} = require('./cdp-client');
+const {isPidAlive, writeFileAtomic} = require('./process-io');
 const registry = require('./registry');
 const {shellProbe, isShell} = require('./antigravity-shell');
 const {discoverEndpoints} = require('./profile-endpoints');
@@ -17,7 +21,7 @@ const binding = '__antigravityToolsCall';
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
 const runtimeVersion = () => {
-	const core = ['cdp-companion.js', 'cdp-client.js', 'registry.js', 'antigravity-shell.js', 'profile-endpoints.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json', '../Multi-Account/main-bootstrap.js', '../Multi-Account/window-identity.js', '../Multi-Account/update-guard.js'].map(filename => path.join(__dirname, filename));
+	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'registry.js', 'runtime-health.js', '../Multi-Account/profiles.js', '../Multi-Account/profiles.json'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
@@ -38,53 +42,10 @@ class Companion {
 		this.connections = new Map();
 		this.modules = new Map();
 		this.errors = {};
+		this.generation = 1;
 		this.instance = crypto.randomUUID();
 		this.version = runtimeVersion();
 		this.stopped = false;
-	}
-	writeState(state, extra = {}) {
-		const record = {
-			schemaVersion: 1,
-			instance: this.instance,
-			version: this.version,
-			pid: process.pid,
-			runtimePath: __filename,
-			state,
-			updated: new Date().toISOString(),
-			windows: this.connections.size,
-			profiles: this.profileStates || [],
-			tools: [...this.modules.keys()],
-			errors: this.errors,
-			...extra
-		};
-		const filename = path.join(this.root, 'runtime.json');
-		const temporary = filename + '.tmp';
-		fs.writeFileSync(temporary, JSON.stringify(record, null, 2));
-		fs.renameSync(temporary, filename);
-	}
-	async broadcast(source) {
-		await Promise.allSettled([...this.connections.values()].filter(item => item.shell).map(item => item.cdp.evaluate(source)));
-	}
-	loadModules() {
-		for (const tool of registry.discover()) {
-			if (!tool.cdp) {
-				throw Error(`Tool ${tool.id} has no CDP runtime adapter`);
-			}
-			const runtime = require(tool.cdp)({
-				stateRoot: this.root,
-				broadcast: source => this.broadcast(source),
-				report: message => {
-					if (message) {
-						this.errors[tool.id] = message;
-					}
-					else {
-						delete this.errors[tool.id];
-					}
-					void this.broadcast(`window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`);
-				}
-			});
-			this.modules.set(tool.id, runtime);
-		}
 	}
 	async attach(target) {
 		const cdp = await CDP.open(target.webSocketDebuggerUrl);
@@ -97,6 +58,8 @@ class Companion {
 			email: target.email,
 			sources: new Map(),
 			sheets: new Map(),
+			pending: [],
+			bootstrappedGeneration: 0,
 			shell: false,
 			booting: false
 		};
@@ -119,6 +82,8 @@ class Companion {
 				r.contextId = null;
 				r.sources.clear();
 				r.sheets.clear();
+				r.pending = [];
+				r.bootstrappedGeneration = 0;
 				r.shell = false;
 			});
 			cdp.on('Page.frameNavigated', ({frame: nextFrame}) => {
@@ -126,6 +91,8 @@ class Companion {
 					r.frameId = nextFrame.id;
 					r.sources.clear();
 					r.sheets.clear();
+					r.pending = [];
+					r.bootstrappedGeneration = 0;
 				}
 			});
 			cdp.on('Page.domContentEventFired', () => {
@@ -144,7 +111,6 @@ class Companion {
 			await cdp.call('CSS.enable');
 			await cdp.call('Runtime.addBinding', {name: binding});
 			await this.bootstrap(r);
-			return r;
 		}
 		catch (error) {
 			cdp.close();
@@ -152,6 +118,82 @@ class Companion {
 				this.connections.delete(key);
 			}
 			throw error;
+		}
+		return r;
+	}
+	async bootstrap(connection) {
+		if (!connection.booting && !connection.cdp.closed) {
+			connection.booting = true;
+			try {
+				const info = await connection.cdp.evaluate(shellProbe);
+				if (isShell(info)) {
+					connection.shell = true;
+					const activeIds = [...this.modules.keys()];
+					await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_PROFILE__=${JSON.stringify({id: connection.profileId, email: connection.email})};(()=>{const active=${JSON.stringify(activeIds)},unload=window.__ANTIGRAVITY_TOOLS_UNLOAD__;if(unload){for(const [id,fn] of Object.entries(unload)){if(!active.includes(id)){fn();delete unload[id];}}}})()`);
+					await connection.cdp.evaluate(bridgeSource);
+					const styles = [...this.modules.values()].filter(runtime => runtime.styleSheet).map(runtime => runtime.styleSheet()).join('\n');
+					const styleHash = crypto.createHash('sha256').update(styles).digest('hex');
+					if (connection.sources.get(':styles') !== styleHash) {
+						let sheet = connection.sheets.get(':styles');
+						if (!sheet) {
+							sheet = (await connection.cdp.call('CSS.createStyleSheet', {frameId: connection.frameId, force: true})).styleSheetId;
+							connection.sheets.set(':styles', sheet);
+						}
+						await connection.cdp.call('CSS.setStyleSheetText', {styleSheetId: sheet, text: styles});
+						connection.sources.set(':styles', styleHash);
+					}
+					const pending = [];
+					for (const [id, runtime] of this.modules) {
+						if (runtime.source) {
+							const source = runtime.source();
+							const hash = crypto.createHash('sha256').update(source).digest('hex');
+							if (connection.sources.get(id) !== hash) {
+								const registerUnload = runtime.disposeExpression ? `;(window.__ANTIGRAVITY_TOOLS_UNLOAD__||={})[${JSON.stringify(id)}]=()=>{${runtime.disposeExpression}};` : '';
+								const attached = await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_INSPECTOR_STYLES__=true${registerUnload}\n${source}`);
+								if (false === attached?.attached) {
+									pending.push({id, reason: attached.reason});
+								}
+								else {
+									connection.sources.set(id, hash);
+								}
+							}
+						}
+					}
+					connection.pending = pending;
+					connection.bootstrappedGeneration = this.generation;
+					await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_STATUS__=${JSON.stringify({architecture: 1, tools: activeIds, pending, stylesHash: styleHash})}`);
+					delete this.errors[connection.id];
+				}
+			}
+			finally {
+				connection.booting = false;
+			}
+		}
+	}
+	async broadcast(source) {
+		await Promise.allSettled([...this.connections.values()].filter(item => item.shell).map(item => item.cdp.evaluate(source)));
+	}
+	async dispose() {
+		if (!this.stopped) {
+			this.stopped = true;
+			clearTimeout(this.timer);
+			await Promise.allSettled([...this.connections.values()].filter(connection => connection.shell).map(async connection => {
+				await connection.cdp.evaluate('for(const fn of Object.values(window.__ANTIGRAVITY_TOOLS_UNLOAD__||{}))fn();delete window.__ANTIGRAVITY_TOOLS_UNLOAD__;delete window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__;delete window.__ANTIGRAVITY_TOOLS_REQUEST__;delete window.__ANTIGRAVITY_TOOLS_RETRY__;delete window.__ANTIGRAVITY_TOOLS_DELIVER__;delete window.__ANTIGRAVITY_TOOLS_STATUS__;');
+				const sheet = connection.sheets.get(':styles');
+				if (sheet) {
+					await connection.cdp.call('CSS.setStyleSheetText', {styleSheetId: sheet, text: ''});
+				}
+			}));
+			for (const connection of this.connections.values()) {
+				connection.cdp.close();
+			}
+			this.connections.clear();
+			for (const runtime of this.modules.values()) {
+				runtime.dispose?.();
+			}
+			this.modules.clear();
+			this.writeState('stopped');
+			fs.rmSync(path.join(this.root, 'instance.lock'), {force: true});
 		}
 	}
 	async handleRequest(connection, event) {
@@ -174,53 +216,80 @@ class Companion {
 			await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_DELIVER__?.(${JSON.stringify(reply)})`);
 		}
 	}
-	async bootstrap(connection) {
-		if (!connection.booting && !connection.cdp.closed) {
-			connection.booting = true;
-			try {
-				const info = await connection.cdp.evaluate(shellProbe);
-				if (isShell(info)) {
-					connection.shell = true;
-					await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_PROFILE__=${JSON.stringify({id: connection.profileId, email: connection.email})}`);
-					await connection.cdp.evaluate(bridgeSource);
-					if (!this.modules.has('folders')) {
-						await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;');
+	invalidate() {
+		this.generation++;
+	}
+	loadModules() {
+		for (const tool of registry.discover()) {
+			if (!tool.cdp) {
+				throw Error(`Tool ${tool.id} has no CDP runtime adapter`);
+			}
+			const runtime = require(tool.cdp)({
+				stateRoot: this.root,
+				broadcast: source => this.broadcast(source),
+				invalidate: () => this.invalidate(),
+				report: message => {
+					if (!message) {
+						delete this.errors[tool.id];
 					}
-					const styles = [...this.modules.values()].filter(runtime => runtime.styleSheet).map(runtime => runtime.styleSheet()).join('\n');
-					const styleHash = crypto.createHash('sha256').update(styles).digest('hex');
-					if (connection.sources.get(':styles') !== styleHash) {
-						let sheet = connection.sheets.get(':styles');
-						if (!sheet) {
-							sheet = (await connection.cdp.call('CSS.createStyleSheet', {frameId: connection.frameId, force: true})).styleSheetId;
-							connection.sheets.set(':styles', sheet);
-						}
-						await connection.cdp.call('CSS.setStyleSheetText', {styleSheetId: sheet, text: styles});
-						connection.sources.set(':styles', styleHash);
+					else {
+						this.errors[tool.id] = message;
 					}
-					const pending = [];
-					for (const [id, runtime] of this.modules) {
-						if (runtime.source) {
-							const source = runtime.source();
-							const hash = crypto.createHash('sha256').update(source).digest('hex');
-							if (connection.sources.get(id) !== hash) {
-								const attached = await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_INSPECTOR_STYLES__=true;\n${source}`);
-								if (false === attached?.attached) {
-									pending.push({id, reason: attached.reason});
-								}
-								else {
-									connection.sources.set(id, hash);
-								}
-							}
+					for (const item of this.modules.values()) {
+						if (item.reportExpression) {
+							void this.broadcast(item.reportExpression(message));
 						}
 					}
-					await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_STATUS__=${JSON.stringify({architecture: 1, tools: [...this.modules.keys()], pending, stylesHash: styleHash})}`);
-					delete this.errors[connection.id];
 				}
-			}
-			finally {
-				connection.booting = false;
-			}
+			});
+			this.modules.set(tool.id, runtime);
 		}
+	}
+	async start() {
+		let r = false;
+		result: {
+			fs.mkdirSync(this.root, {recursive: true});
+			const lockfile = path.join(this.root, 'instance.lock');
+			if (fs.existsSync(lockfile)) {
+				const previous = JSON.parse(fs.readFileSync(lockfile, 'utf8'));
+				if (isPidAlive(previous.pid)) {
+					break result;
+				}
+				fs.rmSync(lockfile);
+			}
+			fs.writeFileSync(lockfile, JSON.stringify({pid: process.pid, instance: this.instance}), {flag: 'wx'});
+			try {
+				this.loadModules();
+			}
+			catch (error) {
+				for (const runtime of this.modules.values()) {
+					runtime.dispose?.();
+				}
+				this.modules.clear();
+				this.errors.runtime = error.message;
+				this.writeState('error');
+				fs.rmSync(lockfile, {force: true});
+				throw error;
+			}
+			this.writeState('starting');
+			const cycle = async () => {
+				if (!this.stopped) {
+					try {
+						await this.tick();
+					}
+					catch (error) {
+						this.errors.runtime = error.message;
+						this.writeState('error');
+					}
+					if (!this.stopped) {
+						this.timer = setTimeout(cycle, 1500);
+					}
+				}
+			};
+			await cycle();
+			r = true;
+		}
+		return r;
 	}
 	async tick() {
 		result: {
@@ -265,7 +334,7 @@ class Companion {
 					if (!connection || connection.cdp.closed) {
 						await this.attach(page);
 					}
-					else {
+					else if (!connection.shell || connection.pending?.length || connection.bootstrappedGeneration !== this.generation) {
 						await this.bootstrap(connection);
 					}
 				}
@@ -283,80 +352,22 @@ class Companion {
 			this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : pages.length ? 'waiting-for-shell' : 'waiting-for-antigravity');
 		}
 	}
-	async start() {
-		let r = false;
-		result: {
-			fs.mkdirSync(this.root, {recursive: true});
-			const lockfile = path.join(this.root, 'instance.lock');
-			if (fs.existsSync(lockfile)) {
-				const previous = JSON.parse(fs.readFileSync(lockfile, 'utf8'));
-				try {
-					process.kill(previous.pid, 0);
-					break result;
-				}
-				catch (error) {
-					if ('ESRCH' !== error.code) {
-						throw error;
-					}
-				}
-				fs.rmSync(lockfile);
-			}
-			fs.writeFileSync(lockfile, JSON.stringify({pid: process.pid, instance: this.instance}), {flag: 'wx'});
-			try {
-				this.loadModules();
-			}
-			catch (error) {
-				for (const runtime of this.modules.values()) {
-					runtime.dispose?.();
-				}
-				this.modules.clear();
-				this.errors.runtime = error.message;
-				this.writeState('error');
-				fs.rmSync(lockfile, {force: true});
-				throw error;
-			}
-			this.writeState('starting');
-			const cycle = async () => {
-				if (!this.stopped) {
-					try {
-						await this.tick();
-					}
-					catch (error) {
-						this.errors.runtime = error.message;
-						this.writeState('error');
-					}
-					if (!this.stopped) {
-						this.timer = setTimeout(cycle, 1500);
-					}
-				}
-			};
-			await cycle();
-			r = true;
-		}
-		return r;
-	}
-	async dispose() {
-		if (!this.stopped) {
-			this.stopped = true;
-			clearTimeout(this.timer);
-			await Promise.allSettled([...this.connections.values()].filter(connection => connection.shell).map(async connection => {
-				await connection.cdp.evaluate('window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;delete window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__;delete window.__ANTIGRAVITY_TOOLS_REQUEST__;delete window.__ANTIGRAVITY_TOOLS_RETRY__;delete window.__ANTIGRAVITY_TOOLS_DELIVER__;delete window.__ANTIGRAVITY_TOOLS_STATUS__;');
-				const sheet = connection.sheets.get(':styles');
-				if (sheet) {
-					await connection.cdp.call('CSS.setStyleSheetText', {styleSheetId: sheet, text: ''});
-				}
-			}));
-			for (const connection of this.connections.values()) {
-				connection.cdp.close();
-			}
-			this.connections.clear();
-			for (const runtime of this.modules.values()) {
-				runtime.dispose?.();
-			}
-			this.modules.clear();
-			this.writeState('stopped');
-			fs.rmSync(path.join(this.root, 'instance.lock'), {force: true});
-		}
+	writeState(state, extra = {}) {
+		const record = {
+			schemaVersion: 1,
+			instance: this.instance,
+			version: this.version,
+			pid: process.pid,
+			runtimePath: __filename,
+			state,
+			updated: new Date().toISOString(),
+			windows: this.connections.size,
+			profiles: this.profileStates || [],
+			tools: [...this.modules.keys()],
+			errors: this.errors,
+			...extra
+		};
+		writeFileAtomic(path.join(this.root, 'runtime.json'), JSON.stringify(record, null, 2));
 	}
 }
 if (module === require.main) {

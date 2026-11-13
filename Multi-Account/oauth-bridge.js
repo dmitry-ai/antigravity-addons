@@ -1,6 +1,9 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const callbackCode = (targets, pending) => {
 	let r = null;
 	result: {
@@ -32,27 +35,17 @@ const callbackCode = (targets, pending) => {
 	return r;
 };
 const {CDP} = require('../Upgrade/cdp-client');
+const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const refreshInitialPage = async ({id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
 		throw Error('Only a managed secondary profile can refresh its initial page');
 	}
 	await new Promise(resolve => setTimeout(resolve, 1500));
-	const fs = require('node:fs');
-	const path = require('node:path');
-	const port = Number(fs.readFileSync(path.join(userDataDir, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0]);
-	if (!Number.isInteger(port) || 1 > port || 65535 < port) {
-		throw Error('Invalid A6 browser endpoint');
+	const endpoint = await probeProfileEndpoint({id, userDataDir});
+	if ('available' !== endpoint.state) {
+		throw Error(endpoint.error || 'Invalid A6 browser endpoint');
 	}
-	const base = `http://127.0.0.1:${port}`;
-	const version = await (await fetch(base + '/json/version', {signal: AbortSignal.timeout(2000)})).json();
-	if (!/Antigravity\//.test(version['User-Agent'] || '')) {
-		throw Error('A6 endpoint is not Antigravity');
-	}
-	const targets = await (await fetch(base + '/json/list', {signal: AbortSignal.timeout(2000)})).json();
-	for (const target of targets) {
-		if ('page' !== target.type || !/^https:\/\/(127\.0\.0\.1|localhost):\d+\//.test(target.url)) {
-			continue;
-		}
+	for (const target of endpoint.pages) {
 		const cdp = await CDP.open(target.webSocketDebuggerUrl);
 		try {
 			const empty = await cdp.evaluate("document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())");

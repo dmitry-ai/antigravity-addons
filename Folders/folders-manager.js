@@ -4,10 +4,14 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('fs');
 const os = require('node:os');
 const path = require('path');
 const crypto = require('node:crypto');
+const {writeFileAtomic} = require('../Upgrade/process-io');
 const model = require('./folders-model');
 const revisions = new WeakMap();
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
@@ -89,38 +93,24 @@ function readConfig(configPath = DEFAULT_CONFIG_PATH) {
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
 function writeConfig(data, configPath = DEFAULT_CONFIG_PATH, {expectedHash = revisions.get(data)} = {}) {
 	validateTree(data.folders);
-	const dir = path.dirname(configPath);
-	if (!fs.existsSync(dir)) {
-		fs.mkdirSync(dir, {recursive: true});
+	const previousText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+	const newline = previousText.includes('\r\n') ? '\r\n' : '\n';
+	let text = JSON.stringify(data, null, '\t').replace(/\n/g, newline);
+	if (previousText.endsWith('\n')) {
+		text += newline;
 	}
-	const temporary = path.join(dir, `.${path.basename(configPath)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
-	try {
-		const previousText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
-		const newline = previousText.includes('\r\n') ? '\r\n' : '\n';
-		let text = JSON.stringify(data, null, '\t').replace(/\n/g, newline);
-		if (previousText.endsWith('\n')) {
-			text += newline;
-		}
-		if (previousText.startsWith('\uFEFF')) {
-			text = '\uFEFF' + text;
-		}
-		const descriptor = fs.openSync(temporary, 'wx');
-		try {
-			fs.writeFileSync(descriptor, text);
-			fs.fsyncSync(descriptor);
-		}
-		finally {
-			fs.closeSync(descriptor);
-		}
-		if (expectedHash && (!fs.existsSync(configPath) || expectedHash !== crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex'))) {
-			throw Error('Folders configuration changed concurrently; reload it and retry');
-		}
-		fs.renameSync(temporary, configPath);
-		revisions.set(data, crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex'));
+	if (previousText.startsWith('\uFEFF')) {
+		text = '\uFEFF' + text;
 	}
-	finally {
-		fs.rmSync(temporary, {force: true});
-	}
+	writeFileAtomic(configPath, text, {
+		sync: true,
+		beforeRename: () => {
+			if (expectedHash && (!fs.existsSync(configPath) || expectedHash !== crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex'))) {
+				throw Error('Folders configuration changed concurrently; reload it and retry');
+			}
+		}
+	});
+	revisions.set(data, crypto.createHash('sha256').update(fs.readFileSync(configPath)).digest('hex'));
 }
 function validateTree(folders) {
 	return model.validateFolders(folders);

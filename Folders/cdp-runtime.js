@@ -1,17 +1,42 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const path = require('node:path');
 const fs = require('node:fs');
+const {writeFileAtomic} = require('../Upgrade/process-io');
 const {FoldersStore} = require('./folders-store');
-const {rendererSource} = require('./renderer-source');
-module.exports = ({broadcast, stateRoot = path.join(__dirname, 'state')}) => {
+const {filenames, rendererSource} = require('./renderer-source');
+const disposeExpression = 'window.__PROJECT_FOLDERS_VIEW__?.dispose();window.__PROJECT_FOLDERS_CLIENT__?.dispose?.();delete window.__FOLDERS_RUNTIME_VERSION__;';
+const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'missing',reason:'Folders runtime is not attached'}";
+const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
+const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.join(__dirname, 'state')}) => {
 	const store = new FoldersStore(path.join(__dirname, 'folders.json'));
 	const viewFile = path.join(stateRoot, 'folders-view.json');
-	store.on('change', snapshot => broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_CLIENT__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`));
+	const watchedNames = new Set([...filenames, 'folders-view.css']);
+	let watchTimer;
+	const assetWatcher = fs.watch(__dirname, (_event, name) => {
+		if (null === name || watchedNames.has(String(name))) {
+			clearTimeout(watchTimer);
+			watchTimer = setTimeout(() => invalidate?.(), 75);
+		}
+	});
+	assetWatcher.on('error', error => report?.(error.message));
+	store.on('change', snapshot => {
+		invalidate?.();
+		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_CLIENT__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
+	});
 	return {
-		styleSheet: () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8'),
-		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}),
+		dispose: () => {
+			clearTimeout(watchTimer);
+			assetWatcher.close();
+			store.dispose();
+		},
+		disposeExpression,
+		inspectExpression,
+		reportExpression,
 		request(message) {
 			let r;
 			if ('GET_VIEW_STATE' === message.method) {
@@ -23,9 +48,7 @@ module.exports = ({broadcast, stateRoot = path.join(__dirname, 'state')}) => {
 					throw Error('Invalid folder view state');
 				}
 				const data = {schemaVersion: 1, collapsed};
-				fs.mkdirSync(stateRoot, {recursive: true});
-				fs.writeFileSync(viewFile + '.tmp', JSON.stringify(data));
-				fs.renameSync(viewFile + '.tmp', viewFile);
+				writeFileAtomic(viewFile, JSON.stringify(data));
 				broadcast(`window.dispatchEvent(new CustomEvent('antigravity-folders-view-state',{detail:${JSON.stringify(data)}}))`);
 				r = data;
 			}
@@ -44,6 +67,11 @@ module.exports = ({broadcast, stateRoot = path.join(__dirname, 'state')}) => {
 			}
 			return r;
 		},
-		dispose: () => store.dispose()
+		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {includeStyle: false}),
+		styleSheet: () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8')
 	};
 };
+createFoldersRuntime.disposeExpression = disposeExpression;
+createFoldersRuntime.inspectExpression = inspectExpression;
+createFoldersRuntime.reportExpression = reportExpression;
+module.exports = createFoldersRuntime;

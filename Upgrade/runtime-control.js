@@ -1,34 +1,17 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {stateRoot, runtimeVersion} = require('./cdp-companion');
+const {isPidAlive, readJsonSafe, writeFileAtomic} = require('./process-io');
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-const readState = (root = stateRoot) => {
-	let r = null;
-	try {
-		r = JSON.parse(fs.readFileSync(path.join(root, 'runtime.json'), 'utf8'));
-	}
-	catch {
-		r = null;
-	}
-	return r;
-};
-const alive = state => {
-	let r = false;
-	if (state?.pid) {
-		try {
-			process.kill(state.pid, 0);
-			r = 'stopped' !== state.state && 30000 > Date.now() - Date.parse(state.updated);
-		}
-		catch {
-			r = false;
-		}
-	}
-	return r;
-};
+const readState = (root = stateRoot) => readJsonSafe(path.join(root, 'runtime.json'));
+const alive = state => Boolean(state?.pid && isPidAlive(state.pid) && 'stopped' !== state.state && 30000 > Date.now() - Date.parse(state.updated));
 const ensureRunning = async ({root = stateRoot, delay = 200} = {}) => {
 	let r;
 	result: {
@@ -90,7 +73,7 @@ const stopRuntime = async ({root = stateRoot, delay = 200} = {}) => {
 		if (!alive(state)) {
 			break result;
 		}
-		fs.writeFileSync(path.join(root, 'control.json'), JSON.stringify({instance: state.instance, action: 'stop'}));
+		writeFileAtomic(path.join(root, 'control.json'), JSON.stringify({instance: state.instance, action: 'stop'}));
 		for (let attempt = 0; 40 > attempt; attempt++) {
 			await pause(delay);
 			if ('stopped' === readState(root)?.state) {

@@ -1,6 +1,9 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -396,4 +399,69 @@ test('Executing bridgeSource across a companion restart re-dispatches in-flight 
 	assert.equal(result.revision, 'rev-1');
 	assert.equal(result.method, 'GET');
 	await runtime.dispose();
+});
+test('Upgrade host files contain zero Folders imports or globals, skip idle tick re-evaluations until invalidated, and validate endpoint socket ports', async context => {
+	const vm = require('node:vm');
+	const {probeProfileEndpoint} = require('./profile-endpoints');
+	const {buildInspectExpression} = require('./runtime-health');
+	const upgradeFiles = fs.readdirSync(__dirname).filter(name => name.endsWith('.js') && !name.startsWith('test-'));
+	for (const name of upgradeFiles) {
+		const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
+		assert.equal(/\.\.\/Folders\/|__PROJECT_FOLDERS_|__FOLDERS_/.test(source), false, `Unexpected Folders coupling in ${name}`);
+	}
+	const root = fixture(context);
+	const roaming = path.join(root, 'roaming');
+	fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
+	fs.writeFileSync(path.join(roaming, 'Antigravity/DevToolsActivePort'), '10001');
+	const previous = process.env.APPDATA;
+	process.env.APPDATA = roaming;
+	context.after(() => {
+		process.env.APPDATA = previous;
+	});
+	const cdp = new FakeCDP();
+	let styleReads = 0;
+	let sourceReads = 0;
+	context.mock.method(CDP, 'open', async () => cdp);
+	context.mock.method(globalThis, 'fetch', async endpoint => Response.json(endpoint.endsWith('/json/version') ? {'User-Agent': 'Antigravity/2.30.0', webSocketDebuggerUrl: 'ws://127.0.0.1:10001/browser'} : [{id: 'main', type: 'page', url: 'https://127.0.0.1:12345/', webSocketDebuggerUrl: 'ws://127.0.0.1:10001/main'}]));
+	const runtime = new Companion({root});
+	runtime.modules.set('css', {
+		styleSheet: () => {
+			styleReads++;
+			return '.compact{}';
+		}
+	});
+	runtime.modules.set('folders', {
+		disposeExpression: 'window.disposedFolders=true;',
+		source: () => {
+			sourceReads++;
+			return '({attached:true})';
+		}
+	});
+	await runtime.tick();
+	assert.equal(styleReads, 1);
+	assert.equal(sourceReads, 1);
+	const evaluationsAfterAttach = cdp.expressions.length;
+	await runtime.tick();
+	assert.equal(styleReads, 1);
+	assert.equal(sourceReads, 1);
+	assert.equal(cdp.expressions.length, evaluationsAfterAttach);
+	runtime.invalidate();
+	await runtime.tick();
+	assert.equal(styleReads, 2);
+	assert.equal(sourceReads, 2);
+	await runtime.dispose();
+	const mismatched = await probeProfileEndpoint({id: 'A6', userDataDir: path.join(roaming, 'Antigravity')}, {
+		fetch: async endpoint => Response.json(endpoint.endsWith('/json/version') ? {'User-Agent': 'Antigravity/2.30.0'} : [{id: 'p1', type: 'page', url: 'https://127.0.0.1:12345/', webSocketDebuggerUrl: 'ws://127.0.0.1:19999/p1'}])
+	});
+	assert.equal(mismatched.state, 'error');
+	assert.match(mismatched.error, /socket does not belong/);
+	const inspectExpr = buildInspectExpression(['css', 'folders'], [{id: 'folders', expr: 'window.fakeInspect()'}]);
+	const inspected = vm.runInNewContext(inspectExpr, {
+		window: {
+			__ANTIGRAVITY_TOOLS_STATUS__: {tools: ['css', 'folders'], pending: []},
+			fakeInspect: () => ({state: 'ready', projects: 3})
+		}
+	});
+	assert.equal(inspected.state, 'ready');
+	assert.equal(inspected.projects, 3);
 });

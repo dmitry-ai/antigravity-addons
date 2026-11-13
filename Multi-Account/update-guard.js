@@ -7,10 +7,14 @@
 // 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
+const {isPidAlive} = require('../Upgrade/process-io');
 const {readProfiles} = require('./profiles');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
@@ -37,19 +41,6 @@ const silenceBrokenStdio = (proc = process) => {
 			}
 		}
 	}
-};
-const isPidAlive = pid => {
-	let r = false;
-	if (Number.isInteger(pid) && 0 < pid) {
-		try {
-			process.kill(pid, 0);
-			r = true;
-		}
-		catch (error) {
-			r = 'EPERM' === error?.code;
-		}
-	}
-	return r;
 };
 const isLockfileHeld = (userDataDir, fileSystem = fs) => {
 	let r = false;

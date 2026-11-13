@@ -1,8 +1,12 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const registry = require('./registry');
 const control = require('./runtime-control');
+const {inspectRuntime} = require('./runtime-health');
 const run = async (options = {}) => {
 	let r;
 	result: {
@@ -58,7 +62,7 @@ const run = async (options = {}) => {
 		let runtime;
 		for (;;) {
 			try {
-				runtime = await require('../Folders/runtime-health').inspectRuntime({expectedTools: tools.map(tool => tool.id)});
+				runtime = await inspectRuntime({expectedTools: tools.map(tool => tool.id), toolsRoot: options.toolsRoot});
 				break;
 			}
 			catch (error) {
