@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/30
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -428,6 +431,8 @@ test('folders-view readConfig coalesces concurrent polls so a restarting compani
 	assert.equal(getCalls, 2, 'Subsequent poll after completion issues a fresh GET');
 	releaseGet();
 	await p4;
+	const disconnected = createReadConfig({window: {}, model, state, client: {notifyUpdate() {}}, status() {}});
+	await assert.rejects(disconnected(), /Folder storage bridge is unavailable/);
 });
 test('folders-manager CRUD operations delegate to folders-model and preserve metadata and tree invariants', context => {
 	const {filename} = scratch(context);

@@ -4,6 +4,9 @@
 // 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
 // https://github.com/dmitry-ai/antigravity-addons/issues/18
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/30
 const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../Upgrade/node_modules/playwright-core');
@@ -119,8 +122,6 @@ const openFixture = async ({
 				projects,
 				summaries,
 				calls: [],
-				storage: {},
-				listeners: new Set(),
 				streams: new Set(),
 				revision: 1,
 				observers: [],
@@ -146,19 +147,6 @@ const openFixture = async ({
 					fixture.observers.push(record);
 				}
 			};
-			window.nativeStorage = {
-				getItems: async () => structuredClone(fixture.storage),
-				updateItems: async changes => {
-					Object.assign(fixture.storage, changes);
-					for (const listener of fixture.listeners) {
-						listener(changes);
-					}
-				},
-				onChanged: listener => {
-					fixture.listeners.add(listener);
-					return () => fixture.listeners.delete(listener);
-				}
-			};
 			window.dialog = {showOpenDialog: async () => 'C:\\fixture\\project'};
 			const frame = message => {
 				const body = new TextEncoder().encode(JSON.stringify(message));
@@ -180,27 +168,7 @@ const openFixture = async ({
 					body = JSON.parse(options.body);
 				}
 				fixture.calls.push({method, body});
-				if ('project-folders' === method) {
-					if ('POST' !== options.method) {
-						r = Response.json({schemaVersion: 2, data: fixture.data, revision: String(fixture.revision)});
-					}
-					else {
-						try {
-							fixture.data = window.AntigravityFoldersModel.applyAction(fixture.data, body);
-							fixture.revision++;
-							r = Response.json({
-								success: true,
-								schemaVersion: 2,
-								data: fixture.data,
-								revision: String(fixture.revision)
-							});
-						}
-						catch (error) {
-							r = Response.json({success: false, error: error.message}, {status: 400});
-						}
-					}
-				}
-				else if ('ListProjects' === method) {
+				if ('ListProjects' === method) {
 					r = Response.json(
 						fixture.badProjects
 							? {changedProjectSchema: []}
@@ -265,15 +233,21 @@ const openFixture = async ({
 					r = fixture.viewState;
 				}
 				else {
-					const response = await window.fetch('/api/project-folders', {
-						method: message.method,
-						body: message.body ? JSON.stringify(message.body) : undefined
-					});
-					const result = await response.json();
-					if (!response.ok || result.error) {
-						throw Error(result.error || 'Fixture request failed');
+					const body = message.body || {};
+					fixture.calls.push({method: 'project-folders', body});
+					if ('POST' !== message.method) {
+						r = {schemaVersion: 2, data: fixture.data, revision: String(fixture.revision)};
 					}
-					r = result;
+					else {
+						fixture.data = window.AntigravityFoldersModel.applyAction(fixture.data, body);
+						fixture.revision++;
+						r = {
+							success: true,
+							schemaVersion: 2,
+							data: fixture.data,
+							revision: String(fixture.revision)
+						};
+					}
 				}
 				return r;
 			};

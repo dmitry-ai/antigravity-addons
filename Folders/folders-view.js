@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/30
 (function(factory) {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -21,11 +24,10 @@
 		return () => {
 			if (!configPromise) {
 				configPromise = (async () => {
-					const response = win.__ANTIGRAVITY_TOOLS_REQUEST__ ? null : await (win.fetch || fetch)('/api/project-folders');
-					if (response && !response.ok) {
-						throw Error(`Folder storage: HTTP ${response.status}; run Upg to reconnect the loader`);
+					if ('function' !== typeof win?.__ANTIGRAVITY_TOOLS_REQUEST__) {
+						throw Error('Folder storage bridge is unavailable; run Upg to reconnect');
 					}
-					const payload = response ? await response.json() : await win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
+					const payload = await win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET'});
 					if (payload.error) {
 						throw Error(payload.error);
 					}
@@ -85,17 +87,7 @@
 		const isStandaloneRoute = () => /^\/(?:artifact|s|settings-standalone|terminal-standalone)(?:\/|$)/.test(location.pathname);
 		const nativeSidebarPending = () => mountDeadline > Date.now() && ((!document.querySelector('[role="navigation"]') && !document.querySelector('.agy-shell')) || !!document.querySelector('[role="navigation"] [data-testid="sidebar-list-skeleton"]'));
 		const sizing = new ResizeObserver(() => schedule());
-		const storageKey = 'antigravity-folders.v2.collapsed';
-		const element = (tag, className, text) => {
-			const el = document.createElement(tag);
-			if (className) {
-				el.className = className;
-			}
-			if (undefined !== text) {
-				el.textContent = text;
-			}
-			return el;
-		};
+		const element = (tag, className, text) => client.element(tag, className, text);
 		const style = element('style');
 		style.dataset.foldersViewStyle = '2';
 		style.textContent = window.__FOLDERS_STYLE__ || '';
@@ -151,15 +143,9 @@
 			}
 		};
 		const persist = () => {
-			if (storageReady) {
-				const saved = {collapsed: [...state.collapsed]};
-				if (!window.__ANTIGRAVITY_TOOLS_REQUEST__) {
-					sessionStorage.setItem(storageKey, JSON.stringify(saved.collapsed));
-				}
-				else {
-					window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'SET_VIEW_STATE', body: saved})
-						.catch(error => status('view-state', error.message));
-				}
+			if (storageReady && 'function' === typeof window.__ANTIGRAVITY_TOOLS_REQUEST__) {
+				window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'SET_VIEW_STATE', body: {collapsed: [...state.collapsed]}})
+					.catch(error => status('view-state', error.message));
 			}
 		};
 		const schedule = () => {
@@ -287,10 +273,6 @@
 						{label: 'Archive', onClick: () => adapter.updateConversation(row.id, {archived: true, archivalStatusTimestamp: new Date().toISOString()}).catch(error => status('action', error.message))}
 					], 'Conversation');
 				};
-				window.__PROJECT_FOLDERS_CONVO_MAP__ ||= {};
-				if (row.projectId) {
-					window.__PROJECT_FOLDERS_CONVO_MAP__[row.id] = row.projectId;
-				}
 			}
 			else {
 				el.append(element('span', 'empty' === row.kind ? 'fg-empty' : '', row.name));
@@ -449,139 +431,80 @@
 				}
 			}
 		};
-		async function createProjectDialog(folderId) {
-			client.ui.closeContextMenu();
-			if (!client.activeModal) {
-				const overlay = element('div', 'antigravity-folder-modal-overlay');
-				const dialog = element('form', 'antigravity-folder-modal');
-				dialog.setAttribute('role', 'dialog');
-				dialog.setAttribute('aria-modal', 'true');
-				dialog.setAttribute('aria-label', 'Create project');
-				dialog.append(element('h3', '', folderId ? `Create project in “${client.getFolder(folderId)?.name}”` : 'Create project'));
-				const name = element('input');
-				name.placeholder = 'Project name';
-				name.required = true;
-				name.setAttribute('aria-label', 'Project name');
-				dialog.append(name);
-				const pathRow = element('div', 'fg-project-path');
-				const directory = element('input');
-				directory.placeholder = 'Project directory (optional)';
-				directory.setAttribute('aria-label', 'Project directory');
-				const browse = element('button', 'antigravity-folder-btn secondary', 'Browse…');
-				browse.type = 'button';
-				browse.onclick = async () => {
-					try {
-						const result = await window.dialog.showOpenDialog();
-						if (result) {
-							directory.value = 'string' === typeof result ? result : Array.isArray(result) ? result[0] || '' : result.filePaths?.[0] || '';
-						}
-					}
-					catch (cause) {
-						error.textContent = cause.message;
-					}
-				};
-				pathRow.append(directory, browse);
-				dialog.append(pathRow);
-				const error = element('div', 'fg-dialog-error');
-				error.setAttribute('role', 'alert');
-				dialog.append(error);
-				const buttons = element('div', 'antigravity-folder-modal-buttons');
-				const cancel = element('button', 'antigravity-folder-btn secondary', 'Cancel');
-				const submit = element('button', 'antigravity-folder-btn primary', 'Create');
-				cancel.type = 'button';
-				submit.type = 'submit';
-				const close = () => {
-					overlay.remove();
-					if (overlay === client.activeModal) {
-						client.activeModal = null;
-					}
-					schedule();
-				};
-				cancel.onclick = close;
-				buttons.append(cancel, submit);
-				dialog.append(buttons);
-				overlay.append(dialog);
-				document.body.append(overlay);
-				client.activeModal = overlay;
-				name.focus();
-				let createdId;
-				const requestId = crypto.randomUUID();
-				dialog.onsubmit = async event => {
-					event.preventDefault();
-					if (!submit.disabled) {
-						submit.disabled = true;
-						error.textContent = '';
+		function createProjectDialog(folderId) {
+			let createdId;
+			let directory;
+			let name;
+			const requestId = crypto.randomUUID();
+			client.ui.openModal({
+				title: folderId ? `Create project in “${client.getFolder(folderId)?.name}”` : 'Create project',
+				ariaLabel: 'Create project',
+				submitLabel: 'Create',
+				onClose: schedule,
+				buildBody: ({errorEl, form}) => {
+					name = element('input');
+					name.placeholder = 'Project name';
+					name.required = true;
+					name.setAttribute('aria-label', 'Project name');
+					const pathRow = element('div', 'fg-project-path');
+					directory = element('input');
+					directory.placeholder = 'Project directory (optional)';
+					directory.setAttribute('aria-label', 'Project directory');
+					const browse = element('button', 'antigravity-folder-btn secondary', 'Browse…');
+					browse.type = 'button';
+					browse.onclick = async () => {
 						try {
-							if (!createdId) {
-								const resources = directory.value.trim()
-									? [{folderUri: new URL('file:///' + directory.value.trim().replace(/\\/g, '/')).href}]
-									: [];
-								createdId = await adapter.createProject({id: requestId, name: name.value, resources});
+							const result = await window.dialog.showOpenDialog();
+							if (result) {
+								directory.value = 'string' === typeof result ? result : Array.isArray(result) ? result[0] || '' : result.filePaths?.[0] || '';
 							}
-							if (folderId) {
-								const assignment = await client.postAction('assign-project', {projectId: createdId, folderId});
-								if (!assignment.success) {
-									throw Error(`Project ${createdId} created, but folder was not assigned: ${assignment.error}`);
-								}
-							}
-							close();
-							view.reveal(createdId, folderId);
-							adapter.navigate({projectId: createdId});
 						}
 						catch (cause) {
-							error.textContent = cause.message;
-							submit.disabled = false;
+							errorEl.textContent = cause.message;
+						}
+					};
+					pathRow.append(directory, browse);
+					form.append(name, pathRow);
+					return name;
+				},
+				onSubmit: async ({close}) => {
+					if (!createdId) {
+						const resources = directory.value.trim()
+							? [{folderUri: new URL('file:///' + directory.value.trim().replace(/\\/g, '/')).href}]
+							: [];
+						createdId = await adapter.createProject({id: requestId, name: name.value, resources});
+					}
+					if (folderId) {
+						const assignment = await client.postAction('assign-project', {projectId: createdId, folderId});
+						if (!assignment.success) {
+							throw Error(`Project ${createdId} created, but folder was not assigned: ${assignment.error}`);
 						}
 					}
-				};
-			}
+					close();
+					view.reveal(createdId, folderId);
+					adapter.navigate({projectId: createdId});
+				}
+			});
 		}
 		function textDialog(title, initialValue, submitAction) {
-			client.ui.closeContextMenu();
-			if (!client.activeModal) {
-				const overlay = element('div', 'antigravity-folder-modal-overlay');
-				const form = element('form', 'antigravity-folder-modal');
-				form.setAttribute('role', 'dialog');
-				form.setAttribute('aria-label', title);
-				const input = element('input');
-				input.value = initialValue;
-				input.required = true;
-				input.setAttribute('aria-label', title);
-				const error = element('div', 'fg-dialog-error');
-				const buttons = element('div', 'antigravity-folder-modal-buttons');
-				const cancel = element('button', 'antigravity-folder-btn secondary', 'Cancel');
-				const submit = element('button', 'antigravity-folder-btn primary', 'Save');
-				cancel.type = 'button';
-				submit.type = 'submit';
-				const close = () => {
-					overlay.remove();
-					if (overlay === client.activeModal) {
-						client.activeModal = null;
-					}
-					schedule();
-				};
-				cancel.onclick = close;
-				buttons.append(cancel, submit);
-				form.append(element('h3', '', title), input, error, buttons);
-				overlay.append(form);
-				document.body.append(overlay);
-				client.activeModal = overlay;
-				input.focus();
+			let input;
+			const modal = client.ui.openModal({
+				title,
+				ariaLabel: title,
+				submitLabel: 'Save',
+				onClose: schedule,
+				buildBody: ({form}) => {
+					input = element('input');
+					input.value = initialValue;
+					input.required = true;
+					input.setAttribute('aria-label', title);
+					form.append(input);
+					return input;
+				},
+				onSubmit: () => submitAction(input.value.trim())
+			});
+			if (modal) {
 				input.select();
-				form.onsubmit = async event => {
-					event.preventDefault();
-					if (!submit.disabled) {
-						submit.disabled = true;
-						try {
-							await submitAction(input.value.trim());
-							close();
-						}
-						catch (cause) {
-							error.textContent = cause.message;
-							submit.disabled = false;
-						}
-					}
-				};
 			}
 		}
 		const view = {
@@ -663,30 +586,20 @@
 		observer.observe(document.documentElement, {childList: true, subtree: true});
 		(async () => {
 			try {
-				const saved = window.__ANTIGRAVITY_TOOLS_REQUEST__
+				const saved = 'function' === typeof window.__ANTIGRAVITY_TOOLS_REQUEST__
 					? await window.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET_VIEW_STATE'})
-					: {collapsed: sessionStorage.getItem(storageKey) ? JSON.parse(sessionStorage.getItem(storageKey)) : undefined};
-				const items = undefined === saved.collapsed && window.nativeStorage?.getItems ? await window.nativeStorage.getItems() : {};
-				const value = undefined === saved.collapsed ? undefined : JSON.stringify(saved.collapsed);
-				if (undefined !== value) {
-					const collapsed = JSON.parse(value);
-					if (!Array.isArray(collapsed) || collapsed.some(key => 'string' !== typeof key)) {
-						throw Error('Invalid saved folder view state');
-					}
-					state.collapsed = new Set(collapsed);
-					state.savedView = true;
-				}
-				else {
+					: {};
+				if (undefined === saved?.collapsed) {
 					for (const project of state.projects) {
 						state.collapsed.add(`project:${project.id}`);
 					}
-					const legacy = JSON.parse(items.sidebar_collapsed_section_headers || '[]');
-					const closed = Array.isArray(legacy) ? new Set(legacy) : new Set(Object.keys(legacy).filter(key => legacy[key]));
-					for (const folder of client.data.folders) {
-						if (closed.has(`folder-${folder.id}`)) {
-							state.collapsed.add(`folder:${folder.id}`);
-						}
+				}
+				else {
+					if (!Array.isArray(saved.collapsed) || saved.collapsed.some(key => 'string' !== typeof key)) {
+						throw Error('Invalid saved folder view state');
 					}
+					state.collapsed = new Set(saved.collapsed);
+					state.savedView = true;
 				}
 				const changed = event => {
 					try {

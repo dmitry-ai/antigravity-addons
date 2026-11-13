@@ -7,6 +7,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/27
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/30
 (function(factory) {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -16,15 +19,6 @@
 		api.initAntigravityFoldersClient();
 	}
 })(() => {
-	function escapeHtml(str) {
-		return str
-			? String(str)
-				.replace(/&/g, '&amp;')
-				.replace(/</g, '&lt;')
-				.replace(/>/g, '&gt;')
-				.replace(/"/g, '&quot;')
-			: '';
-	}
 	// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 	// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/8
@@ -308,6 +302,7 @@
 			this.data = win?.__PROJECT_FOLDERS_DATA__ || {folders: [], projectFolderMap: {}};
 			this.activeMenu = null;
 			this.activeModal = null;
+			this.closeActiveModal = null;
 			this.hoveredFolderId = null;
 			this.hoveredFolderEl = null;
 			this.lastHoveredFolderId = null;
@@ -321,6 +316,7 @@
 			this.rootAbort = null;
 			this.drag = new SidebarDragController(this);
 			this.ui = {
+				openModal: (...args) => this.openModal(...args),
 				showCreateFolderDialog: (...args) => this.showCreateFolderDialog(...args),
 				showFolderContextMenu: (...args) => this.showFolderContextMenu(...args),
 				showProjectContextMenu: (...args) => this.showProjectContextMenu(...args),
@@ -377,10 +373,7 @@
 			listen('keydown', e => {
 				if ('Escape' === e.key) {
 					this.closeContextMenu();
-					if (this.activeModal) {
-						this.activeModal.remove();
-						this.activeModal = null;
-					}
+					this.closeModal();
 				}
 				// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 				// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md, and link source files to GitHub Issues":
@@ -457,37 +450,18 @@
 			});
 			this.drag.bind(root);
 		}
-		buildFolderSelectOptions(selectedParentId = null) {
-			const folders = this.data?.folders || [];
-			const childrenMap = new Map();
-			for (const f of folders) {
-				const pid = f.parentId || null;
-				if (!childrenMap.has(pid)) {
-					childrenMap.set(pid, []);
-				}
-				childrenMap.get(pid).push(f);
-			}
-			const options = [];
-			const isRootSelected = !selectedParentId || !this.getFolder(selectedParentId);
-			options.push(`<option value="" ${isRootSelected ? 'selected' : ''}>📁 Root (no parent)</option>`);
-			const walk = (parentId, depth) => {
-				const list = (childrenMap.get(parentId) || []).slice().sort((a, b) => {
-					const cmp = (a?.name || '').localeCompare(b?.name || '', undefined, {numeric: true, sensitivity: 'base'});
-					return 0 !== cmp ? cmp : (a?.id || '').localeCompare(b?.id || '');
-				});
-				for (const f of list) {
-					const isSelected = selectedParentId === f.id;
-					const prefix = 0 < depth ? `${'&nbsp;&nbsp;'.repeat(depth)}↳ ` : '';
-					options.push(`<option value="${escapeHtml(f.id)}" ${isSelected ? 'selected' : ''}>${prefix}📁 ${escapeHtml(f.name)}</option>`);
-					walk(f.id, depth + 1);
-				}
-			};
-			walk(null, 0);
-			return options.join('');
-		}
 		closeContextMenu() {
 			this.activeMenu?.remove();
 			this.activeMenu = null;
+		}
+		closeModal() {
+			if (this.closeActiveModal) {
+				this.closeActiveModal();
+			}
+			else {
+				this.activeModal?.remove();
+				this.activeModal = null;
+			}
 		}
 		createFolderTreeRow({folder, depth, hasChildren, selectedId, expanded, rows, tree, onSelect, render}) {
 			const row = this.doc.createElement('div');
@@ -590,11 +564,21 @@
 			this.rootAbort?.abort();
 			this.drag.dispose();
 			this.closeContextMenu();
-			this.activeModal?.remove();
+			this.closeModal();
 			if (this.win) {
 				this.win.__PROJECT_FOLDERS_CLIENT_INITIALIZED__ = false;
 				delete this.win.__PROJECT_FOLDERS_CLIENT__;
 			}
+		}
+		element(tag, className, text) {
+			const el = this.doc.createElement(tag);
+			if (className) {
+				el.className = className;
+			}
+			if (undefined !== text) {
+				el.textContent = text;
+			}
+			return el;
 		}
 		folderFromFocusedElement() {
 			let r = null;
@@ -642,46 +626,30 @@
 		}
 		folderFromSelectedConversation() {
 			let r = null;
-			result: {
-				if (!this.doc) {
-					break result;
-				}
-				const selectedConvo = this.doc.querySelector("[data-testid='conversation-row-sidebar'][data-selected='true'], [data-testid^='conversation-row-'][data-selected='true']");
-				if (selectedConvo) {
-					const groupPid = selectedConvo.closest('[data-group-id]')?.getAttribute('data-group-id');
-					const groupFid = groupPid ? this.getProjectFolderId(groupPid) : null;
-					if (groupFid && this.getFolder(groupFid)) {
-						r = groupFid;
-						break result;
-					}
-					const cascadeId = selectedConvo.getAttribute('data-cascade-id');
-					const mapPid = cascadeId ? this.win?.__PROJECT_FOLDERS_CONVO_MAP__?.[cascadeId] : null;
-					const mapFid = mapPid ? this.getProjectFolderId(mapPid) : null;
-					if (mapFid && this.getFolder(mapFid)) {
-						r = mapFid;
-						break result;
-					}
-				}
-				const activeConvoView = this.doc.querySelector("[data-testid='conversation-view'][data-cascade-id]");
-				const activeCascadeId = activeConvoView?.getAttribute('data-cascade-id');
-				const viewPid = activeCascadeId ? this.win?.__PROJECT_FOLDERS_CONVO_MAP__?.[activeCascadeId] : null;
-				const viewFid = viewPid ? this.getProjectFolderId(viewPid) : null;
-				if (viewFid && this.getFolder(viewFid)) {
-					r = viewFid;
-				}
+			const view = this.win?.__PROJECT_FOLDERS_VIEW__;
+			const selection = view?.adapter?.selection?.();
+			const selectedPid = selection?.projectId
+				|| (selection?.conversationId ? view?.state?.summaries?.get?.(selection.conversationId)?.trajectoryMetadata?.projectId : null)
+				|| this.doc?.querySelector?.("[data-testid^='conversation-row-'][data-selected='true']")?.closest?.('[data-group-id]')?.getAttribute('data-group-id');
+			const fid = selectedPid ? this.getProjectFolderId(selectedPid) : null;
+			if (fid && this.getFolder(fid)) {
+				r = fid;
 			}
 			return r;
 		}
 		getDescendantIds(folderId) {
-			const model = this.win?.AntigravityFoldersModel || ('object' === typeof module && module.exports ? require('./folders-model') : null);
+			const model = this.getModel();
 			return model ? model.getDescendantIds(folderId, this.data?.folders) : new Set();
 		}
 		getFolder(id) {
 			return Array.isArray(this.data?.folders) ? this.data.folders.find(f => id === f.id) || null : null;
 		}
 		getFolderPath(folderId) {
-			const model = this.win?.AntigravityFoldersModel || ('object' === typeof module && module.exports ? require('./folders-model') : null);
+			const model = this.getModel();
 			return model ? model.getFolderPath(folderId, this.data?.folders) : '';
+		}
+		getModel() {
+			return this.win?.AntigravityFoldersModel || ('object' === typeof module && module.exports ? require('./folders-model') : null);
 		}
 		getProjectFolderId(projectId) {
 			return this.data?.projectFolderMap?.[projectId] || null;
@@ -744,21 +712,102 @@
 			}
 			this.triggerRerender();
 		}
+		openModal({ariaLabel, buildBody, onClose, onSubmit, submitLabel = 'Save', title}) {
+			this.closeContextMenu();
+			let r = null;
+			if (!this.activeModal) {
+				const overlay = this.element('div', 'antigravity-folder-modal-overlay');
+				const form = this.element('form', 'antigravity-folder-modal');
+				form.setAttribute('role', 'dialog');
+				form.setAttribute('aria-modal', 'true');
+				form.setAttribute('aria-label', ariaLabel || title);
+				const titleEl = this.element('h3', 'folder-modal-title', title);
+				const errorEl = this.element('div', 'fg-dialog-error');
+				errorEl.setAttribute('role', 'alert');
+				const buttons = this.element('div', 'antigravity-folder-modal-buttons');
+				const cancel = this.element('button', 'antigravity-folder-btn secondary btn-cancel', 'Cancel');
+				const submit = this.element('button', 'antigravity-folder-btn primary btn-submit', submitLabel);
+				cancel.type = 'button';
+				submit.type = 'submit';
+				buttons.append(cancel, submit);
+				form.append(titleEl);
+				const focusTarget = buildBody?.({errorEl, form, submit, titleEl});
+				form.append(errorEl, buttons);
+				overlay.append(form);
+				this.doc.body.append(overlay);
+				let closed = false;
+				const close = () => {
+					if (!closed) {
+						closed = true;
+						if (overlay === this.activeModal) {
+							this.activeModal = null;
+							this.closeActiveModal = null;
+						}
+						overlay.remove();
+						onClose?.();
+						this.triggerRerender();
+					}
+				};
+				this.activeModal = overlay;
+				this.closeActiveModal = close;
+				cancel.addEventListener('click', close);
+				overlay.addEventListener('click', e => {
+					if (overlay === e.target) {
+						close();
+					}
+				});
+				focusTarget?.focus?.();
+				form.addEventListener('submit', async e => {
+					e.preventDefault();
+					if (!submit.disabled) {
+						submit.disabled = true;
+						errorEl.textContent = '';
+						try {
+							const done = await onSubmit({close, errorEl, submit});
+							if (false === done) {
+								submit.disabled = false;
+							}
+							else {
+								close();
+							}
+						}
+						catch (cause) {
+							errorEl.textContent = cause.message;
+							submit.disabled = false;
+						}
+					}
+				});
+				r = {close, errorEl, form, overlay, submit, titleEl};
+			}
+			return r;
+		}
+		populateFolderSelect(select, selectedParentId = null) {
+			const {byId, children} = folderPickerModel(this.data?.folders, selectedParentId);
+			const rootOption = this.element('option', '', '📁 Root (no parent)');
+			rootOption.value = '';
+			rootOption.selected = !selectedParentId || !byId.has(selectedParentId);
+			select.replaceChildren(rootOption);
+			const walk = (parentId, depth) => {
+				for (const folder of children.get(parentId) || []) {
+					const prefix = 0 < depth ? `${'\u00a0\u00a0'.repeat(depth)}↳ ` : '';
+					const option = this.element('option', '', `${prefix}📁 ${folder.name}`);
+					option.value = folder.id;
+					option.selected = selectedParentId === folder.id;
+					select.append(option);
+					walk(folder.id, depth + 1);
+				}
+			};
+			walk(null, 0);
+		}
 		async postAction(action, payload = {}) {
 			let r;
 			try {
 				console.log(`[folders-client] Dispatching action: ${action}`, payload);
+				if ('function' !== typeof this.win?.__ANTIGRAVITY_TOOLS_REQUEST__) {
+					throw Error('Folder storage bridge is unavailable; run Upg to reconnect');
+				}
 				const requestBody = {action, ...payload, revision: this.win.__FOLDERS_REVISION__};
-				const res = this.win.__ANTIGRAVITY_TOOLS_REQUEST__
-					? null
-					: await (this.win.fetch || fetch)('/api/project-folders', {
-						method: 'POST',
-						headers: {'content-type': 'application/json'},
-						body: JSON.stringify(requestBody)
-					});
-				const result = this.win.__ANTIGRAVITY_TOOLS_REQUEST__
-					? await this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'POST', body: requestBody})
-					: await res.json();
+				const result = await this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'POST', body: requestBody});
 				if (result.revision) {
 					this.win.__FOLDERS_REVISION__ = result.revision;
 				}
@@ -770,16 +819,10 @@
 			}
 			catch (err) {
 				console.error('[folders-client] Action error:', err);
-				this.win.__PROJECT_FOLDERS_VIEW__?.reportAction(err.message);
+				this.win?.__PROJECT_FOLDERS_VIEW__?.reportAction(err.message);
 				r = {success: false, error: err.message};
 			}
 			return r;
-		}
-		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/10
-		revealCreatedProject(projectId, folderId) {
-			return this.win?.__PROJECT_FOLDERS_VIEW__?.reveal(projectId, folderId);
 		}
 		showContextMenu(x, y, items, title = '') {
 			this.closeContextMenu();
@@ -818,111 +861,83 @@
 			}
 		}
 		showCreateFolderDialog(projectId = null, explicitParentId = undefined) {
-			this.closeContextMenu();
-			if (!this.activeModal) {
-				const targetParentId = undefined !== explicitParentId
-					? explicitParentId
-					: projectId
-						? this.getProjectFolderId(projectId) || null
-						: this.detectCurrentFolderId();
-				const parentFolder = targetParentId ? this.getFolder(targetParentId) : null;
-				const parentNameSafe = parentFolder ? escapeHtml(parentFolder.name) : '';
-				const titleText = parentFolder ? `Create subfolder in “${parentNameSafe}”` : 'Create new folder';
-				const overlay = this.doc.createElement('div');
-				overlay.className = 'antigravity-folder-modal-overlay';
-				const modal = this.doc.createElement('div');
-				modal.className = 'antigravity-folder-modal';
-				modal.setAttribute('role', 'dialog');
-				modal.setAttribute('aria-modal', 'true');
-				modal.setAttribute('aria-label', parentFolder ? `Create subfolder in “${parentFolder.name}”` : 'Create new folder');
-				modal.innerHTML = [
-					`<h3 class="folder-modal-title">${titleText}</h3>`,
-					'<label class="antigravity-folder-label">Folder name:</label>',
-					`<input type="text" class="folder-name-input" placeholder="${parentFolder ? 'Subfolder name...' : 'Folder name...'}" />`,
-					'<label class="antigravity-folder-label">Location (parent):</label>',
-					`<select class="folder-parent-select">${this.buildFolderSelectOptions(targetParentId)}</select>`,
-					'<div class="antigravity-folder-modal-buttons">',
-					'<button type="button" class="antigravity-folder-btn secondary btn-cancel">Cancel</button>',
-					'<button type="button" class="antigravity-folder-btn primary btn-submit">Create</button>',
-					'</div>'
-				].join('');
-				overlay.appendChild(modal);
-				this.doc.body.appendChild(overlay);
-				this.activeModal = overlay;
-				const titleEl = modal.querySelector('.folder-modal-title');
-				const input = modal.querySelector('input.folder-name-input');
-				const select = modal.querySelector('select.folder-parent-select');
-				const btnCancel = modal.querySelector('.btn-cancel');
-				const btnSubmit = modal.querySelector('.btn-submit');
-				select.addEventListener('change', () => {
-					const curParentId = select.value || null;
-					const curParent = curParentId ? this.getFolder(curParentId) : null;
-					titleEl.textContent = curParent ? `Create subfolder in “${curParent.name}”` : 'Create new folder';
-					input.placeholder = curParent ? 'Subfolder name...' : 'Folder name...';
-					input.setCustomValidity('');
-				});
-				input.focus();
-				const closeModal = () => {
-					overlay.remove();
-					this.activeModal = null;
-					this.doc.querySelector('.btn-create-folder')?.focus();
-				};
-				const submit = async () => {
-					if (!btnSubmit.disabled) {
-						const val = input.value.trim();
-						const chosenParentId = select.value || null;
-						const siblings = (this.data?.folders || []).filter(folder => (chosenParentId || null) === (folder.parentId || null));
-						if (!val) {
-							input.setCustomValidity('Enter a folder name');
+			const targetParentId = undefined !== explicitParentId
+				? explicitParentId
+				: projectId
+					? this.getProjectFolderId(projectId) || null
+					: this.detectCurrentFolderId();
+			const parentFolder = targetParentId ? this.getFolder(targetParentId) : null;
+			const titleText = parentFolder ? `Create subfolder in “${parentFolder.name}”` : 'Create new folder';
+			let input;
+			let select;
+			this.openModal({
+				title: titleText,
+				ariaLabel: titleText,
+				submitLabel: 'Create',
+				onClose: () => this.doc?.querySelector?.('.btn-create-folder')?.focus?.(),
+				buildBody: ({form, titleEl}) => {
+					input = this.element('input', 'folder-name-input');
+					input.type = 'text';
+					input.placeholder = parentFolder ? 'Subfolder name...' : 'Folder name...';
+					input.setAttribute('aria-label', 'Folder name');
+					select = this.element('select', 'folder-parent-select');
+					select.setAttribute('aria-label', 'Location (parent)');
+					this.populateFolderSelect(select, targetParentId);
+					select.addEventListener('change', () => {
+						const curParent = select.value ? this.getFolder(select.value) : null;
+						const nextTitle = curParent ? `Create subfolder in “${curParent.name}”` : 'Create new folder';
+						titleEl.textContent = nextTitle;
+						form.setAttribute('aria-label', nextTitle);
+						input.placeholder = curParent ? 'Subfolder name...' : 'Folder name...';
+						input.setCustomValidity('');
+					});
+					input.addEventListener('input', () => input.setCustomValidity(''));
+					form.append(
+						this.element('label', 'antigravity-folder-label', 'Folder name:'),
+						input,
+						this.element('label', 'antigravity-folder-label', 'Location (parent):'),
+						select
+					);
+					return input;
+				},
+				onSubmit: async () => {
+					let r = true;
+					const val = input.value.trim();
+					const chosenParentId = select.value || null;
+					const siblings = (this.data?.folders || []).filter(folder => (chosenParentId || null) === (folder.parentId || null));
+					if (!val) {
+						input.setCustomValidity('Enter a folder name');
+						input.reportValidity();
+						r = false;
+					}
+					else if (siblings.some(folder => val.toLowerCase() === folder.name.toLowerCase())) {
+						input.setCustomValidity('A folder with this name already exists in this branch');
+						input.reportValidity();
+						r = false;
+					}
+					else {
+						const result = await this.postAction('add-folder', {name: val, parentId: chosenParentId});
+						if (!result.success) {
+							input.setCustomValidity(result.error || 'Failed to create folder');
 							input.reportValidity();
-						}
-						else if (siblings.some(folder => val.toLowerCase() === folder.name.toLowerCase())) {
-							input.setCustomValidity('A folder with this name already exists in this branch');
-							input.reportValidity();
+							r = false;
 						}
 						else {
-							btnSubmit.disabled = true;
-							const result = await this.postAction('add-folder', {name: val, parentId: chosenParentId});
-							if (!result.success) {
-								btnSubmit.disabled = false;
-								input.setCustomValidity(result.error || 'Failed to create folder');
-								input.reportValidity();
+							const createdFolder = (result.data?.folders || []).find(f => (chosenParentId || null) === (f.parentId || null) && val.toLowerCase() === f.name.toLowerCase());
+							if (createdFolder) {
+								this.lastActiveFolderId = createdFolder.id;
+								if (projectId) {
+									await this.postAction('assign-project', {projectId, folderId: createdFolder.id});
+								}
 							}
-							else {
-								const createdFolder = (result.data?.folders || []).find(f => (chosenParentId || null) === (f.parentId || null) && val.toLowerCase() === f.name.toLowerCase());
-								if (createdFolder) {
-									this.lastActiveFolderId = createdFolder.id;
-									if (projectId) {
-										await this.postAction('assign-project', {projectId, folderId: createdFolder.id});
-									}
-								}
-								if (chosenParentId) {
-									this.win.__PROJECT_FOLDERS_VIEW__?.expandFolder?.(chosenParentId);
-								}
-								closeModal();
+							if (chosenParentId) {
+								this.win?.__PROJECT_FOLDERS_VIEW__?.expandFolder?.(chosenParentId);
 							}
 						}
 					}
-				};
-				input.addEventListener('input', () => input.setCustomValidity(''));
-				btnCancel.addEventListener('click', closeModal);
-				btnSubmit.addEventListener('click', submit);
-				input.addEventListener('keydown', e => {
-					if ('Enter' === e.key) {
-						e.preventDefault();
-						submit();
-					}
-					else if ('Escape' === e.key) {
-						e.preventDefault();
-						closeModal();
-					}
-				});
-				overlay.addEventListener('click', e => {
-					if (overlay === e.target) {
-						closeModal();
-					}
-				});
-			}
+					return r;
+				}
+			});
 		}
 		showFolderContextMenu(e, folderHeaderEl, folderId, folderName) {
 			e.preventDefault();

@@ -7,6 +7,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/27
+// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/30
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {FoldersClient, SidebarDragController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folders-client');
@@ -110,13 +113,27 @@ test('SidebarDragController validates cycle drops, sibling collisions, and valid
 	assert.deepEqual(drag.canDropOnTarget({}, 'year'), {allowed: true, blocked: false});
 	client.dispose();
 });
-test('FoldersClient detectCurrentFolderId resolves hover, remembered folder, and remembered project in priority order', () => {
-	const client = new FoldersClient({__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals'}}});
+test('FoldersClient detectCurrentFolderId resolves hover, active conversation selection, and remembered selection in priority order', async () => {
+	const summaries = new Map([['c-active', {trajectoryMetadata: {projectId: 'p2'}}]]);
+	let currentSelection = {projectId: null, conversationId: 'c-active'};
+	const client = new FoldersClient({
+		__PROJECT_FOLDERS_DATA__: {folders, projectFolderMap: {p1: 'proposals', p2: 'year'}},
+		__PROJECT_FOLDERS_VIEW__: {
+			adapter: {selection: () => currentSelection},
+			state: {summaries},
+			reportAction() {}
+		}
+	});
 	client.lastActiveProjectId = 'p1';
-	assert.equal(client.detectCurrentFolderId(), 'proposals');
-	client.lastActiveFolderId = 'year';
 	assert.equal(client.detectCurrentFolderId(), 'year');
+	currentSelection = {projectId: null, conversationId: null};
+	assert.equal(client.detectCurrentFolderId(), 'proposals');
+	client.lastActiveFolderId = 'two';
+	assert.equal(client.detectCurrentFolderId(), 'two');
 	client.hoveredFolderId = 'month';
 	assert.equal(client.detectCurrentFolderId(), 'month');
+	const res = await client.postAction('add-folder', {name: 'NoBridge'});
+	assert.equal(res.success, false);
+	assert.match(res.error, /Folder storage bridge is unavailable/);
 	client.dispose();
 });
