@@ -16,6 +16,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/26
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/29
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -26,7 +29,7 @@ const {childEnvironment, prepareProfile, activateExisting} = require('./launcher
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
 const {installWindowIdentity} = require('./window-identity');
-const {installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
+const {UpdateGuard, UpdateRunner, installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
 const fixture = context => {
 	const parent = os.tmpdir();
 	const r = fs.mkdtempSync(path.join(parent, 'antigravity-accounts-'));
@@ -679,4 +682,35 @@ test('Parameterized launch.vbs and installer scripts read profiles.json without 
 		assert.match(source, /profiles\.json/);
 		assert.doesNotMatch(source, /launch_A0\.vbs|launch_A6\.vbs/);
 	}
+});
+test('UpdateGuard and UpdateRunner classes isolate installer resolution, idempotent re-installation, and PID wait timeout', async context => {
+	const root = fixture(context);
+	const pendingDir = path.join(root, 'pending');
+	fs.mkdirSync(pendingDir, {recursive: true});
+	const installerPath = path.join(pendingDir, 'Antigravity-2.31.0.exe');
+	fs.writeFileSync(installerPath, 'binary');
+	fs.writeFileSync(path.join(pendingDir, 'update-info.json'), JSON.stringify({fileName: 'Antigravity-2.31.0.exe'}));
+	const autoUpdater = new EventEmitter();
+	autoUpdater.autoInstallOnAppQuit = true;
+	const first = new UpdateGuard(() => null, {id: 'A0', userDataDir: root}, {autoUpdater, pendingDir, profiles: []}).install();
+	const second = new UpdateGuard(() => null, {id: 'A0', userDataDir: root}, {autoUpdater, pendingDir, profiles: []}).install();
+	assert.equal(globalThis.__ANTIGRAVITY_UPDATE_GUARD__, second);
+	assert.deepEqual(second.resolveInstaller('2.31.0'), {installerPath, fileName: 'Antigravity-2.31.0.exe', version: '2.31.0'});
+	second.dispose();
+	assert.equal(Object.getOwnPropertyDescriptor(autoUpdater, 'autoInstallOnAppQuit')?.value, true);
+	assert.equal(first.status().id, 'A0');
+	const runner = new UpdateRunner({
+		installerPath,
+		pendingDir,
+		profileId: 'A0',
+		userDataDir: root,
+		waitPid: 99999,
+		waitTimeoutMs: 10,
+		pollMs: 2,
+		isPidAlive: () => true,
+		profiles: []
+	});
+	const timedOut = await runner.run();
+	assert.deepEqual(timedOut, {status: 'timeout', waitPid: 99999});
+	assert.equal(JSON.parse(fs.readFileSync(path.join(pendingDir, 'deferred-update.json'), 'utf8')).deferredBy, 'A0');
 });
