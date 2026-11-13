@@ -1,42 +1,10 @@
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
 // https://github.com/dmitry-ai/antigravity-addons/issues/4
-each(range(0, @folder-depth-limit), {
-	[data-folder-depth='@{value}'] {
-		--folder-depth: @value;
-	}
-});
-[data-testid='section-header'][data-folder-id] > .group\/section-header,
-.group\/section-header[data-folder-id],
-[data-testid='section-header'][data-folder-depth] > .group\/section-header,
-.group\/section-header[data-folder-depth] {
-	padding-left: calc(8px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
-	margin-left: 0 !important;
-}
-button[data-project-card][data-folder-depth],
-[data-index][data-folder-depth] button[data-project-card] {
-	padding-left: calc(4px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
-}
-[data-testid='empty-placeholder'][data-folder-depth],
-[data-index][data-folder-depth] [data-testid='empty-placeholder'] {
-	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
-	font-size: 11.5px !important;
-	font-style: italic !important;
-	opacity: 0.5 !important;
-}
-[data-index][data-folder-depth] [data-testid='conversation-row-sidebar'] {
-	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
-}
-[data-index][data-folder-depth] > div.w-full.h-full,
-[data-index][data-folder-depth] > div.w-full.group:has([data-testid]) {
-	padding-left: 0 !important;
-}
-[data-index][data-folder-depth] > div.w-full.group:not(.h-full):not(:has([data-testid])) {
-	padding-left: calc(16px + var(--folder-depth, 0) * var(--folder-indent-unit, @folder-indent)) !important;
-}
-[data-testid='conversation-row-sidebar'] [data-screenshot-volatile],
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 [data-testid='conversation-row-sidebar'] span.text-xs.opacity-60,
-[data-testid='conversation-row-sidebar'] span.min-w-4,
 [data-testid^='conversation-row-'] [data-screenshot-volatile],
 [data-testid^='conversation-row-'] span.min-w-4 {
 	display: none !important;
@@ -45,7 +13,6 @@ button[data-project-card][data-folder-depth],
 	position: relative !important;
 	padding-right: 6px !important;
 }
-[data-testid='conversation-row-sidebar'] > div.grow,
 [data-testid^='conversation-row-'] > div.grow {
 	flex: 1 1 0% !important;
 	min-width: 0 !important;
@@ -53,14 +20,11 @@ button[data-project-card][data-folder-depth],
 	margin-right: 0 !important;
 	z-index: 1 !important;
 }
-[data-testid='conversation-row-sidebar'] > div.grow > div,
 [data-testid^='conversation-row-'] > div.grow > div,
-[data-testid='conversation-row-sidebar'] > div.grow span.truncate,
 [data-testid^='conversation-row-'] > div.grow span.truncate {
 	width: 100% !important;
 	max-width: 100% !important;
 }
-[data-testid='conversation-row-sidebar'] > div.shrink-0,
 [data-testid^='conversation-row-'] > div.shrink-0 {
 	position: absolute !important;
 	right: 4px !important;
@@ -72,23 +36,18 @@ button[data-project-card][data-folder-depth],
 	display: flex !important;
 	align-items: center !important;
 }
-[data-testid='conversation-row-sidebar']:not(:hover):not(:focus-within) > div.shrink-0,
 [data-testid^='conversation-row-']:not(:hover):not(:focus-within) > div.shrink-0 {
 	pointer-events: none !important;
 }
-[data-testid='conversation-row-sidebar']:hover > div.shrink-0,
-[data-testid='conversation-row-sidebar']:focus-within > div.shrink-0,
 [data-testid^='conversation-row-']:hover > div.shrink-0,
 [data-testid^='conversation-row-']:focus-within > div.shrink-0 {
 	pointer-events: auto !important;
 }
-[data-testid='conversation-row-sidebar'] > div.shrink-0 > div,
 [data-testid^='conversation-row-'] > div.shrink-0 > div {
 	height: 100% !important;
 	display: flex !important;
 	align-items: center !important;
 }
-[data-testid='conversation-row-sidebar'] > div.shrink-0 div.absolute,
 [data-testid^='conversation-row-'] > div.shrink-0 div.absolute {
 	height: 100% !important;
 	top: 0 !important;
@@ -101,35 +60,13 @@ button[data-project-card][data-folder-depth],
 	justify-content: flex-end !important;
 	background: linear-gradient(to right, transparent 0%, var(--row-bg, var(--sidebar)) 18px, var(--row-bg, var(--sidebar)) 100%) !important;
 }
-[data-testid='conversation-row-sidebar']:hover > div.shrink-0 div.absolute,
 [data-testid^='conversation-row-']:hover > div.shrink-0 div.absolute {
 	background: linear-gradient(to right, transparent 0%, var(--row-bg, var(--sidebar-muted, #e0e0e0)) 18px, var(--row-bg, var(--sidebar-muted, #e0e0e0)) 100%) !important;
 }
-[data-testid='conversation-row-sidebar'][data-selected='true'] > div.shrink-0 div.absolute,
 [data-testid^='conversation-row-'][data-selected='true'] > div.shrink-0 div.absolute {
 	background: linear-gradient(to right, transparent 0%, var(--sidebar-secondary, #e4e4e4) 18px, var(--sidebar-secondary, #e4e4e4) 100%) !important;
 }
-[data-testid='conversation-row-sidebar'] button,
 [data-testid^='conversation-row-'] button {
 	position: relative !important;
 	z-index: 30 !important;
 }
-each(range(0, @explicit-depth-limit), {
-	[data-testid='section-header'][data-folder-depth='@{value}'] > .group\/section-header,
-	.group\/section-header[data-folder-depth='@{value}'] {
-		padding-left: (8px + @value * @folder-indent) !important;
-	}
-});
-each(range(0, @explicit-depth-limit), {
-	button[data-project-card][data-folder-depth='@{value}'],
-	[data-index][data-folder-depth='@{value}'] button[data-project-card] {
-		padding-left: (4px + @value * @folder-indent) !important;
-	}
-});
-each(range(0, @explicit-depth-limit), {
-	[data-testid='empty-placeholder'][data-folder-depth='@{value}'],
-	[data-index][data-folder-depth='@{value}'] [data-testid='empty-placeholder'],
-	[data-index][data-folder-depth='@{value}'] [data-testid='conversation-row-sidebar'] {
-		padding-left: (16px + @value * @folder-indent) !important;
-	}
-});

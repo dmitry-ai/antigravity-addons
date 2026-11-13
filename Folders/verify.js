@@ -1,6 +1,9 @@
 // 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -14,7 +17,6 @@ module.exports = async () => {
 		'folders-model.js',
 		'antigravity-adapter.js',
 		'folders-client.js',
-		'folders-view.js',
 		'folders-manager.js',
 		'renderer-source.js',
 		'runtime-health.js'

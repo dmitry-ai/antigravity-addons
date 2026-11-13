@@ -4,12 +4,11 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 [data-testid='conversation-list-sidebar'] [data-testid='section-header'][data-title='Outside of Project'] {
 	display: none !important;
-}
-:root,
-[data-testid='conversation-list-sidebar'] {
-	--folder-indent-unit: @folder-indent;
 }
 .fg-row[data-folders-row^='folder:'] {
 	cursor: pointer;
@@ -43,20 +42,6 @@
 	color: var(--foreground, currentColor) !important;
 	background-color: var(--sidebar-secondary, rgba(128, 128, 128, 0.12)) !important;
 }
-.folder-rename-input {
-	background: var(--background, #ffffff) !important;
-	color: var(--foreground, #18181b) !important;
-	border: 1px solid var(--primary, #3b82f6) !important;
-	border-radius: 4px !important;
-	font-size: 11.5px !important;
-	font-weight: 500 !important;
-	padding: 0 4px !important;
-	margin: 0 !important;
-	outline: none !important;
-	width: calc(100% - 24px) !important;
-	height: @tree-row-height !important;
-	box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3) !important;
-}
 .folder-drop-target {
 	outline: 2px dashed #3b82f6 !important;
 	outline-offset: -1px !important;
@@ -64,8 +49,7 @@
 	border-radius: 6px !important;
 	transition: all 120ms ease !important;
 }
-.folder-drop-target > div,
-.folder-drop-target .group\/section-header {
+.folder-drop-target > div {
 	background-color: rgba(59, 130, 246, 0.25) !important;
 }
 .antigravity-folder-menu {

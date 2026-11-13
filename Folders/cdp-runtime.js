@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 const path = require('node:path');
 const fs = require('node:fs');
 const {writeFileAtomic} = require('../Upgrade/process-io');
@@ -26,7 +29,7 @@ const createFoldersRuntime = ({broadcast, invalidate, report, stateRoot = path.j
 	assetWatcher.on('error', error => report?.(error.message));
 	store.on('change', snapshot => {
 		invalidate?.();
-		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_CLIENT__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
+		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
 	});
 	return {
 		dispose: () => {

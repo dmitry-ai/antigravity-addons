@@ -10,6 +10,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decompose installFoldersView into ES6 class FoldersView in Folders/folders-view.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/28
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -19,7 +22,7 @@ const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const manager = require('./folders-manager');
 const {FoldersStore} = require('./folders-store');
-const {FoldersView, createReadConfig} = require('./folders-view');
+const {FoldersView, createReadConfig} = require('./folders-client');
 const config = () => ({
 	folders: [
 		{id: 'root', name: 'Work', parentId: null},
@@ -463,29 +466,26 @@ test('FoldersView class methods manage collapsed state, routes, status, reveal, 
 			return {};
 		}
 	};
-	const client = {
-		data,
-		element: (tag, className = '', text = '') => ({
-			tag,
-			className,
-			textContent: text,
-			dataset: {},
-			style: {},
-			attributes: {},
-			setAttribute(key, value) {
-				this.attributes[key] = String(value);
-			},
-			remove() {
-				this.removed = true;
-			}
-		}),
-		getFolder: id => data.folders.find(item => id === item.id) || null,
-		notifyUpdate() {}
-	};
 	let adapterDisposed = false;
 	const view = new FoldersView(win, {
 		model,
-		client,
+		data,
+		document: {
+			createElement: tag => ({
+				tag,
+				className: '',
+				textContent: '',
+				dataset: {},
+				style: {},
+				attributes: {},
+				setAttribute(key, value) {
+					this.attributes[key] = String(value);
+				},
+				remove() {
+					this.removed = true;
+				}
+			})
+		},
 		adapter: {
 			contract: {rpc: 'ok'},
 			dispose: () => {
