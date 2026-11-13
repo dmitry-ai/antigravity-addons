@@ -1,6 +1,9 @@
 # 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 # "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 # https://github.com/dmitry-ai/antigravity-addons/issues/6
+# 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+# https://github.com/dmitry-ai/antigravity-addons/issues/43
 param([switch]$Check, [switch]$Restore, [switch]$NoPause)
 $ErrorActionPreference = 'Stop'
 $exitStatus = 1
@@ -16,20 +19,6 @@ try {
 	}
 	if ($Restore) {
 		$argumentsList += '--restore'
-	}
-	$requiredPackages = @('less')
-	$missingPackages = @($requiredPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot ('node_modules\' + $_ + '\package.json'))) })
-	if (0 -lt $missingPackages.Count) {
-		Push-Location -LiteralPath $PSScriptRoot
-		try {
-			& npm.cmd ci --ignore-scripts --no-audit --no-fund
-			if (0 -ne $LASTEXITCODE) {
-				throw 'Failed to install dependencies. Check npm access.'
-			}
-		}
-		finally {
-			Pop-Location
-		}
 	}
 	& $nodeCommand.Source @argumentsList
 	$exitStatus = $LASTEXITCODE

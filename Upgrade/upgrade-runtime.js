@@ -4,6 +4,9 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const registry = require('./registry');
 const control = require('./runtime-control');
 const {inspectRuntime} = require('./runtime-health');
@@ -28,9 +31,6 @@ const run = async (options = {}) => {
 		for (const tool of tools) {
 			if (!tool.cdp) {
 				throw Error(`Module ${tool.id} does not declare a CDP adapter`);
-			}
-			if (tool.prepare) {
-				await require(tool.prepare)({dryRun: 'apply' !== mode});
 			}
 		}
 		if ('apply' === mode) {

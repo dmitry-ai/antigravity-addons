@@ -1,6 +1,9 @@
 // 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -33,7 +36,7 @@ const discover = (root = toolsRoot) => {
 					throw Error(`Invalid runtimeFiles: ${manifest}`);
 				}
 				tool.runtimeFiles = (tool.runtimeFiles || []).map(file => resolveFile(code, file));
-				for (const field of ['prepare', 'validate', 'cdp']) {
+				for (const field of ['validate', 'cdp']) {
 					if (tool[field]) {
 						tool[field] = resolveFile(code, tool[field]);
 						new vm.Script(fs.readFileSync(tool[field], 'utf8'), {filename: tool[field]});

@@ -12,9 +12,6 @@
 		"test": "node --test --test-force-exit --test-timeout=30000 test-registry.js test-cdp-runtime.js ../Folders/test-suite.js ../Multi-Account/launcher.test.js ../Multi-Account/skills-manifest.test.js",
 		"test:browser": "node --test --test-force-exit --test-timeout=30000 ../Folders/browser.test.js"
 	},
-	"dependencies": {
-		"less": "4.4.2"
-	},
 	"devDependencies": {
 		"playwright-core": "1.62.1"
 	}

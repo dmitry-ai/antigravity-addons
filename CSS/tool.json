@@ -5,5 +5,5 @@
 	"enabled": true,
 	"order": 10,
 	"cdp": "cdp-runtime.js",
-	"prepare": "build.js"
+	"runtimeFiles": ["base.css", "compact.css", "folders.css", "indent.css", "chat.css"]
 }

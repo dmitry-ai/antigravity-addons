@@ -16,6 +16,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
@@ -164,24 +167,25 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 			}
 			return r;
 		},
-		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {includeStyle: false, revision: store.revision}),
-		styleSheet: () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8')
+		source: () => rendererSource(store.data || {folders: [], projectFolderMap: {}}, {revision: store.revision}),
+		styleSheet
 	};
 };
-const rendererSource = (data, {includeStyle = true, revision = ''} = {}) => {
+const rendererSource = (data, {revision = ''} = {}) => {
 	const scripts = filenames.map(filename => fs.readFileSync(path.join(__dirname, filename), 'utf8')).join('\n;\n');
 	const version = crypto.createHash('sha256').update(scripts).digest('hex');
 	const revisionAssignment = revision ? `window.__FOLDERS_REVISION__=${JSON.stringify(revision)};` : '';
-	const styleAssignment = includeStyle ? `window.__FOLDERS_STYLE__=${JSON.stringify(fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8'))};` : '';
-	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${styleAssignment}${revisionAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
+	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
+const styleSheet = () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8');
 Object.assign(createFoldersRuntime, {
 	FoldersStore,
 	disposeExpression,
 	filenames,
 	inspectExpression,
 	rendererSource,
-	reportExpression
+	reportExpression,
+	styleSheet
 });
 module.exports = createFoldersRuntime;

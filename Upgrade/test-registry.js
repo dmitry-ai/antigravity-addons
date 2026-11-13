@@ -1,6 +1,9 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -58,4 +61,17 @@ test('The CDP CLI accepts current modes and rejects ambiguous or retired archive
 	assert.throws(() => parseArguments(['--check', '--restore']), /one mode/);
 	assert.throws(() => parseArguments(['--app-dir', 'C:/unused']), /Unknown argument/);
 	assert.throws(() => parseArguments(['--bundle', 'unused.js']), /Unknown argument/);
+});
+test('Native CSS runtime concatenates modular stylesheets in memory with zero Less runtime dependencies', () => {
+	const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+	assert.equal(pkg.dependencies, undefined);
+	const cssRuntime = require('../CSS/cdp-runtime');
+	const css = cssRuntime.styleSheet();
+	assert.match(css, /--antigravity-tree-row-height:\s*16px/);
+	assert.match(css, /\.antigravity-folder-picker/);
+	assert.match(css, /\[data-testid='conversation-view'\]/);
+	const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+	assert.equal(/^\s*\/\//m.test(withoutComments), false);
+	assert.equal(/@tree-/.test(withoutComments), false);
+	assert.equal(Object.keys(require.cache).some(key => /[\\/]node_modules[\\/]less[\\/]/.test(key)), false);
 });

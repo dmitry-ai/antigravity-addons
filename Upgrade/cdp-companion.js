@@ -7,6 +7,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 // https://github.com/dmitry-ai/antigravity-addons/issues/38
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -25,7 +28,7 @@ const binding = '__antigravityToolsCall';
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
 const runtimeVersion = () => {
 	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'registry.js', 'runtime-health.js', '../Multi-Account/profiles.js'].map(filename => path.join(__dirname, filename));
-	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, tool.prepare, ...(tool.runtimeFiles || [])].filter(Boolean));
+	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
 // 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk

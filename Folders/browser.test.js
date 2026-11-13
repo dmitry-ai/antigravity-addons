@@ -4,6 +4,9 @@
 // 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
 // https://github.com/dmitry-ai/antigravity-addons/issues/18
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {openFixture, closeSharedBrowser} = require('./browser-fixture');
@@ -28,12 +31,14 @@ test('A real browser mounts the independent tree on unrelated vendor markup and 
 		status: window.__PROJECT_FOLDERS_VIEW__?.inspect(),
 		observers: window.__foldersFixture.observers,
 		runaway: window.__foldersFixture.observerRunaway,
-		draft: document.querySelector('#untouched-draft').value
+		draft: document.querySelector('#untouched-draft').value,
+		parsedCssRules: [...document.styleSheets].reduce((sum, sheet) => sum + sheet.cssRules.length, 0)
 	}));
 	console.log(JSON.stringify(report));
 	assert.equal(report.runaway, undefined);
 	assert.equal(report.status.state, 'ready');
 	assert.equal(report.draft, 'Unsaved draft');
+	assert.ok(40 < report.parsedCssRules);
 	assert.deepEqual(fixture.errors, []);
 	const geometry = await fixture.page.locator('.fg-row').evaluateAll(rows => rows.slice(0, 5).map(el => {
 		const box = el.getBoundingClientRect();

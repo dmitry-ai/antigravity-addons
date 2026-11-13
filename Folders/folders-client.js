@@ -22,6 +22,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 (factory => {
 	const api = factory();
 	if ('object' === typeof module && module.exports) {
@@ -316,7 +319,6 @@
 			this.lifetime = new AbortController();
 			this.rootAbort = null;
 			this.observer = null;
-			this.style = null;
 			this.mountDeadline = Date.now() + 15000;
 			this.drag = new SidebarDragController(this);
 			const MenuCtor = win?.AntigravityFolderMenu?.FolderMenuController || FolderMenuController;
@@ -484,7 +486,6 @@
 			this.sizing?.disconnect();
 			this.adapter?.dispose?.();
 			this.root?.remove();
-			this.style?.remove();
 			if (this.nativeList) {
 				this.nativeList.style.paddingTop = this.nativePaddingTop;
 				this.nativeList.style.removeProperty('display');
@@ -858,12 +859,6 @@
 			}
 		}
 		async start() {
-			this.style = this.element('style');
-			this.style.dataset.foldersViewStyle = '2';
-			this.style.textContent = this.win?.__FOLDERS_STYLE__ || '';
-			if (!this.win?.__ANTIGRAVITY_TOOLS_INSPECTOR_STYLES__) {
-				this.doc?.head?.append(this.style);
-			}
 			this.win?.addEventListener?.('popstate', () => this.schedule(), {signal: this.lifetime.signal});
 			const MutationObserverCtor = this.win?.MutationObserver || ('undefined' !== typeof MutationObserver ? MutationObserver : null);
 			if ('function' === typeof MutationObserverCtor && this.doc?.documentElement) {

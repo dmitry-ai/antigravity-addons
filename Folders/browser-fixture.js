@@ -10,10 +10,14 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../Upgrade/node_modules/playwright-core');
-const {rendererSource} = require('./cdp-runtime');
+const {styleSheet: cssStyleSheet} = require('../CSS/cdp-runtime');
+const {rendererSource, styleSheet: foldersStyleSheet} = require('./cdp-runtime');
 const BROWSER_ARGS = [
 	'--disable-background-networking',
 	'--disable-renderer-backgrounding',
@@ -256,7 +260,7 @@ const openFixture = async ({
 			};
 		}, {data, projects, summaries, badProjects});
 		await page.goto('https://folders-fixture.invalid/');
-		await page.addStyleTag({content: fs.readFileSync(path.resolve(__dirname, '../CSS/style.css'), 'utf8')});
+		await page.addStyleTag({content: `${cssStyleSheet()}\n${foldersStyleSheet()}`});
 		await page.addScriptTag({content: rendererSource(data) + '\n//# sourceURL=folders-runtime-fixture.js'});
 		if (delayedAnchor) {
 			await page.evaluate(() => {

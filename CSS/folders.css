@@ -1,12 +1,15 @@
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/4
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
-// https://github.com/dmitry-ai/antigravity-addons/issues/24
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
-// https://github.com/dmitry-ai/antigravity-addons/issues/34
+/* 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+	https://github.com/dmitry-ai/antigravity-addons/issues/4 */
+/* 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+	https://github.com/dmitry-ai/antigravity-addons/issues/24 */
+/* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+	https://github.com/dmitry-ai/antigravity-addons/issues/34 */
+/* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [data-testid='conversation-list-sidebar'] [data-testid='section-header'][data-title='Outside of Project'] {
 	display: none !important;
 }
@@ -29,7 +32,7 @@
 	align-items: center !important;
 	justify-content: center !important;
 	width: 20px !important;
-	height: @tree-row-height !important;
+	height: var(--antigravity-tree-row-height, 16px) !important;
 	border-radius: 4px !important;
 	border: none !important;
 	background: transparent !important;
@@ -104,9 +107,9 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/8
+/* 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+	https://github.com/dmitry-ai/antigravity-addons/issues/8 */
 .antigravity-folder-picker {
 	display: flex;
 	flex-direction: column;

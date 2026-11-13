@@ -1,9 +1,12 @@
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/4
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
-// https://github.com/dmitry-ai/antigravity-addons/issues/34
+/* 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+	https://github.com/dmitry-ai/antigravity-addons/issues/4 */
+/* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+	https://github.com/dmitry-ai/antigravity-addons/issues/34 */
+/* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [data-testid='conversation-row-sidebar'] span.text-xs.opacity-60,
 [data-testid^='conversation-row-'] [data-screenshot-volatile],
 [data-testid^='conversation-row-'] span.min-w-4 {
