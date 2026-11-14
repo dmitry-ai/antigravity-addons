@@ -19,8 +19,12 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const {createMockDocument} = require('../Upgrade/test-helpers');
 const {FolderDialogController} = require('./folder-dialogs');
 const {SidebarDragController, hasDragType} = require('./folder-drag');
 const {FolderMenuController, folderPickerModel, openProjectContextMenu, positionContextMenu} = require('./folder-menu');
@@ -155,104 +159,7 @@ test('FoldersView detectCurrentFolderId resolves hover, active conversation sele
 	view.dispose();
 });
 test('FolderMenuController and FolderDialogController manage menu ARIA navigation, modal lifecycle, and FoldersView proxy getters in Node', async () => {
-	const makeNode = tag => {
-		const listeners = new Map();
-		const upper = tag.toUpperCase();
-		const node = {
-			tag: upper,
-			className: '',
-			textContent: '',
-			_value: undefined,
-			get value() {
-				return undefined !== this._value ? this._value : 'SELECT' === upper ? this.children.find(opt => opt.selected)?.value || '' : '';
-			},
-			set value(v) {
-				this._value = v;
-			},
-			dataset: {},
-			style: {},
-			attributes: {},
-			children: [],
-			isConnected: true,
-			offsetWidth: 180,
-			offsetHeight: 120,
-			append(...items) {
-				for (const item of items) {
-					if ('object' === typeof item && item) {
-						this.children.push(item);
-					}
-				}
-			},
-			appendChild(child) {
-				this.children.push(child);
-				return child;
-			},
-			replaceChildren(...items) {
-				this.children = items.filter(item => 'object' === typeof item && item);
-			},
-			setAttribute(key, val) {
-				this.attributes[key] = String(val);
-			},
-			addEventListener(type, fn) {
-				if (!listeners.has(type)) {
-					listeners.set(type, []);
-				}
-				listeners.get(type).push(fn);
-			},
-			dispatch(type, event = {}) {
-				for (const fn of listeners.get(type) || []) {
-					fn({
-						preventDefault() {},
-						stopPropagation() {},
-						target: node,
-						...event
-					});
-				}
-			},
-			click() {
-				this.dispatch('click');
-			},
-			focus() {
-				doc.activeElement = node;
-			},
-			scrollIntoView() {},
-			setCustomValidity(msg) {
-				this.validationMessage = msg;
-			},
-			reportValidity() {},
-			remove() {
-				this.removed = true;
-			},
-			querySelectorAll(selector) {
-				const out = [];
-				const match = el => (selector.includes('treeitem') && 'treeitem' === el.attributes?.role)
-					|| (selector.includes('menuitem') && 'menuitem' === el.attributes?.role)
-					|| (selector.includes('button') && 'button' === el.attributes?.role);
-				const walk = el => {
-					for (const child of el.children || []) {
-						if (match(child)) {
-							out.push(child);
-						}
-						walk(child);
-					}
-				};
-				walk(this);
-				return out;
-			},
-			querySelector(selector) {
-				let r = null;
-				if (selector.includes('aria-selected=true')) {
-					r = this.querySelectorAll('treeitem').find(el => 'true' === el.attributes['aria-selected']) || null;
-				}
-				else {
-					r = this.querySelectorAll(selector)[0] || null;
-				}
-				return r;
-			}
-		};
-		return node;
-	};
-	const doc = {activeElement: null, body: makeNode('body'), createElement: makeNode};
+	const doc = createMockDocument();
 	const posted = [];
 	const win = {
 		innerWidth: 640,
@@ -316,42 +223,14 @@ test('FolderStorageClient, FolderTreeRenderer, narrowed MutationObserver, and fo
 			observed.push({target, options});
 		}
 	}
-	const makeEl = name => ({
-		name,
-		isConnected: true,
-		dataset: {},
-		style: {
-			paddingTop: '',
-			setProperty() {},
-			removeProperty() {}
-		},
-		children: [],
-		append(...items) {
-			for (const item of items) {
-				if ('object' === typeof item && item) {
-					item.parentElement = this;
-					item.isConnected = true;
-					this.children.push(item);
-				}
-			}
-		},
-		addEventListener() {},
-		setAttribute() {},
-		removeAttribute() {},
-		closest: sel => '[role="navigation"]' === sel ? nav : null,
-		contains: () => false,
-		querySelector: () => null,
-		remove() {
-			this.isConnected = false;
-		}
-	});
-	const documentElement = makeEl('html');
-	const body = makeEl('body');
-	body.parentElement = documentElement;
-	const nav = makeEl('nav');
-	nav.parentElement = body;
-	const nativeList = makeEl('sidebar');
-	nativeList.parentElement = nav;
+	const doc = createMockDocument();
+	const {documentElement} = doc;
+	const nav = doc.createElement('nav');
+	nav.setAttribute('role', 'navigation');
+	doc.body.append(nav);
+	const nativeList = doc.createElement('div');
+	nativeList.dataset.testid = 'conversation-list-sidebar';
+	nav.append(nativeList);
 	let getCount = 0;
 	const win = {
 		MutationObserver: FakeObserver,
@@ -364,14 +243,6 @@ test('FolderStorageClient, FolderTreeRenderer, narrowed MutationObserver, and fo
 			}
 			return 'GET_VIEW_STATE' === message.method ? {schemaVersion: 1} : {schemaVersion: 2, revision: 'r1', data: {folders, projectFolderMap: {}}};
 		}
-	};
-	const doc = {
-		documentElement,
-		body,
-		activeElement: null,
-		createElement: makeEl,
-		querySelectorAll: () => [nativeList],
-		querySelector: () => nav
 	};
 	const view = new FoldersView(win, {
 		document: doc,

@@ -10,59 +10,17 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const {Companion, bridgeSource, runtimeVersion} = require('./cdp-companion');
 const {CDP} = require('./cdp-client');
-const fixture = context => {
-	const parent = os.tmpdir();
-	const r = fs.mkdtempSync(path.join(parent, 'antigravity-cdp-'));
-	context.after(() => {
-		assert.ok(path.resolve(r).startsWith(path.resolve(parent) + path.sep));
-		fs.rmSync(r, {recursive: true, force: true});
-	});
-	return r;
-};
-class FakeCDP {
-	constructor() {
-		this.handlers = new Map();
-		this.calls = [];
-		this.expressions = [];
-		this.closed = false;
-	}
-	on(name, handler) {
-		this.handlers.set(name, handler);
-	}
-	async call(method, params = {}) {
-		let r = {};
-		this.calls.push({method, params});
-		if ('Page.getFrameTree' === method) {
-			r = {frameTree: {frame: {id: 'main'}}};
-		}
-		else if ('Runtime.enable' === method) {
-			this.handlers.get('Runtime.executionContextCreated')?.({context: {id: 7, auxData: {isDefault: true, frameId: 'main'}}});
-		}
-		else if ('CSS.createStyleSheet' === method) {
-			r = {styleSheetId: 'owned-styles'};
-		}
-		return r;
-	}
-	async evaluate(expression) {
-		let r;
-		this.expressions.push(expression);
-		if (expression.startsWith('({product:')) {
-			r = {product: 'Antigravity', csrf: 'string', ready: 'complete', origin: 'https://127.0.0.1:12345', appRoot: true, nativeStorage: 'function'};
-		}
-		return r;
-	}
-	close() {
-		this.closed = true;
-		this.handlers.get('close')?.();
-	}
-}
+const {FakeCDP, createTempDir, mockProfileEndpoints, withEnv} = require('./test-helpers');
+const fixture = context => createTempDir(context, 'antigravity-cdp-');
 test('Adding a module or changing its declared Node files changes the supervisor version; editing data does not', context => {
 	const root = fixture(context);
 	const manifest = path.join(root, 'tool.json');
@@ -143,13 +101,7 @@ test('Only the verified main execution context can call a module storage channel
 });
 test('The runtime rereads the dynamic CDP port and reports a foreign application without attaching', async context => {
 	const root = fixture(context);
-	const roaming = path.join(root, 'roaming');
-	fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
-	const previous = process.env.APPDATA;
-	process.env.APPDATA = roaming;
-	context.after(() => {
-		process.env.APPDATA = previous;
-	});
+	const roaming = mockProfileEndpoints(context, root, {Antigravity: null});
 	const filename = path.join(roaming, 'Antigravity/DevToolsActivePort');
 	const runtime = new Companion({root});
 	const requests = [];
@@ -195,14 +147,7 @@ test('Opening a native conversation route keeps the same CDP binding and storage
 	const runtime = new Companion({root: fixture(context)});
 	const cdp = new FakeCDP();
 	let url = 'https://127.0.0.1:12345/';
-	const roaming = path.join(runtime.root, 'roaming');
-	fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
-	fs.writeFileSync(path.join(roaming, 'Antigravity/DevToolsActivePort'), '10001');
-	const previous = process.env.APPDATA;
-	process.env.APPDATA = roaming;
-	context.after(() => {
-		process.env.APPDATA = previous;
-	});
+	mockProfileEndpoints(context, runtime.root);
 	context.mock.method(CDP, 'open', async () => cdp);
 	context.mock.method(globalThis, 'fetch', async endpoint => Response.json(endpoint.endsWith('/json/version') ? {'User-Agent': 'Antigravity/2.27.0', webSocketDebuggerUrl: 'ws://127.0.0.1:10001/browser'} : [{id: 'main', type: 'page', url, webSocketDebuggerUrl: 'ws://127.0.0.1:10001/main'}]));
 	runtime.modules.set('folders', {source: () => 'window.testFolders=true'});
@@ -218,16 +163,7 @@ test('Opening a native conversation route keeps the same CDP binding and storage
 });
 test('Profiles with identical target IDs remain independent when one endpoint disappears or restarts', async context => {
 	const root = fixture(context);
-	const roaming = path.join(root, 'roaming');
-	for (const [name, port] of [['Antigravity', '10001'], ['Antigravity-A6', '10006']]) {
-		fs.mkdirSync(path.join(roaming, name), {recursive: true});
-		fs.writeFileSync(path.join(roaming, name, 'DevToolsActivePort'), port);
-	}
-	const previous = process.env.APPDATA;
-	process.env.APPDATA = roaming;
-	context.after(() => {
-		process.env.APPDATA = previous;
-	});
+	mockProfileEndpoints(context, root, {Antigravity: '10001', 'Antigravity-A6': '10006'});
 	let offline = false;
 	let generation = 1;
 	context.mock.method(CDP, 'open', async () => new FakeCDP());
@@ -272,53 +208,22 @@ test('ensureRunning stops an outdated companion, launches via explorer.exe start
 	fs.mkdirSync(sysRoot, {recursive: true});
 	fs.writeFileSync(shortcut, 'shortcut');
 	fs.writeFileSync(explorer, 'explorer');
-	const prevAppData = process.env.APPDATA;
-	const prevSystemRoot = process.env.SystemRoot;
-	process.env.APPDATA = roaming;
-	process.env.SystemRoot = sysRoot;
-	context.after(() => {
-		process.env.APPDATA = prevAppData;
-		process.env.SystemRoot = prevSystemRoot;
-	});
+	withEnv(context, {APPDATA: roaming, SystemRoot: sysRoot});
 	const cp = require('node:child_process');
 	const control = require('./runtime-control');
 	const expectedVersion = runtimeVersion();
 	const expectedPath = path.join(__dirname, 'cdp-companion.js');
-	fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
-		instance: 'stale-instance',
-		version: 'old-version',
-		pid: process.pid,
-		runtimePath: expectedPath,
-		state: 'connected',
-		updated: new Date().toISOString()
-	}));
+	const writeRuntime = (instance, version, state = 'connected') => fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({instance, version, pid: process.pid, runtimePath: expectedPath, state, updated: new Date().toISOString()}));
+	writeRuntime('stale-instance', 'old-version');
 	const spawns = [];
 	let shellStartsCompanion = true;
 	context.mock.method(cp, 'spawn', (command, args, options) => {
 		spawns.push({command, args, options});
 		if (command === explorer && shellStartsCompanion) {
-			setImmediate(() => {
-				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
-					instance: 'shell-instance',
-					version: expectedVersion,
-					pid: process.pid,
-					runtimePath: expectedPath,
-					state: 'connected',
-					updated: new Date().toISOString()
-				}));
-			});
+			setImmediate(() => writeRuntime('shell-instance', expectedVersion));
 		}
 		else if (command === process.execPath) {
-			setImmediate(() => {
-				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
-					instance: 'fallback-instance',
-					version: expectedVersion,
-					pid: process.pid,
-					runtimePath: expectedPath,
-					state: 'connected',
-					updated: new Date().toISOString()
-				}));
-			});
+			setImmediate(() => writeRuntime('fallback-instance', expectedVersion));
 		}
 		return {unref() {}};
 	});
@@ -328,14 +233,7 @@ test('ensureRunning stops an outdated companion, launches via explorer.exe start
 			const cmd = JSON.parse(fs.readFileSync(controlFile, 'utf8'));
 			fs.unlinkSync(controlFile);
 			if ('stale-instance' === cmd.instance && 'stop' === cmd.action) {
-				fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({
-					instance: 'stale-instance',
-					version: 'old-version',
-					pid: process.pid,
-					runtimePath: expectedPath,
-					state: 'stopped',
-					updated: new Date().toISOString()
-				}));
+				writeRuntime('stale-instance', 'old-version', 'stopped');
 			}
 		}
 	}, 2);
@@ -422,14 +320,7 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	}
 	assert.equal(require('./profiles').readProfiles, require('../Multi-Account/profiles').readProfiles);
 	const root = fixture(context);
-	const roaming = path.join(root, 'roaming');
-	fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
-	fs.writeFileSync(path.join(roaming, 'Antigravity/DevToolsActivePort'), '10001');
-	const previous = process.env.APPDATA;
-	process.env.APPDATA = roaming;
-	context.after(() => {
-		process.env.APPDATA = previous;
-	});
+	const roaming = mockProfileEndpoints(context, root);
 	const cdp = new FakeCDP();
 	let styleReads = 0;
 	let sourceReads = 0;

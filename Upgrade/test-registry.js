@@ -4,20 +4,18 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 // https://github.com/dmitry-ai/antigravity-addons/issues/43
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const {discover} = require('./registry');
+const {createTempDir} = require('./test-helpers');
 const {parseArguments} = require('./upgrade');
 const fixture = context => {
-	const parent = os.tmpdir();
-	const root = fs.mkdtempSync(path.join(parent, 'antigravity-registry-'));
-	context.after(() => {
-		assert.ok(path.resolve(root).startsWith(path.resolve(parent) + path.sep));
-		fs.rmSync(root, {recursive: true, force: true});
-	});
+	const root = createTempDir(context, 'antigravity-registry-');
 	const add = (name, manifest) => {
 		const r = path.join(root, name);
 		fs.mkdirSync(r, {recursive: true});

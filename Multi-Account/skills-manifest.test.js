@@ -1,19 +1,17 @@
 // 2026-11-02 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Preserve inherited shared skills during A6 profile preparation":
 // https://github.com/dmitry-ai/antigravity-addons/issues/19
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const {createTempDir} = require('../Upgrade/test-helpers');
 const {prepareProfile} = require('./launcher');
 const fixture = context => {
-	const parent = path.resolve(os.tmpdir());
-	const root = fs.mkdtempSync(path.join(parent, 'antigravity-skills-manifest-'));
-	context.after(() => {
-		assert.ok(path.resolve(root).startsWith(parent + path.sep));
-		fs.rmSync(root, {recursive: true, force: true});
-	});
+	const root = createTempDir(context, 'antigravity-skills-manifest-');
 	const skillsRoot = path.join(root, 'shared skills');
 	fs.mkdirSync(path.join(skillsRoot, 'upwork-init'), {recursive: true});
 	fs.writeFileSync(path.join(skillsRoot, 'upwork-init/SKILL.md'), '---\nname: upwork-init\ndescription: fixture\n---\n');

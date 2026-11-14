@@ -28,11 +28,14 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
 // https://github.com/dmitry-ai/antigravity-addons/issues/36
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
+const {createMockDocument, createTempDir, encodeConnectFrame} = require('../Upgrade/test-helpers');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
 const {AntigravityAdapter, ConnectSummaryStream} = createAdapter;
@@ -55,20 +58,9 @@ const projects = [
 	{id: 'p1', name: 'Project 2'},
 	{id: 'p3', name: 'Unassigned'}
 ];
-const summary = (projectId, title = 'Conversation') => ({
-	annotations: {title},
-	trajectoryMetadata: {projectId},
-	status: 'CASCADE_RUN_STATUS_IDLE',
-	lastModifiedTime: '2026-10-28T10:00:00Z'
-});
+const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
 const scratch = context => {
-	const parent = os.tmpdir();
-	const directory = fs.mkdtempSync(path.join(parent, 'antigravity-folders-'));
-	context.after(() => {
-		const resolved = path.resolve(directory);
-		assert.ok(resolved.startsWith(path.resolve(parent) + path.sep));
-		fs.rmSync(resolved, {recursive: true, force: true});
-	});
+	const directory = createTempDir(context, 'antigravity-folders-');
 	const filename = path.join(directory, 'folders.json');
 	fs.writeFileSync(filename, JSON.stringify(config()));
 	return {directory, filename};
@@ -204,20 +196,9 @@ const fakeWindow = () => {
 	const win = {
 		__APP_CONFIG__: {csrfToken: 'fixture-only'},
 		location: {href: 'https://127.0.0.1:12345/'},
-		history: {
-			pushState(_state, _title, url) {
-				win.lastUrl = url;
-				win.location.href = new URL(url, win.location.href).href;
-			}
-		},
-		dispatchEvent(event) {
-			win.lastEvent = event;
-		},
-		PopStateEvent: class {
-			constructor(type) {
-				this.type = type;
-			}
-		}
+		history: {pushState(_state, _title, url) { win.lastUrl = url; win.location.href = new URL(url, win.location.href).href; }},
+		dispatchEvent(event) { win.lastEvent = event; },
+		PopStateEvent: class { constructor(type) { this.type = type; } }
 	};
 	return win;
 };
@@ -279,10 +260,9 @@ test('Native API errors and missing records are surfaced instead of reporting an
 	await assert.rejects(failed.createProject({id: 'p-new', name: 'New'}), /HTTP 404/);
 	failed.dispose();
 });
-const encode = value => ConnectSummaryStream.encodeFrame(value);
 test('Live conversation stream decodes fragmented/coalesced frames and preserves updates and deletions', async () => {
-	const a = encode({updates: {c1: summary('p1')}});
-	const b = encode({updates: {c2: summary('p1')}, deletes: ['c1']});
+	const a = encodeConnectFrame({updates: {c1: summary('p1')}});
+	const b = encodeConnectFrame({updates: {c2: summary('p1')}, deletes: ['c1']});
 	const frames = new Uint8Array(a.length + b.length);
 	frames.set(a);
 	frames.set(b, a.length);
@@ -362,7 +342,7 @@ test('Renaming a running conversation sends an annotation patch without writing 
 					new ReadableStream({
 						start(controller) {
 							stream = controller;
-							controller.enqueue(encode({updates: {c1: original}}));
+							controller.enqueue(encodeConnectFrame({updates: {c1: original}}));
 							options.signal.addEventListener('abort', () => controller.close(), {once: true});
 						}
 					}),
@@ -370,7 +350,7 @@ test('Renaming a running conversation sends an annotation patch without writing 
 				);
 			}
 			else if (url.endsWith('/UpdateConversationAnnotations')) {
-				stream.enqueue(encode({updates: {c1: {...original, stepCount: 121}}}));
+				stream.enqueue(encodeConnectFrame({updates: {c1: {...original, stepCount: 121}}}));
 				await new Promise(resolve => setImmediate(resolve));
 				r = Response.json({});
 			}
@@ -505,27 +485,10 @@ test('FoldersView class methods manage collapsed state, routes, status, reveal, 
 	const view = new FoldersView(win, {
 		model,
 		data,
-		document: {
-			createElement: tag => ({
-				tag,
-				className: '',
-				textContent: '',
-				dataset: {},
-				style: {},
-				attributes: {},
-				setAttribute(key, value) {
-					this.attributes[key] = String(value);
-				},
-				remove() {
-					this.removed = true;
-				}
-			})
-		},
+		document: createMockDocument(),
 		adapter: {
 			contract: {rpc: 'ok'},
-			dispose: () => {
-				adapterDisposed = true;
-			},
+			dispose: () => { adapterDisposed = true; },
 			selection: () => ({})
 		}
 	});
@@ -587,7 +550,7 @@ test('Folders runtime persists GET_VIEW_STATE, short-circuits unchanged knownRev
 	};
 	const view = new FoldersView(win, {
 		model,
-		document: {createElement: () => ({dataset: {}, style: {}, setAttribute() {}, remove() {}})},
+		document: createMockDocument(),
 		adapter: {dispose() {}, selection: () => ({})}
 	});
 	view.schedule = () => {
@@ -690,29 +653,7 @@ test('Single-read CAS persistConfig preserves BOM/CRLF, FoldersStore.dispatch re
 	assert.equal(rawAfter.includes('\r\n'), true);
 	assert.equal(rawAfter.endsWith('\r\n'), true);
 	let clicked = 0;
-	const view = new FoldersView({}, {
-		document: {
-			createElement: tag => ({
-				tag,
-				dataset: {},
-				style: {},
-				attributes: {},
-				listeners: {},
-				children: [],
-				setAttribute(k, v) {
-					this.attributes[k] = String(v);
-				},
-				addEventListener(k, fn) {
-					this.listeners[k] = fn;
-				},
-				append(...items) {
-					this.children.push(...items);
-				},
-				remove() {}
-			})
-		},
-		adapter: {dispose() {}, selection: () => ({})}
-	});
+	const view = new FoldersView({}, {document: createMockDocument(), adapter: {dispose() {}, selection: () => ({})}});
 	const child = view.element('span', 'child-cls', 'Child');
 	const el = view.element('button', 'btn-cls', undefined, {
 		attrs: {'aria-label': 'Test'},
@@ -790,6 +731,48 @@ test('AntigravityAdapter and ConnectSummaryStream coalesce concurrent readProjec
 		const flagged = ConnectSummaryStream.encodeFrame({error: {message: 'end-of-stream'}});
 		flagged[0] = 2;
 		assert.throws(() => stream.decodeFrames(flagged, () => {}), /end-of-stream/);
+	}
+	finally {
+		adapter.dispose();
+	}
+});
+test('A project committed before a lost response is recovered by exact UUID and retry creates no duplicate', async () => {
+	const committed = [];
+	const created = [];
+	const adapter = createAdapter({
+		window: {__APP_CONFIG__: {csrfToken: 'fixture'}},
+		model,
+		fetch: async (url, options) => {
+			if (url.endsWith('/CreateProject')) {
+				const project = JSON.parse(options.body).project;
+				created.push(project.id);
+				committed.push(project);
+				throw Error('Reply lost after commit');
+			}
+			if (!url.endsWith('/ListProjects') && !url.endsWith('/ReadProjects')) {
+				throw Error('Unexpected RPC');
+			}
+			return Response.json(url.endsWith('/ListProjects') ? {projectIds: committed.map(project => project.id)} : {projects: committed});
+		}
+	});
+	try {
+		assert.equal(await adapter.createProject({id: 'dialog-owned-uuid', name: 'Work'}), 'dialog-owned-uuid');
+		assert.equal(await adapter.createProject({id: 'dialog-owned-uuid', name: 'Work'}), 'dialog-owned-uuid');
+		assert.deepEqual(created, ['dialog-owned-uuid']);
+	}
+	finally {
+		adapter.dispose();
+	}
+});
+test('Creation errors cannot be mistaken for an unrelated project with the same display name', async () => {
+	const other = {id: 'unrelated-id', name: 'Same name'};
+	const adapter = createAdapter({
+		window: {__APP_CONFIG__: {csrfToken: 'fixture'}},
+		model,
+		fetch: async url => url.endsWith('/ListProjects') ? Response.json({projectIds: [other.id]}) : url.endsWith('/ReadProjects') ? Response.json({projects: [other]}) : new Response('Unavailable', {status: 503})
+	});
+	try {
+		await assert.rejects(adapter.createProject({id: 'exact-dialog-id', name: other.name}), /HTTP 503/);
 	}
 	finally {
 		adapter.dispose();

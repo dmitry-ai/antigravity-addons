@@ -22,28 +22,22 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cp = require('node:child_process');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const {EventEmitter} = require('node:events');
+const {MockBaseWindow, createElectronHarness, createTempDir} = require('../Upgrade/test-helpers');
 const {activateExisting, buildBootstrapExpression, childEnvironment, prepareProfile} = require('./launcher');
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
-const {installWindowIdentity} = require('./window-identity');
 const {UpdateGuard, UpdateRunner, installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
-const fixture = context => {
-	const parent = os.tmpdir();
-	const r = fs.mkdtempSync(path.join(parent, 'antigravity-accounts-'));
-	context.after(() => {
-		assert.ok(path.resolve(r).startsWith(path.resolve(parent) + path.sep));
-		fs.rmSync(r, {recursive: true, force: true});
-	});
-	return r;
-};
+const fixture = context => createTempDir(context, 'antigravity-accounts-');
 // 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
@@ -126,47 +120,7 @@ test('Broken launcher stderr/stdout pipes are silenced so console.error in elect
 });
 test('Browser routing preserves the OAuth state and callback while selecting the configured Chrome identity, and A0 bootstrap keeps native auth', async context => {
 	const root = fixture(context);
-	const events = {};
-	const opened = [];
-	const native = [];
-	const paths = {};
-	const app = {
-		setPath: (key, value) => {
-			paths[key] = value;
-		},
-		getPath: key => paths[key],
-		setAppUserModelId: id => {
-			paths.appId = id;
-		},
-		setAsDefaultProtocolClient: () => true,
-		on: (event, handler) => {
-			events[event] = handler;
-		},
-		removeListener: () => {}
-	};
-	const shell = {
-		openExternal: async url => {
-			native.push(url);
-		}
-	};
-	const processes = {
-		spawn: (executable, args, options) => {
-			opened.push({executable, args, options});
-			const r = {
-				pid: 12345,
-				on: () => r,
-				once: (event, callback) => {
-					if ('spawn' === event) {
-						queueMicrotask(callback);
-					}
-					return r;
-				},
-				unref: () => {}
-			};
-			return r;
-		}
-	};
-	const fakeRequire = name => 'electron' === name ? {app, shell} : 'node:os' === name ? {homedir: () => root} : 'node:child_process' === name ? processes : path.join(__dirname, 'oauth-bridge.js') === name ? {OAuthBridge: class {}} : path.join(__dirname, 'window-identity.js') === name ? {allWindows: () => [], installWindowIdentity: () => {}} : require(name);
+	const {app, fakeRequire, native, opened, paths, processes, shell} = createElectronHarness({codeRoot: __dirname, homedir: root});
 	bootstrap(fakeRequire, {id: 'A6', email: 'admin6@mage2.pro', homeDir: root, userDataDir: root, codeRoot: __dirname, chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8']}, browserEnvironment: {USERPROFILE: 'real'}});
 	await shell.openExternal('https://accounts.google.com/o/oauth2/auth?state=exact-state&redirect_uri=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback');
 	const url = new URL(opened[0].args.at(-1));
@@ -219,69 +173,7 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	const siblings = activeSiblingProfiles({id: 'A0', userDataDir: a0Dir}, {profiles, isPidAlive: pid => 66006 === pid && a6Alive});
 	assert.equal(siblings.length, 1);
 	assert.equal(siblings[0].id, 'A6');
-	const app = new EventEmitter();
-	app.getVersion = () => '2.29.1';
-	let appQuitCalls = 0;
-	app.quit = () => {
-		appQuitCalls++;
-	};
-	const dialogs = [];
-	const dialog = {
-		showMessageBox: async (_win, box) => {
-			dialogs.push(box || _win);
-			return {response: 0};
-		}
-	};
-	const menuItem = {label: 'Check for Updates', enabled: true};
-	const Menu = {
-		getApplicationMenu: () => ({
-			getMenuItemById: id => 'check-for-updates' === id ? menuItem : null
-		})
-	};
-	let lastState = {type: 'idle'};
-	const updater = {
-		MenuUpdateStep: {RestartToUpdate: 'Restart to Update'},
-		getLastState: () => lastState,
-		broadcastState: state => {
-			lastState = state;
-		}
-	};
-	const autoUpdater = new EventEmitter();
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
-	autoUpdater.autoRunAppAfterInstall = true;
-	autoUpdater.disableDifferentialDownload = false;
-	autoUpdater.disableWebInstaller = false;
-	autoUpdater.installerPath = installerPath;
-	autoUpdater.quitAndInstallCalled = false;
-	autoUpdater.quitHandlerAdded = false;
-	let installCalls = 0;
-	let quitAndInstallCalls = 0;
-	autoUpdater.install = () => {
-		installCalls++;
-		autoUpdater.quitAndInstallCalled = true;
-		return true;
-	};
-	autoUpdater.quitAndInstall = () => {
-		quitAndInstallCalls++;
-		autoUpdater.quitAndInstallCalled = true;
-		return true;
-	};
-	const spawns = [];
-	const mockCp = {
-		spawn: (command, args, options) => {
-			spawns.push({command, args, options});
-			return {
-				once: (event, cb) => {
-					if ('exit' === event) {
-						queueMicrotask(() => cb(0));
-					}
-				},
-				unref() {}
-			};
-		}
-	};
-	const fakeRequire = name => 'electron' === name ? {app, dialog, BrowserWindow: {getFocusedWindow: () => null, getAllWindows: () => []}, Menu, autoUpdater: new EventEmitter()} : 'electron-updater' === name ? {autoUpdater} : './updater' === name ? updater : null;
+	const {app, autoUpdater, dialogs, fakeRequire, menuItem, processes: mockCp, spawns, state, updater} = createElectronHarness({installerPath});
 	const a0Guard = installUpdateGuard(fakeRequire, {id: 'A0', userDataDir: a0Dir}, {
 		profiles,
 		pendingDir,
@@ -297,7 +189,7 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	updater.broadcastState({type: 'available for download', update: {version: '2.30.0'}});
 	autoUpdater.emit('update-available', {version: '2.30.0'});
 	await new Promise(resolve => setImmediate(resolve));
-	assert.deepEqual(lastState, {type: 'downloading'});
+	assert.deepEqual(state.lastState, {type: 'downloading'});
 	// 2. Before update is downloaded, autoInstallOnAppQuit stays true so BaseUpdater.addQuitHandler() registers
 	assert.equal(autoUpdater.autoInstallOnAppQuit, true);
 	autoUpdater.emit('update-downloaded', {version: '2.30.0'});
@@ -309,14 +201,14 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	menuItem.label = 'Check for Updates';
 	autoUpdater.emit('error', Error('net::ERR_NAME_NOT_RESOLVED'));
 	await new Promise(resolve => setImmediate(resolve));
-	assert.deepEqual(lastState, {type: 'ready', update: {version: '2.30.0'}});
+	assert.deepEqual(state.lastState, {type: 'ready', update: {version: '2.30.0'}});
 	assert.equal(menuItem.label, 'Restart to Update');
 	// 4. Clicking "Restart to Update" (quitAndInstall) while A6 is open is blocked, restores Ready state from Updating, and informs the user
 	updater.broadcastState({type: 'updating'});
 	assert.equal(autoUpdater.quitAndInstall(false, false), false);
 	await new Promise(resolve => setImmediate(resolve));
-	assert.deepEqual(lastState, {type: 'ready', update: {version: '2.30.0'}});
-	assert.equal(quitAndInstallCalls, 0);
+	assert.deepEqual(state.lastState, {type: 'ready', update: {version: '2.30.0'}});
+	assert.equal(state.quitAndInstallCalls, 0);
 	assert.equal(dialogs.length, 1);
 	assert.match(dialogs[0].message, /A6/);
 	// 5. Closing A0 while A6 is open keeps autoInstallOnAppQuit false even across async before-quit ticks
@@ -324,14 +216,14 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	await new Promise(resolve => setImmediate(resolve));
 	assert.equal(autoUpdater.autoInstallOnAppQuit, false);
 	assert.equal(autoUpdater.install(true, false), false);
-	assert.equal(installCalls, 0);
+	assert.equal(state.installCalls, 0);
 	app.emit('quit', {}, 0);
 	assert.equal(spawns.length, 0);
 	// 6. When A6 closes, clicking "Restart to Update" in A0 spawns the external post-update runner with --relaunch=A0 and quits A0
 	a6Alive = false;
 	assert.equal(autoUpdater.quitAndInstall(false, false), true);
 	await new Promise(resolve => setImmediate(resolve));
-	assert.equal(appQuitCalls, 1);
+	assert.equal(state.appQuitCalls, 1);
 	assert.equal(spawns.length, 1);
 	assert.equal(spawns[0].command, 'C:/tools/nodejs/node.exe');
 	const parsedRestartCli = parseCliOptions(spawns[0].args.slice(1));
@@ -369,27 +261,9 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	assert.deepEqual(spawns[1].args, ['--updated', '/S']);
 	a0Guard.dispose();
 	// 8. When A6 later closes as the last active profile with a deferred update, A6 spawns the post-update runner without relaunch
-	fs.writeFileSync(path.join(pendingDir, 'deferred-update.json'), JSON.stringify({
-		version: '2.30.0',
-		fileName: 'Antigravity-x64.exe',
-		installerPath,
-		deferredBy: 'A0'
-	}));
-	const a6App = new EventEmitter();
-	a6App.getVersion = () => '2.29.1';
-	const a6AutoUpdater = new EventEmitter();
-	a6AutoUpdater.autoInstallOnAppQuit = true;
-	a6AutoUpdater.quitAndInstallCalled = false;
-	a6AutoUpdater.quitHandlerAdded = false;
-	const a6Require = name => 'electron' === name ? {app: a6App} : 'electron-updater' === name ? {autoUpdater: a6AutoUpdater} : null;
-	const a6Guard = installUpdateGuard(a6Require, {id: 'A6', userDataDir: a6Dir}, {
-		profiles,
-		pendingDir,
-		cp: mockCp,
-		pid: 66006,
-		nodeExecutable: 'C:/tools/nodejs/node.exe',
-		isPidAlive: () => false
-	});
+	fs.writeFileSync(path.join(pendingDir, 'deferred-update.json'), JSON.stringify({version: '2.30.0', fileName: 'Antigravity-x64.exe', installerPath, deferredBy: 'A0'}));
+	const {app: a6App, fakeRequire: a6Require} = createElectronHarness();
+	const a6Guard = installUpdateGuard(a6Require, {id: 'A6', userDataDir: a6Dir}, {profiles, pendingDir, cp: mockCp, pid: 66006, nodeExecutable: 'C:/tools/nodejs/node.exe', isPidAlive: () => false});
 	context.after(() => a6Guard.dispose());
 	a6App.emit('before-quit');
 	a6App.emit('quit', {}, 0);
@@ -450,91 +324,13 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	const root = fixture(context);
 	const desktop = path.join(root, 'Desktop');
 	fs.mkdirSync(desktop, {recursive: true});
-	const app = new EventEmitter();
-	const paths = {desktop};
-	let focusOptions = null;
-	app.setPath = (key, value) => {
-		paths[key] = value;
-	};
-	app.getPath = key => paths[key];
-	app.setAppUserModelId = id => {
-		paths.appId = id;
-	};
-	app.setAsDefaultProtocolClient = () => true;
-	app.isReady = () => true;
-	app.focus = options => {
-		focusOptions = options;
-	};
-	class MockBaseWindow extends EventEmitter {
-		constructor(id, title = 'Antigravity', minimized = false) {
-			super();
-			this._id = id;
-			this.title = title;
-			this.minimized = minimized;
-			this.shown = false;
-			this.focused = false;
-			this.destroyed = false;
-			this.icon = null;
-			this.appDetails = null;
-			this.webContents = new EventEmitter();
-			this.webContents.getURL = () => 'https://127.0.0.1:2890/';
-		}
-		get id() {
-			if (this.destroyed) {
-				throw new TypeError('Object has been destroyed');
-			}
-			return this._id;
-		}
-		isDestroyed() {
-			return this.destroyed;
-		}
-		destroy() {
-			this.destroyed = true;
-			this.emit('closed');
-		}
-		isMinimized() {
-			return this.minimized;
-		}
-		restore() {
-			this.minimized = false;
-		}
-		show() {
-			this.shown = true;
-		}
-		focus() {
-			this.focused = true;
-		}
-		setIcon(icon) {
-			this.icon = icon;
-		}
-		setAppDetails(details) {
-			this.appDetails = details;
-		}
-		getTitle() {
-			return this.title;
-		}
-		setTitle(title) {
-			this.title = title;
-		}
-	}
-	const baseWindows = [new MockBaseWindow(1, '50 - smokeday.com - U.P.2...', true)];
-	MockBaseWindow.getAllWindows = () => baseWindows;
-	let showOrCreateCalls = 0;
-	const utils = {
-		getHubWindows: () => baseWindows,
-		getHubWebContents: win => win.webContents,
-		showOrCreateWindow: () => {
-			showOrCreateCalls++;
-			baseWindows.push(new MockBaseWindow(2, 'Antigravity', false));
-		}
-	};
-	const fakeRequire = name => 'electron' === name ? {
-		app,
-		shell: {openExternal: async () => {}, writeShortcutLink: () => true},
-		BrowserWindow: {getAllWindows: () => []},
-		BaseWindow: MockBaseWindow,
-		nativeImage: {createFromPath: () => ({isEmpty: () => false, getSize: () => ({width: 256, height: 256})})}
-	} : 'node:os' === name ? {homedir: () => root} : './utils' === name ? utils : './languageServer' === name ? {getLsPort: () => 2890} : require(name);
+	const {app, baseWindows, fakeRequire, state} = createElectronHarness({
+		codeRoot: __dirname,
+		desktop,
+		homedir: root,
+		realModules: true,
+		windows: [new MockBaseWindow(1, '50 - smokeday.com - U.P.2...', true)]
+	});
 	bootstrap(fakeRequire, {
 		id: 'A6',
 		email: 'admin6@mage2.pro',
@@ -566,11 +362,11 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	assert.equal(baseWindows[0].isMinimized(), false);
 	assert.equal(baseWindows[0].shown, true);
 	assert.equal(baseWindows[0].focused, true);
-	assert.deepEqual(focusOptions, {steal: true});
+	assert.deepEqual(state.focusOptions, {steal: true});
 	// If 0 windows are open in a running process, __ANTIGRAVITY_MANAGED_ACTIVATE__ creates one via utils.showOrCreateWindow and applies A6 identity on web-contents-created
 	baseWindows.length = 0;
 	const createdActivation = globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__();
-	assert.equal(showOrCreateCalls, 1);
+	assert.equal(state.showOrCreateCalls, 1);
 	assert.equal(createdActivation.windows, 1);
 	app.emit('web-contents-created', {}, baseWindows[0].webContents);
 	await new Promise(resolve => setImmediate(resolve));
@@ -732,28 +528,10 @@ test('launcher.js avoids bootstrap.toString and update-guard loading, executes b
 	for (const forbidden of ['update-guard.js', 'update-runner.js', 'main-bootstrap.js']) {
 		assert.equal(loaded.some(item => item.endsWith(path.sep + forbidden)), false, `launcher.js should not load ${forbidden}`);
 	}
-	const paths = {};
-	const app = {
-		getPath: key => paths[key],
-		on: () => {},
-		removeListener: () => {},
-		setAppUserModelId: id => {
-			paths.appId = id;
-		},
-		setAsDefaultProtocolClient: () => true,
-		setPath: (key, value) => {
-			paths[key] = value;
-		}
-	};
-	const vmRequire = name => 'electron' === name ? {app, shell: {openExternal: async () => {}}} : 'node:os' === name ? {homedir: () => root} : path.join(__dirname, 'window-identity.js') === name ? {allWindows: () => [], installWindowIdentity: () => {}} : require(name);
+	const {app, fakeRequire: vmRequire, paths} = createElectronHarness({codeRoot: __dirname, homedir: root});
 	const vmResult = vm.runInNewContext(buildBootstrapExpression({
-		id: 'A6',
-		email: 'admin6@mage2.pro',
-		homeDir: root,
-		userDataDir: root,
-		codeRoot: __dirname,
-		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222},
-		browserEnvironment: {USERPROFILE: 'real'}
+		id: 'A6', email: 'admin6@mage2.pro', homeDir: root, userDataDir: root, codeRoot: __dirname,
+		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222}, browserEnvironment: {USERPROFILE: 'real'}
 	}), {require: vmRequire});
 	context.after(() => {
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();

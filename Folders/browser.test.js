@@ -10,6 +10,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {openFixture, closeSharedBrowser} = require('./browser-fixture');
@@ -28,7 +31,6 @@ const projects = [
 ];
 test('A real browser mounts the independent tree on unrelated vendor markup and keeps the event loop responsive', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForTimeout(300);
 	const report = await fixture.page.evaluate(() => ({
 		status: window.__PROJECT_FOLDERS_VIEW__?.inspect(),
@@ -63,7 +65,6 @@ test('A real browser mounts the independent tree on unrelated vendor markup and 
 });
 test('A missing native mount produces a visible fault without starving the event loop or hiding the native UI', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, missingAnchor: true, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForTimeout(400);
 	const report = await fixture.page.evaluate(() => ({
 		state: window.__PROJECT_FOLDERS_STATUS__,
@@ -79,7 +80,6 @@ test('A missing native mount produces a visible fault without starving the event
 });
 test('A sidebar created after asynchronous native startup recovers automatically without a reload', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, delayedAnchor: true, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state, {timeout: 5000});
 	assert.equal(await fixture.page.locator('.fg-fault').count(), 0);
 	assert.equal(await fixture.page.locator('[data-folders-root]').count(), 1);
@@ -91,7 +91,6 @@ test('A sidebar created after asynchronous native startup recovers automatically
 // https://github.com/dmitry-ai/antigravity-addons/issues/14
 test('Early CDP attachment during native shell and skeleton boot never flashes a mount fault before the sidebar renders', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, bootingShell: true, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => window.__PROJECT_FOLDERS_VIEW__?.state.haveConfig && window.__PROJECT_FOLDERS_VIEW__?.state.haveProjects);
 	await fixture.page.waitForTimeout(150);
 	const duringAuthSpinner = await fixture.page.evaluate(() => ({
@@ -127,7 +126,6 @@ test('Early CDP attachment during native shell and skeleton boot never flashes a
 });
 test('Real UI menus create a project in the exact chosen folder and cancellation does not capture a later project', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	const folder = fixture.page.locator('[data-folders-row="folder:root"]');
 	await folder.click({button: 'right'});
@@ -156,7 +154,6 @@ test('Real UI menus create a project in the exact chosen folder and cancellation
 });
 test('New vendor API schemas produce a visible fault and preserve the original project list', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, badProjects: true, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'error' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	assert.match(await fixture.page.locator('.fg-fault').textContent(), /unknown project list schema/);
 	assert.equal(await fixture.page.locator('[data-folders-root]').count(), 0);
@@ -166,7 +163,6 @@ test('New vendor API schemas produce a visible fault and preserve the original p
 test('Thousands of projects remain virtualized and live conversation updates keep the selected route and draft', {timeout: 30000}, async context => {
 	const many = Array.from({length: 5000}, (_, index) => ({id: `p${index}`, name: `Project ${index}`}));
 	const fixture = await openFixture({data: {folders: [], projectFolderMap: {}}, projects: many, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	const report = await fixture.page.evaluate(() => window.__PROJECT_FOLDERS_VIEW__.inspect());
 	assert.equal(report.rowCount, 5000);
@@ -203,7 +199,6 @@ test('The conversation rename UI keeps its ID, native route, project name, live 
 		trajectoryMetadata: {projectId: 'p1', rootConversationId: 'c1'}
 	};
 	const fixture = await openFixture({data, projects, summaries: {c1: summary}, context});
-	context.after(() => fixture.close());
 	await fixture.page.waitForFunction(() => 'ready' === window.__PROJECT_FOLDERS_STATUS__?.state);
 	await fixture.page.locator('[data-folders-row="project:p1"] .fg-toggle').click();
 	await fixture.page.getByRole('button', {name: /Before rename/}).click({button: 'right'});
