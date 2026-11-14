@@ -13,11 +13,15 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 // https://github.com/dmitry-ai/antigravity-addons/issues/43
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('../Upgrade/node_modules/playwright-core');
 const {styleSheet: cssStyleSheet} = require('../CSS/cdp-runtime');
 const {rendererSource, styleSheet: foldersStyleSheet} = require('./cdp-runtime');
+const {applyAction} = require('./folders-model');
 const BROWSER_ARGS = [
 	'--disable-background-networking',
 	'--disable-renderer-backgrounding',
@@ -122,6 +126,7 @@ const openFixture = async ({
 			contentType: 'text/html',
 			body: `<!doctype html><html><head></head><body style="margin:0">${body}</body></html>`
 		}));
+		await page.exposeFunction('__foldersFixtureApply', applyAction);
 		await page.addInitScript(({data, projects, summaries, badProjects}) => {
 			window.__APP_CONFIG__ = {csrfToken: 'isolated-fixture', appVersion: 'future-fixture'};
 			const fixture = window.__foldersFixture = {
@@ -246,7 +251,7 @@ const openFixture = async ({
 						r = {schemaVersion: 2, data: fixture.data, revision: String(fixture.revision)};
 					}
 					else {
-						fixture.data = window.AntigravityFoldersModel.applyAction(fixture.data, body);
+						fixture.data = await window.__foldersFixtureApply(fixture.data, body);
 						fixture.revision++;
 						r = {
 							success: true,

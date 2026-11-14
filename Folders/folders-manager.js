@@ -22,6 +22,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/42
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -31,23 +34,16 @@ const model = require('./folders-model');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
 const DEFAULT_PROJECTS_DIR = path.join(process.env.USERPROFILE || os.homedir(), '.gemini/config/projects').replace(/\\/g, '/');
 const {getDescendantIds, getFolderPath, validateFolders: validateTree} = model;
-const slugify = name => 'folder-' + name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
 class FoldersCliManager {
 	constructor({configPath = DEFAULT_CONFIG_PATH, fs: fileSystem = fs, logger = console, projectsDir = DEFAULT_PROJECTS_DIR} = {}) {
-		this.configPath = configPath;
-		this.fs = fileSystem;
-		this.logger = logger;
-		this.projectsDir = projectsDir;
-		this.revisions = new WeakMap();
+		Object.assign(this, {configPath, fs: fileSystem, logger, projectsDir, revisions: new WeakMap()});
 	}
 	addFolder(input, parentQuery = null, color = '#10b981', configPath = this.configPath) {
 		const isObject = 'object' === typeof input && null !== input;
 		const name = String(isObject ? input.name : input).trim();
 		const rawParent = isObject ? input.parentId || null : parentQuery;
-		const customId = isObject ? input.id || null : null;
-		const folderColor = isObject ? input.color || '#10b981' : color || '#10b981';
-		const targetConfig = isObject ? parentQuery || this.configPath : configPath;
-		return this.mutateConfig(targetConfig, data => {
+		const folderColor = (isObject ? input.color : color) || '#10b981';
+		return this.mutateConfig(isObject ? parentQuery || this.configPath : configPath, data => {
 			let r;
 			const parentId = rawParent ? this.findFolder(data.folders, rawParent)?.id || null : null;
 			const sibling = data.folders.find(f => parentId === (f.parentId || null) && name.toLowerCase() === f.name.toLowerCase());
@@ -57,11 +53,10 @@ class FoldersCliManager {
 				r = {next: data, result: sibling};
 			}
 			else {
-				const baseId = customId || slugify(name);
+				const baseId = (isObject ? input.id : null) || slugify(name);
 				let id = baseId;
-				let seq = 1;
-				while (data.folders.some(f => id === f.id)) {
-					id = `${baseId}-${seq++}`;
+				for (let seq = 1; data.folders.some(f => id === f.id); seq++) {
+					id = `${baseId}-${seq}`;
 				}
 				const next = model.applyAction(data, {action: 'add-folder', id, name, parentId, color: folderColor});
 				this.logger.log(`✅ Created folder "${name}" (ID: ${id}, Parent: ${parentId || 'root'}).`);
@@ -72,16 +67,10 @@ class FoldersCliManager {
 	}
 	assignProject(projQuery, folderQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
+			const project = this.requireProject(projQuery);
+			const folder = project ? this.requireFolder(data.folders, folderQuery, `❌ Folder "${folderQuery}" not found. Create it first: node folders-manager.js add-folder "${folderQuery}"`) : null;
 			let r = {result: false};
-			const project = this.resolveProject(projQuery);
-			const folder = project ? this.findFolder(data.folders, folderQuery) : null;
-			if (!project) {
-				this.logger.error(`❌ Project "${projQuery}" not found.`);
-			}
-			else if (!folder) {
-				this.logger.error(`❌ Folder "${folderQuery}" not found. Create it first: node folders-manager.js add-folder "${folderQuery}"`);
-			}
-			else {
+			if (project && folder) {
 				const next = model.applyAction(data, {action: 'assign-project', projectId: project.id, folderId: folder.id});
 				this.logger.log(`✅ Project "${project.name}" added to folder "${folder.name}".`);
 				r = {next, result: true};
@@ -110,13 +99,8 @@ class FoldersCliManager {
 						parentId = pathMatch.id;
 					}
 				}
-				if (pathMatch) {
-					r = pathMatch;
-				}
-				else {
-					const exact = folders.filter(f => qLower === f.name.toLowerCase());
-					r = exact.find(f => null === (f.parentId || null)) || exact[0] || folders.find(f => f.name.toLowerCase().includes(qLower)) || null;
-				}
+				const exact = pathMatch ? null : folders.filter(f => qLower === f.name.toLowerCase());
+				r = pathMatch || exact.find(f => null === (f.parentId || null)) || exact[0] || folders.find(f => f.name.toLowerCase().includes(qLower)) || null;
 			}
 		}
 		return r;
@@ -124,14 +108,9 @@ class FoldersCliManager {
 	listAll(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		const projectMap = new Map();
-		for (const p of this.loadAntigravityProjects()) {
+		for (const p of [...this.loadAntigravityProjects(), ...Object.keys(data.projectFolderMap || {}).map(pid => ({id: pid, name: pid}))]) {
 			if (p.id && model.INTERNAL_PROJECT_ID !== p.id && !projectMap.has(p.id)) {
 				projectMap.set(p.id, p);
-			}
-		}
-		for (const pid of Object.keys(data.projectFolderMap || {})) {
-			if (pid && model.INTERNAL_PROJECT_ID !== pid && !projectMap.has(pid)) {
-				projectMap.set(pid, {id: pid, name: pid});
 			}
 		}
 		const rows = model.buildRows({data, projects: [...projectMap.values()]});
@@ -166,30 +145,24 @@ class FoldersCliManager {
 	listProjects(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		this.logger.log('\n📋 All Antigravity Projects:\n');
-		this.loadAntigravityProjects()
-			.filter(p => model.INTERNAL_PROJECT_ID !== p.id)
-			.sort(model.compare)
-			.forEach(p => {
-				const fId = data.projectFolderMap[p.id];
-				const folderPathStr = fId ? `📁 ${getFolderPath(fId, data.folders)}` : '— (unassigned)';
-				this.logger.log(`- ${p.name.padEnd(38)} | Folder: ${folderPathStr}`);
-			});
+		for (const p of this.loadAntigravityProjects().filter(item => model.INTERNAL_PROJECT_ID !== item.id).sort(model.compare)) {
+			const fId = data.projectFolderMap[p.id];
+			this.logger.log(`- ${p.name.padEnd(38)} | Folder: ${fId ? `📁 ${getFolderPath(fId, data.folders)}` : '— (unassigned)'}`);
+		}
 		this.logger.log('');
 	}
 	loadAntigravityProjects() {
 		const r = [];
 		try {
 			if (this.fs.existsSync(this.projectsDir)) {
-				for (const f of this.fs.readdirSync(this.projectsDir)) {
-					if (f.endsWith('.json')) {
-						try {
-							const data = JSON.parse(this.fs.readFileSync(path.join(this.projectsDir, f), 'utf8'));
-							if (data.id) {
-								r.push({id: data.id, name: data.name || 'Untitled Project'});
-							}
+				for (const f of this.fs.readdirSync(this.projectsDir).filter(name => name.endsWith('.json'))) {
+					try {
+						const data = JSON.parse(this.fs.readFileSync(path.join(this.projectsDir, f), 'utf8'));
+						if (data.id) {
+							r.push({id: data.id, name: data.name || 'Untitled Project'});
 						}
-						catch {}
 					}
+					catch {}
 				}
 			}
 		}
@@ -200,17 +173,11 @@ class FoldersCliManager {
 	}
 	moveFolder(query, newParentQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
-			let r = {result: false};
-			const folder = this.findFolder(data.folders, query);
+			const folder = this.requireFolder(data.folders, query);
 			const isRoot = !newParentQuery || 'root' === newParentQuery || 'null' === newParentQuery;
-			const parentFolder = folder && !isRoot ? this.findFolder(data.folders, newParentQuery) : null;
-			if (!folder) {
-				this.logger.error(`❌ Folder "${query}" not found.`);
-			}
-			else if (!isRoot && !parentFolder) {
-				this.logger.error(`❌ Target parent folder "${newParentQuery}" not found.`);
-			}
-			else {
+			const parentFolder = folder && !isRoot ? this.requireFolder(data.folders, newParentQuery, `❌ Target parent folder "${newParentQuery}" not found.`) : null;
+			let r = {result: false};
+			if (folder && (isRoot || parentFolder)) {
 				const newParentId = isRoot ? null : parentFolder.id;
 				const next = model.applyAction(data, {action: 'move-folder', id: folder.id, newParentId});
 				this.logger.log(`✅ Folder "${folder.name}" moved: ${folder.parentId || 'root'} ➔ ${newParentId || 'root'}.`);
@@ -238,12 +205,9 @@ class FoldersCliManager {
 	}
 	removeFolder(query, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
+			const folder = this.requireFolder(data.folders, query);
 			let r = {result: false};
-			const folder = this.findFolder(data.folders, query);
-			if (!folder) {
-				this.logger.error(`❌ Folder "${query}" not found.`);
-			}
-			else {
+			if (folder) {
 				const promotedFolders = data.folders.filter(f => folder.id === f.parentId).length;
 				const promotedProjects = Object.values(data.projectFolderMap).filter(fId => folder.id === fId).length;
 				const next = model.applyAction(data, {action: 'remove-folder', id: folder.id});
@@ -255,13 +219,10 @@ class FoldersCliManager {
 	}
 	renameFolder(query, newName, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
-			let r = {result: false};
-			const target = this.findFolder(data.folders, query);
+			const target = this.requireFolder(data.folders, query);
 			const cleanName = String(newName || '').trim();
-			if (!target) {
-				this.logger.error(`❌ Folder "${query}" not found.`);
-			}
-			else {
+			let r = {result: false};
+			if (target) {
 				try {
 					const next = model.applyAction(data, {action: 'rename-folder', id: target.id, newName: cleanName});
 					this.logger.log(`✅ Folder "${target.name}" renamed to "${cleanName}" (ID: ${target.id}).`);
@@ -276,6 +237,20 @@ class FoldersCliManager {
 			}
 			return r;
 		});
+	}
+	requireFolder(folders, query, message = `❌ Folder "${query}" not found.`) {
+		const r = this.findFolder(folders, query);
+		if (!r) {
+			this.logger.error(message);
+		}
+		return r;
+	}
+	requireProject(query) {
+		const r = this.resolveProject(query);
+		if (!r) {
+			this.logger.error(`❌ Project "${query}" not found.`);
+		}
+		return r;
 	}
 	resolveFolder(query, configPath = this.configPath) {
 		return query ? this.findFolder(this.readConfig(configPath).folders, query) : null;
@@ -307,17 +282,14 @@ class FoldersCliManager {
 	}
 	unassignProject(projQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
-			let r = {result: false};
-			const project = this.resolveProject(projQuery);
+			const project = this.requireProject(projQuery);
 			const oldFolderId = project ? data.projectFolderMap[project.id] : null;
-			if (!project) {
-				this.logger.error(`❌ Project "${projQuery}" not found.`);
-			}
-			else if (!oldFolderId) {
+			let r = {result: false};
+			if (project && !oldFolderId) {
 				this.logger.log(`ℹ️ Project "${project.name}" is not in any folder (already at root).`);
 				r = {result: true};
 			}
-			else {
+			else if (project) {
 				const oldFolder = data.folders.find(f => oldFolderId === f.id);
 				const next = model.applyAction(data, {action: 'unassign-project', projectId: project.id});
 				this.logger.log(`✅ Project "${project.name}" removed from folder "${oldFolder?.name || oldFolderId}" (moved to root).`);
@@ -327,52 +299,40 @@ class FoldersCliManager {
 		});
 	}
 	writeConfig(data, configPath = this.configPath, {expectedHash = this.revisions.get(data)} = {}) {
-		model.validateConfig(data);
-		const previousText = this.fs.existsSync(configPath) ? this.fs.readFileSync(configPath, 'utf8') : '';
-		const newline = previousText.includes('\r\n') ? '\r\n' : '\n';
-		let text = JSON.stringify(data, null, '\t').replace(/\n/g, newline);
-		if (previousText.endsWith('\n')) {
-			text += newline;
-		}
-		if (previousText.startsWith('\uFEFF')) {
-			text = '\uFEFF' + text;
-		}
-		writeFileAtomic(configPath, text, {
-			sync: true,
-			beforeRename: () => {
-				if (expectedHash && (!this.fs.existsSync(configPath) || expectedHash !== crypto.createHash('sha256').update(this.fs.readFileSync(configPath)).digest('hex'))) {
-					throw Error('Folders configuration changed concurrently; reload it and retry');
-				}
-			}
-		});
-		this.revisions.set(data, crypto.createHash('sha256').update(this.fs.readFileSync(configPath)).digest('hex'));
+		this.revisions.set(data, persistConfig(configPath, data, {expectedHash, fs: this.fs}));
 	}
 }
+const persistConfig = (configPath, data, {expectedHash, fs: fileSystem = fs, validate = true} = {}) => {
+	if (validate) {
+		model.validateConfig(data);
+	}
+	const raw = fileSystem.existsSync(configPath) ? fileSystem.readFileSync(configPath) : null;
+	if (expectedHash && (!raw || expectedHash !== crypto.createHash('sha256').update(raw).digest('hex'))) {
+		throw Error('Folders configuration changed concurrently; reload it and retry');
+	}
+	const prev = raw ? raw.toString('utf8') : '';
+	const eol = prev.includes('\r\n') ? '\r\n' : '\n';
+	const text = (prev.startsWith('\uFEFF') ? '\uFEFF' : '') + JSON.stringify(data, null, '\t').replace(/\n/g, eol) + (prev.endsWith('\n') ? eol : '');
+	writeFileAtomic(configPath, text, {sync: true});
+	return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+};
+const slugify = name => 'folder-' + name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
 const defaultManager = new FoldersCliManager();
-const addFolder = (...args) => defaultManager.addFolder(...args);
-const assignProject = (...args) => defaultManager.assignProject(...args);
-const listAll = (...args) => defaultManager.listAll(...args);
-const listProjects = (...args) => defaultManager.listProjects(...args);
-const moveFolder = (...args) => defaultManager.moveFolder(...args);
-const readConfig = (...args) => defaultManager.readConfig(...args);
-const removeFolder = (...args) => defaultManager.removeFolder(...args);
-const renameFolder = (...args) => defaultManager.renameFolder(...args);
-const resolveFolder = (...args) => defaultManager.resolveFolder(...args);
-const resolveProject = (...args) => defaultManager.resolveProject(...args);
-const setEnabled = (...args) => defaultManager.setEnabled(...args);
-const unassignProject = (...args) => defaultManager.unassignProject(...args);
-const writeConfig = (...args) => defaultManager.writeConfig(...args);
+const bound = Object.fromEntries([
+	'addFolder', 'assignProject', 'listAll', 'listProjects', 'moveFolder', 'readConfig',
+	'removeFolder', 'renameFolder', 'resolveFolder', 'resolveProject', 'setEnabled', 'unassignProject', 'writeConfig'
+].map(k => [k, (...args) => defaultManager[k](...args)]));
 const CLI_COMMANDS = {
-	'add-folder': {min: 1, usage: 'add-folder <folder_name> [parent] [color] [configPath]', run: args => addFolder(args[0], args[1], args[2], args[3])},
-	assign: {min: 2, usage: 'assign <project_name> <folder_name>', run: args => assignProject(args[0], args[1])},
-	disable: {min: 0, run: () => setEnabled(false)},
-	enable: {min: 0, run: () => setEnabled(true)},
-	list: {min: 0, run: () => listAll()},
-	'move-folder': {min: 1, usage: 'move-folder <folder_id_or_name> <new_parent_or_root>', run: args => moveFolder(args[0], args[1] || null)},
-	projects: {min: 0, run: () => listProjects()},
-	'remove-folder': {min: 1, usage: 'remove-folder <folder_name_or_id>', run: args => removeFolder(args[0])},
-	'rename-folder': {min: 2, usage: 'rename-folder <old_name_or_id> <new_name>', run: args => renameFolder(args[0], args[1])},
-	unassign: {min: 1, usage: 'unassign <project_name>', run: args => unassignProject(args[0])}
+	'add-folder': {min: 1, usage: 'add-folder <folder_name> [parent] [color] [configPath]', run: args => bound.addFolder(args[0], args[1], args[2], args[3])},
+	assign: {min: 2, usage: 'assign <project_name> <folder_name>', run: args => bound.assignProject(args[0], args[1])},
+	disable: {min: 0, run: () => bound.setEnabled(false)},
+	enable: {min: 0, run: () => bound.setEnabled(true)},
+	list: {min: 0, run: () => bound.listAll()},
+	'move-folder': {min: 1, usage: 'move-folder <folder_id_or_name> <new_parent_or_root>', run: args => bound.moveFolder(args[0], args[1] || null)},
+	projects: {min: 0, run: () => bound.listProjects()},
+	'remove-folder': {min: 1, usage: 'remove-folder <folder_name_or_id>', run: args => bound.removeFolder(args[0])},
+	'rename-folder': {min: 2, usage: 'rename-folder <old_name_or_id> <new_name>', run: args => bound.renameFolder(args[0], args[1])},
+	unassign: {min: 1, usage: 'unassign <project_name>', run: args => bound.unassignProject(args[0])}
 };
 if (require.main === module) {
 	const [,, cmd, ...args] = process.argv;
@@ -385,30 +345,8 @@ if (require.main === module) {
 		entry.run(args);
 	}
 	else {
-		console.log([
-			'Folder management commands:',
-			...Object.entries(CLI_COMMANDS).map(([name, spec]) => `\tnode folders-manager.js ${spec.usage || name}`)
-		].join('\n'));
-		listAll();
+		console.log(['Folder management commands:', ...Object.entries(CLI_COMMANDS).map(([name, spec]) => `\tnode folders-manager.js ${spec.usage || name}`)].join('\n'));
+		bound.listAll();
 	}
 }
-module.exports = {
-	DEFAULT_CONFIG_PATH,
-	FoldersCliManager,
-	addFolder,
-	assignProject,
-	getDescendantIds,
-	getFolderPath,
-	listAll,
-	listProjects,
-	moveFolder,
-	readConfig,
-	removeFolder,
-	renameFolder,
-	resolveFolder,
-	resolveProject,
-	setEnabled,
-	unassignProject,
-	validateTree,
-	writeConfig
-};
+module.exports = {DEFAULT_CONFIG_PATH, FoldersCliManager, ...bound, getDescendantIds, getFolderPath, persistConfig, validateTree};

@@ -22,6 +22,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/42
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -664,4 +667,69 @@ test('FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager isolate ro
 	assert.ok(logs.some(line => line.includes('CLI Subfolder') && line.includes('1 projects')));
 	assert.ok(logs.some(line => line.includes('Alpha Secondary') && line.includes('Work / CLI Subfolder')));
 	assert.equal(logs.some(line => line.includes('project-folders/folders')), false);
+});
+test('Single-read CAS persistConfig preserves BOM/CRLF, FoldersStore.dispatch reads disk once, and declarative element helper binds props/events', context => {
+	const {filename} = scratch(context);
+	const expectedExports = [
+		'DEFAULT_CONFIG_PATH', 'FoldersCliManager', 'addFolder', 'assignProject', 'getDescendantIds', 'getFolderPath',
+		'listAll', 'listProjects', 'moveFolder', 'persistConfig', 'readConfig', 'removeFolder', 'renameFolder',
+		'resolveFolder', 'resolveProject', 'setEnabled', 'unassignProject', 'validateTree', 'writeConfig'
+	];
+	for (const name of expectedExports) {
+		assert.ok(name in manager, `Missing export ${name}`);
+	}
+	const bomCrlf = '\uFEFF' + JSON.stringify(config(), null, '\t').replace(/\n/g, '\r\n') + '\r\n';
+	fs.writeFileSync(filename, bomCrlf, 'utf8');
+	const store = new FoldersStore(filename);
+	context.after(() => store.dispose());
+	const readSpy = context.mock.method(fs, 'readFileSync');
+	const res = store.dispatch({action: 'rename-folder', id: 'ten', newName: 'Ten Renamed', revision: store.revision});
+	assert.equal(res.success, true);
+	assert.equal(readSpy.mock.calls.length, 1);
+	readSpy.mock.restore();
+	const rawAfter = fs.readFileSync(filename, 'utf8');
+	assert.equal(rawAfter.startsWith('\uFEFF'), true);
+	assert.equal(rawAfter.includes('\r\n'), true);
+	assert.equal(rawAfter.endsWith('\r\n'), true);
+	let clicked = 0;
+	const view = new FoldersView({}, {
+		document: {
+			createElement: tag => ({
+				tag,
+				dataset: {},
+				style: {},
+				attributes: {},
+				listeners: {},
+				children: [],
+				setAttribute(k, v) {
+					this.attributes[k] = String(v);
+				},
+				addEventListener(k, fn) {
+					this.listeners[k] = fn;
+				},
+				append(...items) {
+					this.children.push(...items);
+				},
+				remove() {}
+			})
+		},
+		adapter: {dispose() {}, selection: () => ({})}
+	});
+	const child = view.element('span', 'child-cls', 'Child');
+	const el = view.element('button', 'btn-cls', undefined, {
+		attrs: {'aria-label': 'Test'},
+		children: [child],
+		dataset: {folderId: 'root'},
+		on: {click: () => clicked++},
+		props: {type: 'button'},
+		style: {top: '16px'}
+	});
+	el.listeners.click();
+	assert.equal(clicked, 1);
+	assert.equal(el.attributes['aria-label'], 'Test');
+	assert.equal(el.dataset.folderId, 'root');
+	assert.equal(el.type, 'button');
+	assert.equal(el.style.top, '16px');
+	assert.deepEqual(el.children, [child]);
+	view.dispose();
 });

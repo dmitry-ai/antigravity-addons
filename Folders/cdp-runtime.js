@@ -22,12 +22,15 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
 const path = require('node:path');
 const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
-const manager = require('./folders-manager');
+const {persistConfig} = require('./folders-manager');
 const {applyAction, validateConfig} = require('./folders-model');
 const disposeExpression = 'window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;';
 const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folder-menu.js', 'folder-dialogs.js', 'folder-drag.js', 'folders-client.js'];
@@ -35,11 +38,7 @@ const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'m
 class FoldersStore extends EventEmitter {
 	constructor(filename) {
 		super();
-		this.filename = path.resolve(filename);
-		this.data = null;
-		this.revision = '';
-		this.statSignature = null;
-		this.error = null;
+		Object.assign(this, {filename: path.resolve(filename), data: null, revision: '', statSignature: null, error: null});
 		this.reload();
 		this.watcher = fs.watch(path.dirname(this.filename), (_event, name) => {
 			if (null === name || path.basename(this.filename) === String(name)) {
@@ -52,13 +51,8 @@ class FoldersStore extends EventEmitter {
 			this.emit('change', this.snapshot());
 		});
 	}
-	dispose() {
-		clearTimeout(this.timer);
-		this.watcher.close();
-		this.removeAllListeners();
-	}
 	dispatch(body) {
-		this.reload();
+		this.reloadIfChanged();
 		if (this.error) {
 			throw Error(this.error);
 		}
@@ -66,12 +60,16 @@ class FoldersStore extends EventEmitter {
 			throw Error('Folders configuration changed concurrently; reload it and retry');
 		}
 		const data = applyAction(this.data, body);
-		manager.writeConfig(data, this.filename, {expectedHash: this.revision});
-		this.reload();
-		if (this.error) {
-			throw Error(this.error);
-		}
-		return {success: true, ...this.snapshot()};
+		this.revision = persistConfig(this.filename, data, {expectedHash: this.revision, validate: false});
+		Object.assign(this, {data, statSignature: this.statKey(), error: null});
+		const snap = this.snapshot();
+		this.emit('change', snap);
+		return {success: true, ...snap};
+	}
+	dispose() {
+		clearTimeout(this.timer);
+		this.watcher.close();
+		this.removeAllListeners();
 	}
 	reload() {
 		const previousRevision = this.revision;
@@ -80,10 +78,7 @@ class FoldersStore extends EventEmitter {
 			const raw = fs.readFileSync(this.filename, 'utf8');
 			const data = JSON.parse(raw.replace(/^\uFEFF/, ''));
 			validateConfig(data);
-			this.data = data;
-			this.revision = crypto.createHash('sha256').update(raw).digest('hex');
-			this.statSignature = this.statKey();
-			this.error = null;
+			Object.assign(this, {data, revision: crypto.createHash('sha256').update(raw).digest('hex'), statSignature: this.statKey(), error: null});
 		}
 		catch (error) {
 			this.statSignature = null;
@@ -96,9 +91,7 @@ class FoldersStore extends EventEmitter {
 	}
 	reloadIfChanged() {
 		const signature = this.statKey();
-		return !this.error && this.data && signature && signature === this.statSignature
-			? this.snapshot()
-			: this.reload();
+		return !this.error && this.data && signature && signature === this.statSignature ? this.snapshot() : this.reload();
 	}
 	snapshot() {
 		return {schemaVersion: 2, revision: this.revision, data: this.data, error: this.error};
@@ -175,21 +168,14 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 	};
 };
 const rendererSource = (data, {error = null, revision = ''} = {}) => {
-	const scripts = filenames.map(filename => fs.readFileSync(path.join(__dirname, filename), 'utf8')).join('\n;\n');
-	const version = crypto.createHash('sha256').update(scripts).digest('hex');
+	const entries = filenames.map(name => `${JSON.stringify('./' + path.basename(name, '.js'))}:(module,exports,require)=>{\n${fs.readFileSync(path.join(__dirname, name), 'utf8')}\n}`).join(',');
+	const bundle = `(()=>{const mods={${entries}},cache={},req=id=>{let m=cache[id];if(!m){m=cache[id]={exports:{}};mods[id](m,m.exports,req);}return m.exports;};req('./folders-client').installFoldersView();})()`;
+	const version = crypto.createHash('sha256').update(bundle).digest('hex');
 	const revisionAssignment = revision ? `window.__FOLDERS_REVISION__=${JSON.stringify(revision)};` : '';
 	const errorAssignment = `window.__FOLDERS_CONFIG_ERROR__=${JSON.stringify(error)};`;
-	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(error)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${scripts}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
+	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(error)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${bundle}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
 const styleSheet = () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8');
-Object.assign(createFoldersRuntime, {
-	FoldersStore,
-	disposeExpression,
-	filenames,
-	inspectExpression,
-	rendererSource,
-	reportExpression,
-	styleSheet
-});
+Object.assign(createFoldersRuntime, {FoldersStore, disposeExpression, filenames, inspectExpression, rendererSource, reportExpression, styleSheet});
 module.exports = createFoldersRuntime;
