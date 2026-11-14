@@ -19,13 +19,18 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/29
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const cp = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const {EventEmitter} = require('node:events');
-const {childEnvironment, prepareProfile, activateExisting} = require('./launcher');
+const {activateExisting, buildBootstrapExpression, childEnvironment, prepareProfile} = require('./launcher');
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
 const {installWindowIdentity} = require('./window-identity');
@@ -646,7 +651,6 @@ test('The official callback can clear its address bar; the original navigation s
 test('Post-login recovery refuses A0 and never reloads an app or a draft', async context => {
 	const {refreshInitialPage} = require('./oauth-bridge');
 	const {CDP} = require('../Upgrade/cdp-client');
-	const vm = require('node:vm');
 	await assert.rejects(refreshInitialPage({id: 'A0', userDataDir: 'unused'}), /secondary profile/);
 	const root = fixture(context);
 	fs.writeFileSync(path.join(root, 'DevToolsActivePort'), '10006');
@@ -713,4 +717,64 @@ test('UpdateGuard and UpdateRunner classes isolate installer resolution, idempot
 	const timedOut = await runner.run();
 	assert.deepEqual(timedOut, {status: 'timeout', waitPid: 99999});
 	assert.equal(JSON.parse(fs.readFileSync(path.join(pendingDir, 'deferred-update.json'), 'utf8')).deferredBy, 'A0');
+});
+test('launcher.js avoids bootstrap.toString and update-guard loading, executes buildBootstrapExpression in vm, and filters showDeferredDialog windows via allWindows', context => {
+	const root = fixture(context);
+	const launcherCode = fs.readFileSync(path.join(__dirname, 'launcher.js'), 'utf8').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n');
+	assert.equal(launcherCode.includes('bootstrap.toString'), false);
+	const prodFiles = fs.readdirSync(__dirname).filter(name => name.endsWith('.js') && !name.endsWith('.test.js'));
+	for (const name of prodFiles) {
+		const lines = fs.readFileSync(path.join(__dirname, name), 'utf8').split(/\r?\n/);
+		const count = '' === lines.at(-1) ? lines.length - 1 : lines.length;
+		assert.ok(360 >= count, `Expected ${name} <= 360 lines, got ${count}`);
+	}
+	const loaded = JSON.parse(cp.execFileSync(process.execPath, ['-e', 'require(' + JSON.stringify(path.join(__dirname, 'launcher.js')) + '); console.log(JSON.stringify(Object.keys(require.cache)));'], {encoding: 'utf8', windowsHide: true}));
+	for (const forbidden of ['update-guard.js', 'update-runner.js', 'main-bootstrap.js']) {
+		assert.equal(loaded.some(item => item.endsWith(path.sep + forbidden)), false, `launcher.js should not load ${forbidden}`);
+	}
+	const paths = {};
+	const app = {
+		getPath: key => paths[key],
+		on: () => {},
+		removeListener: () => {},
+		setAppUserModelId: id => {
+			paths.appId = id;
+		},
+		setAsDefaultProtocolClient: () => true,
+		setPath: (key, value) => {
+			paths[key] = value;
+		}
+	};
+	const vmRequire = name => 'electron' === name ? {app, shell: {openExternal: async () => {}}} : 'node:os' === name ? {homedir: () => root} : path.join(__dirname, 'window-identity.js') === name ? {allWindows: () => [], installWindowIdentity: () => {}} : require(name);
+	const vmResult = vm.runInNewContext(buildBootstrapExpression({
+		id: 'A6',
+		email: 'admin6@mage2.pro',
+		homeDir: root,
+		userDataDir: root,
+		codeRoot: __dirname,
+		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222},
+		browserEnvironment: {USERPROFILE: 'real'}
+	}), {require: vmRequire});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	assert.equal(vmResult.id, 'A6');
+	assert.equal(vmResult.updateGuard, true);
+	assert.equal(paths.appId, 'Google.Antigravity.A6');
+	const dialogCalls = [];
+	const destroyedWin = {isDestroyed: () => true};
+	const popupWin = {__isWebviewPopupWindow: true, isDestroyed: () => false};
+	const healthyWin = {isDestroyed: () => false};
+	const dialogGuard = new UpdateGuard(name => 'electron' === name ? {
+		app,
+		BaseWindow: {getFocusedWindow: () => destroyedWin, getAllWindows: () => [popupWin, healthyWin]},
+		BrowserWindow: {getFocusedWindow: () => popupWin, getAllWindows: () => []},
+		dialog: {showMessageBox: (first, second) => dialogCalls.push({first, second})}
+	} : null, {id: 'A0', userDataDir: root}, {pendingDir: path.join(root, 'pending'), profiles: []});
+	dialogGuard.showDeferredDialog([{id: 'A6'}]);
+	assert.equal(dialogCalls.length, 1);
+	assert.equal(dialogCalls[0].first, healthyWin);
+	assert.match(dialogCalls[0].second.message, /A6/);
 });

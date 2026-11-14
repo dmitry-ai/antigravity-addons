@@ -13,30 +13,36 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/29
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
+const cp = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const cp = require('node:child_process');
-const {isPidAlive, readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
-const {readProfiles} = require('./profiles');
-const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+const {readJsonSafe} = require('../Upgrade/process-io');
+const state = require('./update-state');
+const {allWindows} = require('./window-identity');
+const defaultRunnerScript = path.join(__dirname, 'update-runner.js');
 class UpdateGuard {
 	constructor(appRequire, config, options = {}) {
-		this.appRequire = appRequire;
-		this.config = config;
-		this.options = options;
-		this.id = config.id;
-		this.fileSystem = options.fs || fs;
-		this.processes = options.cp || cp;
-		this.electron = resolveModule(appRequire, 'electron') || {};
-		this.autoUpdater = options.autoUpdater || resolveModule(appRequire, 'electron-updater')?.autoUpdater;
-		this.pendingDir = options.pendingDir || path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'antigravity-updater/pending');
+		Object.assign(this, {
+			appRequire,
+			autoUpdater: options.autoUpdater || state.resolveModule(appRequire, 'electron-updater')?.autoUpdater,
+			config,
+			configuredAutoInstall: true,
+			electron: state.resolveModule(appRequire, 'electron') || {},
+			fileSystem: options.fs || fs,
+			id: config.id,
+			lastBlockedSiblings: [],
+			options,
+			pendingDir: options.pendingDir || path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'antigravity-updater/pending'),
+			processes: options.cp || cp,
+			quitting: false
+		});
 		this.deferredFile = path.join(this.pendingDir, 'deferred-update.json');
 		this.updateInfoFile = path.join(this.pendingDir, 'update-info.json');
-		this.quitting = false;
-		this.configuredAutoInstall = true;
-		this.lastBlockedSiblings = [];
-		this.downloadedVersion = this.getUpdater()?.getLastState?.()?.update?.version || readJsonSafe(this.deferredFile, this.fileSystem)?.version || null;
+		this.downloadedVersion = this.getUpdater()?.getLastState?.()?.update?.version || state.readDeferredManifest(this.deferredFile, this.fileSystem)?.version || null;
 		if (this.downloadedVersion && this.downloadedVersion === this.currentVersion()) {
 			this.downloadedVersion = null;
 			this.clearDeferredUpdate();
@@ -50,7 +56,7 @@ class UpdateGuard {
 		this.onWebContentsCreated = (event, contents) => this.handleWebContentsCreated(event, contents);
 	}
 	activeSiblings() {
-		return activeSiblingProfiles(this.config, this.options);
+		return state.activeSiblingProfiles(this.config, this.options);
 	}
 	blockForSiblings(siblings, action, {resetQuitFlag = false, restoreReady = false} = {}) {
 		let r = false;
@@ -69,10 +75,7 @@ class UpdateGuard {
 		return r;
 	}
 	clearDeferredUpdate() {
-		try {
-			this.fileSystem.rmSync(this.deferredFile, {force: true});
-		}
-		catch {}
+		state.clearDeferredManifest(this.deferredFile, this.fileSystem);
 	}
 	clearQuitting() {
 		this.quitting = false;
@@ -82,16 +85,13 @@ class UpdateGuard {
 	}
 	dispose() {
 		const {app} = this.electron;
-		app?.removeListener?.('before-quit', this.onMarkQuitting);
-		app?.removeListener?.('will-quit', this.onMarkQuitting);
-		app?.removeListener?.('browser-window-focus', this.onClearQuitting);
-		app?.removeListener?.('web-contents-created', this.onWebContentsCreated);
-		app?.removeListener?.('quit', this.onQuit);
+		for (const [event, handler] of [['before-quit', this.onMarkQuitting], ['will-quit', this.onMarkQuitting], ['browser-window-focus', this.onClearQuitting], ['web-contents-created', this.onWebContentsCreated], ['quit', this.onQuit]]) {
+			app?.removeListener?.(event, handler);
+		}
 		if (this.autoUpdater) {
-			this.autoUpdater.removeListener?.('update-available', this.onUpdateAvailable);
-			this.autoUpdater.removeListener?.('update-downloaded', this.onUpdateDownloaded);
-			this.autoUpdater.removeListener?.('error', this.onRestoreReadyState);
-			this.autoUpdater.removeListener?.('update-not-available', this.onRestoreReadyState);
+			for (const [event, handler] of [['update-available', this.onUpdateAvailable], ['update-downloaded', this.onUpdateDownloaded], ['error', this.onRestoreReadyState], ['update-not-available', this.onRestoreReadyState]]) {
+				this.autoUpdater.removeListener?.(event, handler);
+			}
 			this.autoUpdater.disableDifferentialDownload = this.originalDisableDifferential;
 			this.autoUpdater.disableWebInstaller = this.originalDisableWebInstaller;
 			if (this.originalDescriptor) {
@@ -108,21 +108,19 @@ class UpdateGuard {
 				this.autoUpdater.quitAndInstall = this.originalQuitAndInstall;
 			}
 		}
-		if (globalThis.__ANTIGRAVITY_UPDATE_GUARD__ === this) {
+		if (this === globalThis.__ANTIGRAVITY_UPDATE_GUARD__) {
 			delete globalThis.__ANTIGRAVITY_UPDATE_GUARD__;
 		}
 	}
 	getAutoInstallOnAppQuit() {
 		let r = this.configuredAutoInstall;
-		if (this.configuredAutoInstall && (this.quitting || Boolean(this.autoUpdater?.quitHandlerAdded))) {
-			if (this.blockForSiblings(this.activeSiblings(), 'Deferred autoInstallOnAppQuit')) {
-				r = false;
-			}
+		if (this.configuredAutoInstall && (this.quitting || Boolean(this.autoUpdater?.quitHandlerAdded)) && this.blockForSiblings(this.activeSiblings(), 'Deferred autoInstallOnAppQuit')) {
+			r = false;
 		}
 		return r;
 	}
 	getUpdater() {
-		return this.options.updater || resolveModule(this.appRequire, './updater');
+		return this.options.updater || state.resolveModule(this.appRequire, './updater');
 	}
 	handleInstall(isSilent = false, isForceRunAfter = false) {
 		let r = false;
@@ -137,12 +135,10 @@ class UpdateGuard {
 	}
 	handleQuit(_event, exitCode = 0) {
 		this.quitting = true;
-		if (0 === exitCode && !this.autoUpdater?.quitAndInstallCalled && !(this.autoUpdater?.quitHandlerAdded && this.configuredAutoInstall && this.autoUpdater?.installerPath)) {
-			if (!this.activeSiblings().length) {
-				const deferred = readJsonSafe(this.deferredFile, this.fileSystem);
-				if (deferred?.version && deferred.version !== this.currentVersion()) {
-					this.spawnManagedUpdate({version: deferred.version, relaunchProfile: null});
-				}
+		if (0 === exitCode && !this.autoUpdater?.quitAndInstallCalled && !(this.autoUpdater?.quitHandlerAdded && this.configuredAutoInstall && this.autoUpdater?.installerPath) && !this.activeSiblings().length) {
+			const deferred = state.readDeferredManifest(this.deferredFile, this.fileSystem);
+			if (deferred?.version && deferred.version !== this.currentVersion()) {
+				this.spawnManagedUpdate({version: deferred.version, relaunchProfile: null});
 			}
 		}
 	}
@@ -191,19 +187,17 @@ class UpdateGuard {
 	}
 	install() {
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose?.();
-		silenceBrokenStdio(this.options.process || process);
+		state.silenceBrokenStdio(this.options.process || process);
 		this.patchAutoUpdater();
 		const {app} = this.electron;
-		app?.on?.('before-quit', this.onMarkQuitting);
-		app?.on?.('will-quit', this.onMarkQuitting);
-		app?.on?.('browser-window-focus', this.onClearQuitting);
-		app?.on?.('web-contents-created', this.onWebContentsCreated);
-		app?.on?.('quit', this.onQuit);
+		for (const [event, handler] of [['before-quit', this.onMarkQuitting], ['will-quit', this.onMarkQuitting], ['browser-window-focus', this.onClearQuitting], ['web-contents-created', this.onWebContentsCreated], ['quit', this.onQuit]]) {
+			app?.on?.(event, handler);
+		}
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__ = this;
 		return this;
 	}
 	log(message) {
-		appendGuardLog(this.config.userDataDir, message, this.fileSystem);
+		state.appendGuardLog(this.config.userDataDir, message, this.fileSystem);
 	}
 	markQuitting() {
 		this.quitting = true;
@@ -235,39 +229,28 @@ class UpdateGuard {
 			if (this.originalQuitAndInstall) {
 				this.autoUpdater.quitAndInstall = (isSilent = false, isForceRunAfter = false) => this.handleQuitAndInstall(isSilent, isForceRunAfter);
 			}
-			this.autoUpdater.on?.('update-available', this.onUpdateAvailable);
-			this.autoUpdater.on?.('update-downloaded', this.onUpdateDownloaded);
-			this.autoUpdater.on?.('error', this.onRestoreReadyState);
-			this.autoUpdater.on?.('update-not-available', this.onRestoreReadyState);
+			for (const [event, handler] of [['update-available', this.onUpdateAvailable], ['update-downloaded', this.onUpdateDownloaded], ['error', this.onRestoreReadyState], ['update-not-available', this.onRestoreReadyState]]) {
+				this.autoUpdater.on?.(event, handler);
+			}
 		}
 	}
 	recordDeferredUpdate(version) {
 		let r = null;
-		const targetVersion = version || this.downloadedVersion || this.getUpdater()?.getLastState?.()?.update?.version || readJsonSafe(this.deferredFile, this.fileSystem)?.version || null;
+		const targetVersion = version || this.downloadedVersion || this.getUpdater()?.getLastState?.()?.update?.version || state.readDeferredManifest(this.deferredFile, this.fileSystem)?.version || null;
 		const installer = this.resolveInstaller(targetVersion);
 		if (targetVersion && targetVersion !== this.currentVersion() && installer) {
-			r = writeDeferredManifest({
-				deferredBy: this.config.id,
-				deferredFile: this.deferredFile,
-				fs: this.fileSystem,
-				installerPath: installer.installerPath,
-				version: targetVersion
-			});
+			r = state.writeDeferredManifest({deferredBy: this.config.id, deferredFile: this.deferredFile, fs: this.fileSystem, installerPath: installer.installerPath, version: targetVersion});
 		}
 		return r;
 	}
 	resolveInstaller(version) {
 		let r = null;
 		const direct = this.autoUpdater?.installerPath;
-		const deferred = readJsonSafe(this.deferredFile, this.fileSystem);
+		const deferred = state.readDeferredManifest(this.deferredFile, this.fileSystem);
 		const info = readJsonSafe(this.updateInfoFile, this.fileSystem);
 		const candidate = direct || (deferred?.fileName ? path.join(this.pendingDir, path.basename(deferred.fileName)) : null) || (info?.fileName ? path.join(this.pendingDir, path.basename(info.fileName)) : null);
 		if (candidate && this.fileSystem.existsSync(candidate)) {
-			r = {
-				installerPath: candidate,
-				fileName: path.basename(candidate),
-				version: version || this.downloadedVersion || deferred?.version || null
-			};
+			r = {installerPath: candidate, fileName: path.basename(candidate), version: version || this.downloadedVersion || deferred?.version || null};
 		}
 		return r;
 	}
@@ -280,9 +263,8 @@ class UpdateGuard {
 						updater.broadcastState({type: 'ready', update: {version: this.downloadedVersion}});
 					}
 					const item = this.electron.Menu?.getApplicationMenu?.()?.getMenuItemById?.('check-for-updates');
-					const label = updater?.MenuUpdateStep?.RestartToUpdate || 'Restart to Update';
 					if (item) {
-						item.label = label;
+						item.label = updater?.MenuUpdateStep?.RestartToUpdate || 'Restart to Update';
 						item.enabled = true;
 					}
 				}
@@ -293,13 +275,8 @@ class UpdateGuard {
 		const {dialog, BaseWindow, BrowserWindow} = this.electron;
 		if (dialog?.showMessageBox) {
 			const names = siblings.map(item => item.id).join(', ');
-			const boxOptions = {
-				type: 'info',
-				title: 'Update Deferred',
-				message: 'Antigravity update is ready and will be installed automatically when all profiles (' + names + ') are closed.',
-				buttons: ['OK']
-			};
-			const win = BaseWindow?.getFocusedWindow?.() || BrowserWindow?.getFocusedWindow?.() || BaseWindow?.getAllWindows?.()?.[0] || BrowserWindow?.getAllWindows?.()?.[0];
+			const boxOptions = {type: 'info', title: 'Update Deferred', message: 'Antigravity update is ready and will be installed automatically when all profiles (' + names + ') are closed.', buttons: ['OK']};
+			const win = allWindows({BaseWindow, BrowserWindow, include: [BaseWindow?.getFocusedWindow?.(), BrowserWindow?.getFocusedWindow?.()]})[0];
 			void (win ? dialog.showMessageBox(win, boxOptions) : dialog.showMessageBox(boxOptions));
 		}
 	}
@@ -311,8 +288,8 @@ class UpdateGuard {
 				this.autoUpdater.quitAndInstallCalled = true;
 			}
 			this.clearDeferredUpdate();
-			const nodeExecutable = this.options.nodeExecutable || defaultNodeExecutable();
-			const runnerScript = this.options.runnerScript || __filename;
+			const nodeExecutable = this.options.nodeExecutable || state.defaultNodeExecutable();
+			const runnerScript = this.options.runnerScript || defaultRunnerScript;
 			const targetVersion = installer.version || version || this.downloadedVersion || null;
 			const args = [
 				runnerScript,
@@ -331,12 +308,7 @@ class UpdateGuard {
 				if ('node.exe' !== path.basename(nodeExecutable).toLowerCase()) {
 					env.ELECTRON_RUN_AS_NODE = '1';
 				}
-				const child = this.processes.spawn(nodeExecutable, args, {
-					detached: true,
-					stdio: 'ignore',
-					windowsHide: true,
-					env
-				});
+				const child = this.processes.spawn(nodeExecutable, args, {detached: true, stdio: 'ignore', windowsHide: true, env});
 				child?.unref?.();
 				r = true;
 			}
@@ -357,316 +329,24 @@ class UpdateGuard {
 			disableDifferentialDownload: Boolean(this.autoUpdater?.disableDifferentialDownload),
 			disableWebInstaller: Boolean(this.autoUpdater?.disableWebInstaller),
 			downloadedVersion: this.downloadedVersion,
-			deferred: readJsonSafe(this.deferredFile, this.fileSystem),
+			deferred: state.readDeferredManifest(this.deferredFile, this.fileSystem),
 			activeSiblings: this.activeSiblings(),
 			lastBlockedSiblings: this.lastBlockedSiblings
 		};
 	}
 }
-class UpdateRunner {
-	constructor(options = {}) {
-		this.options = options;
-		this.fileSystem = options.fs || fs;
-		this.processes = options.cp || cp;
-		this.alive = options.isPidAlive || isPidAlive;
-		this.pause = options.sleep || sleep;
-		this.profileId = options.profileId || 'A0';
-		this.userDataDir = options.userDataDir || '';
-		this.pendingDir = options.pendingDir || path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'antigravity-updater/pending');
-		this.deferredFile = path.join(this.pendingDir, 'deferred-update.json');
-		this.installerPath = options.installerPath || '';
-		this.version = options.version || readJsonSafe(this.deferredFile, this.fileSystem)?.version || null;
-		this.relaunchProfile = options.relaunchProfile || null;
-		this.waitPid = Number(options.waitPid);
-		this.waitTimeoutMs = options.waitTimeoutMs ?? 30000;
-		this.pollMs = options.pollMs ?? 100;
-	}
-	log(message) {
-		appendGuardLog(this.userDataDir, message, this.fileSystem);
-	}
-	async run() {
-		let r = {status: 'noop'};
-		result: {
-			if (!(await this.waitForProcessExit())) {
-				this.saveDeferred();
-				this.log('Timed out waiting for exiting PID ' + this.waitPid + '; update deferred');
-				r = {status: 'timeout', waitPid: this.waitPid};
-				break result;
-			}
-			const siblings = activeSiblingProfiles({id: this.profileId, userDataDir: this.userDataDir}, {
-				fs: this.fileSystem,
-				isPidAlive: this.alive,
-				isLockfileHeld: this.options.isLockfileHeld,
-				profiles: this.options.profiles,
-				roaming: this.options.roaming,
-				profilesFile: this.options.profilesFile,
-				pid: this.options.pid ?? process.pid
-			});
-			if (siblings.length) {
-				this.saveDeferred();
-				this.log('Post-update runner deferred because sibling profiles are active: ' + siblings.map(item => item.id).join(', '));
-				r = {status: 'deferred', siblings};
-				break result;
-			}
-			if (!this.installerPath || !this.fileSystem.existsSync(this.installerPath)) {
-				this.log('Installer is missing at ' + this.installerPath);
-				r = {status: 'missing-installer', installerPath: this.installerPath};
-				break result;
-			}
-			try {
-				this.fileSystem.rmSync(this.deferredFile, {force: true});
-			}
-			catch {}
-			this.log('Running silent installer: ' + this.installerPath + (this.relaunchProfile ? ' (relaunch ' + this.relaunchProfile + ')' : ''));
-			const exitCode = await this.runInstaller();
-			if (0 !== exitCode) {
-				this.saveDeferred();
-				this.log('Installer exited with non-zero code: ' + exitCode);
-				r = {status: 'installer-failed', exitCode};
-				break result;
-			}
-			const shortcutsRepaired = (this.options.repairShortcuts || repairShortcuts)({
-				codeRoot: this.options.codeRoot || __dirname,
-				cp: this.processes,
-				fs: this.fileSystem,
-				log: message => this.log(message)
-			});
-			if (this.relaunchProfile) {
-				const launchProfile = this.options.launchProfile || (id => require('./launcher').launch(id));
-				await launchProfile(this.relaunchProfile);
-			}
-			r = {status: 'installed', exitCode: 0, shortcutsRepaired, relaunched: this.relaunchProfile};
-		}
-		return r;
-	}
-	runInstaller() {
-		return new Promise((resolve, reject) => {
-			const child = this.processes.spawn(this.installerPath, ['--updated', '/S'], {
-				windowsHide: true,
-				stdio: 'ignore'
-			});
-			if (!child || 'function' !== typeof child.once) {
-				resolve(0);
-			}
-			else {
-				child.once('error', reject);
-				child.once('exit', code => resolve(code ?? 0));
-			}
-		});
-	}
-	saveDeferred() {
-		if (this.installerPath && this.fileSystem.existsSync(this.installerPath)) {
-			writeDeferredManifest({
-				deferredBy: this.profileId,
-				deferredFile: this.deferredFile,
-				fs: this.fileSystem,
-				installerPath: this.installerPath,
-				version: this.version || 'pending'
-			});
-		}
-	}
-	async waitForProcessExit() {
-		let r = true;
-		if (Number.isInteger(this.waitPid) && 0 < this.waitPid) {
-			const deadline = Date.now() + this.waitTimeoutMs;
-			while (this.alive(this.waitPid)) {
-				if (Date.now() >= deadline) {
-					r = false;
-					break;
-				}
-				await this.pause(this.pollMs);
-			}
-		}
-		return r;
-	}
-}
-const activeSiblingProfiles = (config, options = {}) => {
-	const fileSystem = options.fs || fs;
-	const alive = options.isPidAlive || isPidAlive;
-	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
-	const currentPid = options.pid ?? process.pid;
-	let profiles = options.profiles;
-	if (!profiles) {
-		try {
-			profiles = readProfiles({roaming: options.roaming, filename: options.profilesFile});
-		}
-		catch {
-			profiles = [];
-		}
-	}
-	const selfDir = config?.userDataDir ? path.resolve(config.userDataDir).toLowerCase() : '';
-	const r = [];
-	for (const profile of profiles) {
-		const dir = path.resolve(profile.userDataDir);
-		if (profile.id !== config?.id && dir.toLowerCase() !== selfDir) {
-			const record = readJsonSafe(path.join(dir, 'main-runtime.json'), fileSystem);
-			let activePid = null;
-			let reason = null;
-			if (record?.pid && record.pid !== currentPid && alive(record.pid)) {
-				activePid = record.pid;
-				reason = 'main-runtime';
-			}
-			if (!reason && locked(dir)) {
-				reason = 'lockfile';
-			}
-			if (reason) {
-				r.push({id: profile.id, userDataDir: profile.userDataDir, pid: activePid, reason});
-			}
-		}
-	}
-	return r;
-};
-const appendGuardLog = (userDataDir, message, fileSystem = fs) => {
-	if (userDataDir) {
-		try {
-			fileSystem.appendFileSync(path.join(userDataDir, 'launcher.log'), new Date().toISOString() + ' [UpdateGuard] ' + message + '\n');
-		}
-		catch {}
-	}
-};
-const applyUpdate = async (options = {}) => new UpdateRunner(options).run();
-const defaultNodeExecutable = () => fs.existsSync('C:/tools/nodejs/node.exe') ? 'C:/tools/nodejs/node.exe' : process.execPath;
 const installUpdateGuard = (appRequire, config, options = {}) => new UpdateGuard(appRequire, config, options).install();
-const isLockfileHeld = (userDataDir, fileSystem = fs) => {
-	let r = false;
-	if (userDataDir) {
-		const lockfile = path.join(userDataDir, 'lockfile');
-		let fd;
-		try {
-			fd = fileSystem.openSync(lockfile, 'r+');
-		}
-		catch (error) {
-			r = ['EBUSY', 'EPERM', 'EACCES'].includes(error?.code);
-		}
-		finally {
-			if (undefined !== fd) {
-				try {
-					fileSystem.closeSync(fd);
-				}
-				catch {}
-			}
-		}
-	}
-	return r;
-};
-const parseCliOptions = (argv = process.argv.slice(2)) => {
-	const flags = {
-		'--installer=': ['installerPath', String],
-		'--pending-dir=': ['pendingDir', String],
-		'--profile=': ['profileId', String],
-		'--relaunch=': ['relaunchProfile', String],
-		'--user-data-dir=': ['userDataDir', String],
-		'--version=': ['version', String],
-		'--wait-pid=': ['waitPid', Number]
-	};
-	const r = {};
-	for (const arg of argv) {
-		if ('--apply-update' === arg) {
-			r.applyUpdate = true;
-		}
-		else {
-			for (const [prefix, [key, parse]] of Object.entries(flags)) {
-				if (arg.startsWith(prefix)) {
-					r[key] = parse(arg.slice(prefix.length));
-					break;
-				}
-			}
-		}
-	}
-	return r;
-};
-const repairShortcuts = ({codeRoot = __dirname, cp: processes = cp, fs: fileSystem = fs, log = () => {}} = {}) => {
-	let r = false;
-	const script = path.join(codeRoot, 'install.ps1');
-	if (fileSystem.existsSync(script) && 'function' === typeof processes?.execFileSync) {
-		try {
-			processes.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], {
-				encoding: 'utf8',
-				windowsHide: true
-			});
-			r = true;
-		}
-		catch (error) {
-			log('Failed to repair shortcuts: ' + error.message);
-		}
-	}
-	return r;
-};
-const resolveModule = (appRequire, id) => {
-	let r = null;
-	if ('function' === typeof appRequire) {
-		try {
-			r = appRequire(id);
-		}
-		catch {}
-	}
-	if (!r && process.resourcesPath) {
-		try {
-			const {createRequire} = require('node:module');
-			r = createRequire(path.join(process.resourcesPath, 'app.asar/dist/main.js'))(id);
-		}
-		catch {}
-	}
-	return r;
-};
-const silenceBrokenStdio = (proc = process) => {
-	for (const name of ['stderr', 'stdout']) {
-		const stream = proc?.[name];
-		if (stream && 'object' === typeof stream) {
-			if ('function' === typeof stream.on && !stream.__antigravityErrorSilenced) {
-				stream.on('error', () => {});
-				stream.__antigravityErrorSilenced = true;
-			}
-			if ('function' === typeof stream.write && !stream.__antigravityWriteSilenced) {
-				stream.write = (chunk, encoding, callback) => {
-					if ('function' === typeof encoding) {
-						encoding();
-					}
-					else if ('function' === typeof callback) {
-						callback();
-					}
-					return true;
-				};
-				stream.__antigravityWriteSilenced = true;
-			}
-		}
-	}
-};
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const writeDeferredManifest = ({deferredBy, deferredFile, fs: fileSystem = fs, installerPath, version}) => {
-	const r = {
-		version: version || 'pending',
-		fileName: path.basename(installerPath),
-		installerPath,
-		deferredBy,
-		deferredAt: new Date().toISOString()
-	};
-	try {
-		writeFileAtomic(deferredFile, JSON.stringify(r), {fs: fileSystem});
-	}
-	catch {}
-	return r;
-};
 if (module === require.main) {
-	const cli = parseCliOptions();
+	const runner = require('./update-runner');
+	const cli = runner.parseCliOptions();
 	if (cli.applyUpdate) {
-		applyUpdate(cli).catch(() => {
+		runner.applyUpdate(cli).catch(() => {
 			process.exitCode = 1;
 		});
 	}
 }
-module.exports = {
-	UpdateGuard,
-	UpdateRunner,
-	activeSiblingProfiles,
-	applyUpdate,
-	defaultNodeExecutable,
-	installUpdateGuard,
-	isLockfileHeld,
-	isPidAlive,
-	parseCliOptions,
-	repairShortcuts,
-	resolveModule,
-	silenceBrokenStdio,
-	writeDeferredManifest
-};
+const exportsObject = {...state, UpdateGuard, installUpdateGuard};
+for (const key of ['UpdateRunner', 'applyUpdate', 'parseCliOptions', 'repairShortcuts']) {
+	Object.defineProperty(exportsObject, key, {enumerable: true, get: () => require('./update-runner')[key]});
+}
+module.exports = exportsObject;

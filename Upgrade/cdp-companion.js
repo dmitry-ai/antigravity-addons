@@ -10,6 +10,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 // https://github.com/dmitry-ai/antigravity-addons/issues/43
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -27,7 +30,7 @@ const binding = '__antigravityToolsCall';
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
 const runtimeVersion = () => {
-	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'registry.js', 'runtime-health.js', '../Multi-Account/profiles.js'].map(filename => path.join(__dirname, filename));
+	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'profiles.js', 'registry.js', 'runtime-health.js'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };

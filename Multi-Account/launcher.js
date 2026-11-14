@@ -19,58 +19,70 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/26
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
+const cp = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const cp = require('node:child_process');
-const {readProfiles} = require('./profiles');
 const {CDP} = require('../Upgrade/cdp-client');
 const {readJsonSafe} = require('../Upgrade/process-io');
 const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
-const {bootstrap} = require('./main-bootstrap');
+const {readProfiles} = require('./profiles');
 const {ensureSharedSkills} = require('./skills-manifest');
-const {isLockfileHeld} = require('./update-guard');
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const {appendLauncherLog, isLockfileHeld} = require('./update-state');
+const mainBootstrapPath = path.join(__dirname, 'main-bootstrap.js');
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
-const readChromeShortcut = profile => {
-	const script = "$p=Join-Path ([Environment]::GetFolderPath('Desktop')) '" + profile.chromeShortcut + ".lnk'; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($p); @{executable=$s.TargetPath;command=$s.Arguments}|ConvertTo-Json -Compress";
-	const shortcut = JSON.parse(cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true}).replace(/^\uFEFF/, ''));
-	if (!fs.existsSync(shortcut.executable) || 'chrome.exe' !== path.basename(shortcut.executable).toLowerCase()) {
-		throw Error('Chrome shortcut is missing or invalid');
-	}
-	const value = flag => shortcut.command.match(new RegExp('(?:^|\\s)--' + flag + '=(?:"([^"]+)"|([^\\s]+))'))?.slice(1).find(Boolean);
-	const userData = value('user-data-dir');
-	const directory = value('profile-directory');
-	const debugPort = Number(value('remote-debugging-port'));
-	if (!userData || !path.isAbsolute(userData) || !directory || /[\\/]/.test(directory)) {
-		throw Error('Chrome shortcut must specify its user-data-dir and profile-directory');
-	}
-	if (!Number.isInteger(debugPort) || 1 > debugPort || 65535 < debugPort) {
-		throw Error('Chrome shortcut must specify its CDP port for the OAuth callback');
-	}
-	const state = readJsonSafe(path.join(userData, 'Local State'));
-	if (state?.profile?.info_cache?.[directory]?.user_name?.toLowerCase() !== profile.email.toLowerCase()) {
-		throw Error('Chrome shortcut account does not match ' + profile.email);
-	}
-	return {
-		executable: shortcut.executable,
-		arguments: ['--user-data-dir=' + userData, '--profile-directory=' + directory, '--remote-debugging-port=' + debugPort, '--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disable'],
-		directory,
-		userData,
-		debugPort
-	};
-};
-const prepareProfile = profile => {
-	if ('A0' !== profile.id) {
-		if (!fs.existsSync(profile.skillsRoot) || !fs.readdirSync(profile.skillsRoot).some(name => fs.existsSync(path.join(profile.skillsRoot, name, 'SKILL.md')))) {
-			throw Error('The shared skills source is unavailable');
+const activateExisting = async (profile, options = {}) => {
+	let r = null;
+	const fileSystem = options.fs || fs;
+	const cdpClient = options.CDP || CDP;
+	const request = options.fetch || globalThis.fetch;
+	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
+	const record = readJsonSafe(path.join(profile.userDataDir, 'main-runtime.json'), fileSystem);
+	if (record && record.id === profile.id && record.userDataDir === profile.userDataDir && /^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
+		let cdp;
+		try {
+			cdp = await cdpClient.open(record.inspector);
+			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
+			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
+			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
+				const activated = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
+				if (activated?.windows > 0) {
+					r = activated;
+				}
+			}
 		}
-		const config = path.join(profile.homeDir, '.gemini/config');
-		fs.mkdirSync(config, {recursive: true});
-		const filename = path.join(config, 'skills.json');
-		ensureSharedSkills(filename, profile.skillsRoot);
+		catch {
+			r = null;
+		}
+		finally {
+			cdp?.close();
+		}
 	}
-	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
+	if (!r && 'A0' === profile.id && locked(profile.userDataDir) && 'function' === typeof request) {
+		const endpoint = await probeProfileEndpoint(profile, {fetch: request, fs: fileSystem});
+		if ('available' === endpoint.state && endpoint.pages.length) {
+			try {
+				for (const page of endpoint.pages) {
+					const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
+					try {
+						await pageCdp.call('Page.bringToFront');
+					}
+					finally {
+						pageCdp.close();
+					}
+				}
+				r = {id: profile.id, port: endpoint.port, windows: endpoint.pages.length};
+			}
+			catch {
+				r = null;
+			}
+		}
+	}
+	return r;
 };
+const buildBootstrapExpression = settings => `require(${JSON.stringify(mainBootstrapPath)}).bootstrap(require,${JSON.stringify(settings)})`;
 // 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
@@ -96,7 +108,7 @@ const launch = async id => {
 		}
 		const chrome = 'A0' === profile.id ? null : readChromeShortcut(profile);
 		prepareProfile(profile);
-		const log = message => fs.appendFileSync(path.join(profile.userDataDir, 'launcher.log'), new Date().toISOString() + ' ' + message + '\n');
+		const log = message => appendLauncherLog(profile.userDataDir, message, {fs});
 		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 		// "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/13
@@ -172,7 +184,7 @@ const launch = async id => {
 			};
 			const evaluation = await cdp.call('Debugger.evaluateOnCallFrame', {
 				callFrameId: frame.callFrameId,
-				expression: '(' + bootstrap.toString() + ')(require,' + JSON.stringify(settings) + ')',
+				expression: buildBootstrapExpression(settings),
 				returnByValue: true
 			});
 			if (evaluation.exceptionDetails) {
@@ -203,59 +215,51 @@ const launch = async id => {
 		}
 	}
 };
-const activateExisting = async (profile, options = {}) => {
-	let r = null;
-	const fileSystem = options.fs || fs;
-	const cdpClient = options.CDP || CDP;
-	const request = options.fetch || globalThis.fetch;
-	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
-	const record = readJsonSafe(path.join(profile.userDataDir, 'main-runtime.json'), fileSystem);
-	if (record && record.id === profile.id && record.userDataDir === profile.userDataDir && /^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
-		let cdp;
-		try {
-			cdp = await cdpClient.open(record.inspector);
-			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
-			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
-			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
-				const activated = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
-				if (activated?.windows > 0) {
-					r = activated;
-				}
-			}
+const prepareProfile = profile => {
+	if ('A0' !== profile.id) {
+		if (!fs.existsSync(profile.skillsRoot) || !fs.readdirSync(profile.skillsRoot).some(name => fs.existsSync(path.join(profile.skillsRoot, name, 'SKILL.md')))) {
+			throw Error('The shared skills source is unavailable');
 		}
-		catch {
-			r = null;
-		}
-		finally {
-			cdp?.close();
-		}
+		const config = path.join(profile.homeDir, '.gemini/config');
+		fs.mkdirSync(config, {recursive: true});
+		const filename = path.join(config, 'skills.json');
+		ensureSharedSkills(filename, profile.skillsRoot);
 	}
-	if (!r && 'A0' === profile.id && locked(profile.userDataDir) && 'function' === typeof request) {
-		const endpoint = await probeProfileEndpoint(profile, {fetch: request, fs: fileSystem});
-		if ('available' === endpoint.state && endpoint.pages.length) {
-			try {
-				for (const page of endpoint.pages) {
-					const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
-					try {
-						await pageCdp.call('Page.bringToFront');
-					}
-					finally {
-						pageCdp.close();
-					}
-				}
-				r = {id: profile.id, port: endpoint.port, windows: endpoint.pages.length};
-			}
-			catch {
-				r = null;
-			}
-		}
-	}
-	return r;
+	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
 };
+const readChromeShortcut = profile => {
+	const script = "$p=Join-Path ([Environment]::GetFolderPath('Desktop')) '" + profile.chromeShortcut + ".lnk'; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($p); @{executable=$s.TargetPath;command=$s.Arguments}|ConvertTo-Json -Compress";
+	const shortcut = JSON.parse(cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true}).replace(/^\uFEFF/, ''));
+	if (!fs.existsSync(shortcut.executable) || 'chrome.exe' !== path.basename(shortcut.executable).toLowerCase()) {
+		throw Error('Chrome shortcut is missing or invalid');
+	}
+	const value = flag => shortcut.command.match(new RegExp('(?:^|\\s)--' + flag + '=(?:"([^"]+)"|([^\\s]+))'))?.slice(1).find(Boolean);
+	const userData = value('user-data-dir');
+	const directory = value('profile-directory');
+	const debugPort = Number(value('remote-debugging-port'));
+	if (!userData || !path.isAbsolute(userData) || !directory || /[\\/]/.test(directory)) {
+		throw Error('Chrome shortcut must specify its user-data-dir and profile-directory');
+	}
+	if (!Number.isInteger(debugPort) || 1 > debugPort || 65535 < debugPort) {
+		throw Error('Chrome shortcut must specify its CDP port for the OAuth callback');
+	}
+	const state = readJsonSafe(path.join(userData, 'Local State'));
+	if (state?.profile?.info_cache?.[directory]?.user_name?.toLowerCase() !== profile.email.toLowerCase()) {
+		throw Error('Chrome shortcut account does not match ' + profile.email);
+	}
+	return {
+		executable: shortcut.executable,
+		arguments: ['--user-data-dir=' + userData, '--profile-directory=' + directory, '--remote-debugging-port=' + debugPort, '--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disable'],
+		directory,
+		userData,
+		debugPort
+	};
+};
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (module === require.main) {
 	launch(process.argv[2] || 'A6').catch(error => {
 		console.error(error.message);
 		process.exitCode = 1;
 	});
 }
-module.exports = {launch, prepareProfile, childEnvironment, readChromeShortcut, activateExisting};
+module.exports = {activateExisting, buildBootstrapExpression, childEnvironment, launch, prepareProfile, readChromeShortcut};

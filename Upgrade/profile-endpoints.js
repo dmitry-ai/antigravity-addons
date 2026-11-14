@@ -7,9 +7,12 @@
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
-const {readProfiles} = require('../Multi-Account/profiles');
+const {readProfiles} = require('./profiles');
 const {isCandidateTarget} = require('./antigravity-shell');
 const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
 const isLocalEndpointSocket = (value, port) => {

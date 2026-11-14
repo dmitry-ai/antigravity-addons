@@ -7,6 +7,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 // https://github.com/dmitry-ai/antigravity-addons/issues/38
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -415,7 +418,9 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	for (const name of upgradeFiles) {
 		const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
 		assert.equal(/\.\.\/Folders\/|__PROJECT_FOLDERS_|__FOLDERS_/.test(source), false, `Unexpected Folders coupling in ${name}`);
+		assert.equal(/\.\.\/Multi-Account\//.test(source), false, `Unexpected Multi-Account coupling in ${name}`);
 	}
+	assert.equal(require('./profiles').readProfiles, require('../Multi-Account/profiles').readProfiles);
 	const root = fixture(context);
 	const roaming = path.join(root, 'roaming');
 	fs.mkdirSync(path.join(roaming, 'Antigravity'), {recursive: true});
