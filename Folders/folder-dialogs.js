@@ -4,6 +4,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
+// https://github.com/dmitry-ai/antigravity-addons/issues/36
 const {folderPickerModel} = require('./folder-menu');
 class FolderDialogController {
 	constructor(view) {
@@ -187,7 +190,7 @@ class FolderDialogController {
 		if (project) {
 			this.openText('Project name', project.name, async name => {
 				await this.view.adapter.rpc('UpdateProject', {project: {...project, name}});
-				await this.view.adapter.readProjects();
+				await this.view.adapter.readProjects({force: true});
 			});
 		}
 	}

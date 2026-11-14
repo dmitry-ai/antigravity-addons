@@ -25,6 +25,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
+// https://github.com/dmitry-ai/antigravity-addons/issues/36
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -32,6 +35,7 @@ const path = require('node:path');
 const os = require('node:os');
 const model = require('./folders-model');
 const createAdapter = require('./antigravity-adapter');
+const {AntigravityAdapter, ConnectSummaryStream} = createAdapter;
 const manager = require('./folders-manager');
 const createFoldersRuntime = require('./cdp-runtime');
 const {FoldersStore} = createFoldersRuntime;
@@ -275,13 +279,7 @@ test('Native API errors and missing records are surfaced instead of reporting an
 	await assert.rejects(failed.createProject({id: 'p-new', name: 'New'}), /HTTP 404/);
 	failed.dispose();
 });
-const encode = value => {
-	const data = new TextEncoder().encode(JSON.stringify(value));
-	const bytes = new Uint8Array(data.length + 5);
-	new DataView(bytes.buffer).setUint32(1, data.length);
-	bytes.set(data, 5);
-	return bytes;
-};
+const encode = value => ConnectSummaryStream.encodeFrame(value);
 test('Live conversation stream decodes fragmented/coalesced frames and preserves updates and deletions', async () => {
 	const a = encode({updates: {c1: summary('p1')}});
 	const b = encode({updates: {c2: summary('p1')}, deletes: ['c1']});
@@ -732,4 +730,68 @@ test('Single-read CAS persistConfig preserves BOM/CRLF, FoldersStore.dispatch re
 	assert.equal(el.style.top, '16px');
 	assert.deepEqual(el.children, [child]);
 	view.dispose();
+});
+test('AntigravityAdapter and ConnectSummaryStream coalesce concurrent readProjects calls, cache unchanged projectIds across polls, and validate frames', async () => {
+	let listCalls = 0;
+	let readCalls = 0;
+	let releaseList;
+	let currentName = 'Initial';
+	const adapter = new AntigravityAdapter({
+		window: fakeWindow(),
+		model,
+		fetch: async url => {
+			let r;
+			if (url.endsWith('/ListProjects')) {
+				listCalls++;
+				if (1 === listCalls) {
+					await new Promise(resolve => {
+						releaseList = resolve;
+					});
+				}
+				r = Response.json({projectIds: ['p1']});
+			}
+			else if (url.endsWith('/ReadProjects')) {
+				readCalls++;
+				r = Response.json({projects: [{id: 'p1', name: currentName}]});
+			}
+			else {
+				r = Response.json({});
+			}
+			return r;
+		}
+	});
+	try {
+		const c1 = adapter.readProjects();
+		const c2 = adapter.readProjects();
+		assert.equal(c1, c2);
+		assert.equal(listCalls, 1);
+		releaseList();
+		assert.equal((await Promise.all([c1, c2]))[0][0].name, 'Initial');
+		assert.equal(readCalls, 1);
+		currentName = 'CachedSkip';
+		for (let i = 0; 12 > i; i++) {
+			assert.equal((await adapter.readProjects())[0].name, 'Initial');
+		}
+		assert.equal(readCalls, 1);
+		assert.equal((await adapter.readProjects())[0].name, 'CachedSkip');
+		assert.equal(readCalls, 2);
+		currentName = 'ForcedRefresh';
+		assert.equal((await adapter.readProjects({force: true}))[0].name, 'ForcedRefresh');
+		assert.equal(readCalls, 3);
+		currentName = 'UpdatedViaRpc';
+		await adapter.rpc('UpdateProject', {project: {id: 'p1', name: currentName}});
+		assert.equal((await adapter.readProjects())[0].name, 'UpdatedViaRpc');
+		assert.equal(readCalls, 4);
+		assert.throws(() => adapter.validateProjectIds({projectIds: ['dup', 'dup']}), /duplicate project IDs/);
+		const stream = new ConnectSummaryStream({headers: () => ({}), lifetime: new AbortController(), model, onStatus() {}, onSummaries() {}, request: async () => ({}), url: '/'});
+		const oversized = new Uint8Array(5);
+		new DataView(oversized.buffer).setUint32(1, 33 * 1024 * 1024);
+		assert.throws(() => stream.decodeFrames(oversized, () => {}), /exceeds contract limit/);
+		const flagged = ConnectSummaryStream.encodeFrame({error: {message: 'end-of-stream'}});
+		flagged[0] = 2;
+		assert.throws(() => stream.decodeFrames(flagged, () => {}), /end-of-stream/);
+	}
+	finally {
+		adapter.dispose();
+	}
 });
