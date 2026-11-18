@@ -22,6 +22,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+// 2026-11-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
+// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const cp = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -100,6 +103,13 @@ const childEnvironment = (profile, original = process.env) => {
 	r.ANTIGRAVITY_VSCODE_HOST = '1';
 	return r;
 };
+const spawnOptions = (executable, profile, original = process.env) => ({
+	cwd: path.dirname(executable),
+	env: childEnvironment(profile, original),
+	windowsHide: false,
+	detached: true,
+	stdio: ['ignore', 'ignore', 'pipe']
+});
 const launch = async id => {
 	result: {
 		const profile = readProfiles().find(item => item.id === id);
@@ -126,13 +136,7 @@ const launch = async id => {
 		// 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 		// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/15
-		const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0'], {
-			cwd: path.dirname(executable),
-			env: childEnvironment(profile),
-			windowsHide: true,
-			detached: true,
-			stdio: ['ignore', 'ignore', 'pipe']
-		});
+		const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0'], spawnOptions(executable, profile));
 		let inspector;
 		let exited;
 		let spawnError;
@@ -262,4 +266,4 @@ if (module === require.main) {
 		process.exitCode = 1;
 	});
 }
-module.exports = {activateExisting, buildBootstrapExpression, childEnvironment, launch, prepareProfile, readChromeShortcut};
+module.exports = {activateExisting, buildBootstrapExpression, childEnvironment, launch, prepareProfile, readChromeShortcut, spawnOptions};

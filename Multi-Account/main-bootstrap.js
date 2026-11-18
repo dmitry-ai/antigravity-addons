@@ -19,6 +19,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+// 2026-11-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
+// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const defaultProcesses = require('node:child_process');
 const fs = require('node:fs');
 const defaultOs = require('node:os');
@@ -46,6 +49,7 @@ const bootstrap = (appRequire, config) => {
 		configureSecondaryProfile({app, appRequire, codeRoot, config, processes, shell, windowIdentity});
 	}
 	installUpdateGuard(appRequire, config);
+	ensureInitialWindowVisible({app, appRequire, BaseWindow});
 	globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__ = {
 		id: config.id,
 		email: config.email || null,
@@ -153,6 +157,57 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 	items.autoCheckForUpdates = 'false';
 	writeFileAtomic(storage, JSON.stringify(items), {fs});
 };
+const ensureInitialWindowVisible = ({app, appRequire, BaseWindow}) => {
+	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose?.();
+	if ('headless' === process.env.ELECTRON_OZONE_PLATFORM_HINT) {
+		return null;
+	}
+	const findInitialHubWindow = () => {
+		const utils = resolveModule(appRequire, './utils');
+		return utils?.getLastFocusedLocalHubWindow?.() || (BaseWindow?.getAllWindows?.() || []).find(win => win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) || null;
+	};
+	const reveal = win => {
+		if (win && !win.isDestroyed?.()) {
+			if ('function' === typeof win.isVisible && !win.isVisible() && !win.isMinimized?.()) {
+				win.show?.();
+			}
+			if (!win.isMinimized?.()) {
+				win.focus?.();
+				app?.focus?.({steal: true});
+			}
+			return true;
+		}
+		return false;
+	};
+	if (reveal(findInitialHubWindow())) {
+		return null;
+	}
+	let scheduled = false;
+	const check = () => {
+		scheduled = false;
+		if (reveal(findInitialHubWindow())) {
+			dispose();
+		}
+	};
+	const onWebContentsCreated = () => {
+		if (!scheduled) {
+			scheduled = true;
+			setImmediate(check);
+		}
+	};
+	const dispose = () => {
+		app?.removeListener?.('web-contents-created', onWebContentsCreated);
+		app?.removeListener?.('will-quit', dispose);
+		if (handle === globalThis.__ANTIGRAVITY_INITIAL_WINDOW__) {
+			delete globalThis.__ANTIGRAVITY_INITIAL_WINDOW__;
+		}
+	};
+	const handle = {dispose};
+	app?.on?.('web-contents-created', onWebContentsCreated);
+	app?.on?.('will-quit', dispose);
+	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__ = handle;
+	return handle;
+};
 const listManagedWindows = ({appRequire, BaseWindow, BrowserWindow, windowIdentity}) => {
 	const utils = resolveModule(appRequire, './utils');
 	const hubWindows = utils?.getHubWindows?.() || [];
@@ -167,4 +222,4 @@ const listManagedWindows = ({appRequire, BaseWindow, BrowserWindow, windowIdenti
 	}
 	return r;
 };
-module.exports = {bootstrap, configureSecondaryProfile, listManagedWindows};
+module.exports = {bootstrap, configureSecondaryProfile, ensureInitialWindowVisible, listManagedWindows};

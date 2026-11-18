@@ -25,6 +25,9 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/37
+// 2026-11-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
+// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cp = require('node:child_process');
@@ -33,7 +36,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {EventEmitter} = require('node:events');
 const {MockBaseWindow, createElectronHarness, createTempDir} = require('../Upgrade/test-helpers');
-const {activateExisting, buildBootstrapExpression, childEnvironment, prepareProfile} = require('./launcher');
+const {activateExisting, buildBootstrapExpression, childEnvironment, prepareProfile, spawnOptions} = require('./launcher');
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
 const {UpdateGuard, UpdateRunner, installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
@@ -146,6 +149,7 @@ test('Browser routing preserves the OAuth state and callback while selecting the
 	assert.equal(a0Result.tokenStorage, 'native-credential-manager');
 	assert.equal(a0Result.updateGuard, true);
 	assert.equal(fs.existsSync(path.join(a0Dir, 'app_storage.json')), false);
+	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose();
 	globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
 	delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
 	delete globalThis.__ANTIGRAVITY_OAUTH_BRIDGES__;
@@ -534,6 +538,7 @@ test('launcher.js avoids bootstrap.toString and update-guard loading, executes b
 		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222}, browserEnvironment: {USERPROFILE: 'real'}
 	}), {require: vmRequire});
 	context.after(() => {
+		globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose();
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
 		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
 		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
@@ -555,4 +560,57 @@ test('launcher.js avoids bootstrap.toString and update-guard loading, executes b
 	assert.equal(dialogCalls.length, 1);
 	assert.equal(dialogCalls[0].first, healthyWin);
 	assert.match(dialogCalls[0].second.message, /A6/);
+});
+test('spawnOptions disables windowsHide and cold bootstrap reveals and focuses a hidden initial Hub window once', async context => {
+	const root = fixture(context);
+	const desktop = path.join(root, 'Desktop');
+	fs.mkdirSync(desktop, {recursive: true});
+	const executable = 'C:/Local/Programs/antigravity/Antigravity.exe';
+	for (const profile of [{id: 'A0', homeDir: 'unused', userDataDir: 'C:/Roaming/Antigravity'}, {id: 'A6', homeDir: path.join(root, 'home'), userDataDir: root}]) {
+		const opts = spawnOptions(executable, profile, {USERPROFILE: 'C:/Users/dfedi'});
+		assert.equal(opts.windowsHide, false);
+		assert.equal(opts.detached, true);
+		assert.equal(opts.cwd, 'C:/Local/Programs/antigravity');
+		assert.deepEqual(opts.stdio, ['ignore', 'ignore', 'pipe']);
+	}
+	const {app, baseWindows, fakeRequire, state} = createElectronHarness({codeRoot: __dirname, desktop, homedir: root, realModules: true});
+	bootstrap(fakeRequire, {
+		id: 'A6',
+		email: 'admin6@mage2.pro',
+		homeDir: root,
+		userDataDir: root,
+		codeRoot: __dirname,
+		chrome: {executable: 'chrome.exe', arguments: ['--profile-directory=Profile 8'], debugPort: 9222},
+		browserEnvironment: {USERPROFILE: 'real'}
+	});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose();
+		globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose();
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	assert.ok(globalThis.__ANTIGRAVITY_INITIAL_WINDOW__);
+	app.emit('web-contents-created', {}, {});
+	await new Promise(resolve => setImmediate(resolve));
+	assert.ok(globalThis.__ANTIGRAVITY_INITIAL_WINDOW__);
+	assert.equal(state.focusOptions, null);
+	const hiddenWin = new MockBaseWindow(1, 'Antigravity', false);
+	hiddenWin.visible = false;
+	hiddenWin.isVisible = () => hiddenWin.visible;
+	hiddenWin.show = () => {
+		hiddenWin.visible = true;
+		hiddenWin.shown = true;
+	};
+	baseWindows.push(hiddenWin);
+	app.emit('web-contents-created', {}, hiddenWin.webContents);
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(hiddenWin.isVisible(), true);
+	assert.equal(hiddenWin.shown, true);
+	assert.equal(hiddenWin.focused, true);
+	assert.deepEqual(state.focusOptions, {steal: true});
+	assert.equal(globalThis.__ANTIGRAVITY_INITIAL_WINDOW__, undefined);
+	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.dispose();
+	globalThis.__ANTIGRAVITY_UPDATE_GUARD__.dispose();
+	assert.equal(app.listenerCount('web-contents-created'), 0);
 });
