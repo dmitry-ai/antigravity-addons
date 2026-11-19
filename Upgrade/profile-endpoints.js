@@ -1,4 +1,7 @@
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -18,7 +21,7 @@ const path = require('node:path');
 const {CDP} = require('./cdp-client');
 const {isCandidateTarget} = require('./antigravity-shell');
 const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
-const {isPidAlive, readJsonSafe} = require('./process-io');
+const {isLockfileHeld, isPidAlive, readJsonSafe} = require('./process-io');
 const {readProfiles} = require('./profiles');
 const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
 const isLocalEndpointSocket = (value, port) => {
@@ -32,21 +35,22 @@ const isLocalEndpointSocket = (value, port) => {
 	}
 	return r;
 };
-const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs, isPidAlive: checkPid = isPidAlive, openInspector = url => CDP.open(url)} = {}) => {
+const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs, isLockfileHeld: checkLockfile = isLockfileHeld, isPidAlive: checkPid = isPidAlive, openInspector = url => CDP.open(url)} = {}) => {
 	const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
 	const mainRuntimeFile = path.join(profile.userDataDir, 'main-runtime.json');
 	let r = {id: profile.id, email: profile.email, userDataDir: profile.userDataDir, state: 'unavailable', pages: []};
+	let mainError = null;
+	let runtimePidAlive = false;
 	result: {
-		let mainError = null;
 		const defaultPortFile = path.join(profile.userDataDir, 'DevToolsActivePort');
 		const isDefaultPortFile = !profile.portFile || path.resolve(profile.portFile).toLowerCase() === path.resolve(defaultPortFile).toLowerCase();
 		const mainRecord = isDefaultPortFile && fileSystem.existsSync(mainRuntimeFile) ? readJsonSafe(mainRuntimeFile, fileSystem) : null;
+		runtimePidAlive = Boolean(mainRecord?.pid && checkPid(mainRecord.pid));
 		const validMainRecord = Boolean(
-			mainRecord
+			runtimePidAlive
 			&& mainRecord.id === profile.id
 			&& path.resolve(String(mainRecord.userDataDir || '')).toLowerCase() === path.resolve(profile.userDataDir).toLowerCase()
 			&& /^ws:\/\/(127\.0\.0\.1|localhost):\d+\/[\da-f-]+$/i.test(mainRecord.inspector || '')
-			&& checkPid(mainRecord.pid)
 		);
 		if (validMainRecord) {
 			let inspector;
@@ -122,6 +126,13 @@ const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarge
 		catch (error) {
 			r = {...r, state: 'error', error: error.message};
 		}
+	}
+	if ('unavailable' === r.state && (runtimePidAlive || checkLockfile(profile.userDataDir, fileSystem))) {
+		r = {
+			...r,
+			state: 'error',
+			error: mainError || `Active Antigravity profile ${profile.id} has no reachable inspector or CDP endpoint`
+		};
 	}
 	return r;
 };

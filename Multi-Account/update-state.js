@@ -1,9 +1,12 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
-const {isPidAlive, readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
+const {isLockfileHeld, isPidAlive, readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const {readProfiles} = require('./profiles');
 const activeSiblingProfiles = (config, options = {}) => {
 	const fileSystem = options.fs || fs;
@@ -57,28 +60,6 @@ const clearDeferredManifest = (deferredFile, fileSystem = fs) => {
 	catch {}
 };
 const defaultNodeExecutable = () => fs.existsSync('C:/tools/nodejs/node.exe') ? 'C:/tools/nodejs/node.exe' : process.execPath;
-const isLockfileHeld = (userDataDir, fileSystem = fs) => {
-	let r = false;
-	if (userDataDir) {
-		const lockfile = path.join(userDataDir, 'lockfile');
-		let fd;
-		try {
-			fd = fileSystem.openSync(lockfile, 'r+');
-		}
-		catch (error) {
-			r = ['EBUSY', 'EPERM', 'EACCES'].includes(error?.code);
-		}
-		finally {
-			if (undefined !== fd) {
-				try {
-					fileSystem.closeSync(fd);
-				}
-				catch {}
-			}
-		}
-	}
-	return r;
-};
 const readDeferredManifest = (deferredFile, fileSystem = fs) => readJsonSafe(deferredFile, fileSystem);
 const resolveModule = (appRequire, id) => {
 	let r = null;

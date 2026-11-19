@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
@@ -52,4 +55,26 @@ const writeFileAtomic = (filename, content, {beforeRename, fs: fileSystem = fs, 
 		fileSystem.rmSync(temporary, {force: true});
 	}
 };
-module.exports = {isPidAlive, readJsonSafe, writeFileAtomic};
+const isLockfileHeld = (userDataDir, fileSystem = fs) => {
+	let r = false;
+	if (userDataDir) {
+		const lockfile = path.join(userDataDir, 'lockfile');
+		let fd;
+		try {
+			fd = fileSystem.openSync(lockfile, 'r+');
+		}
+		catch (error) {
+			r = ['EBUSY', 'EPERM', 'EACCES'].includes(error?.code);
+		}
+		finally {
+			if (undefined !== fd) {
+				try {
+					fileSystem.closeSync(fd);
+				}
+				catch {}
+			}
+		}
+	}
+	return r;
+};
+module.exports = {isLockfileHeld, isPidAlive, readJsonSafe, writeFileAtomic};

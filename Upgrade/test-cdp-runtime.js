@@ -1,4 +1,7 @@
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -526,4 +529,35 @@ test('Main-process WebContents debugger bridge discovers and attaches shells wit
 	await companion.dispose();
 	assert.equal(attached, false);
 	assert.equal(detachCount, 1);
+});
+test('Idle closed profiles report unavailable while active profiles without a reachable endpoint fail closed as error', async context => {
+	const {probeProfileEndpoint} = require('./profile-endpoints');
+	const {inspectRuntime} = require('./runtime-health');
+	const {isLockfileHeld} = require('./process-io');
+	const root = fixture(context);
+	const roaming = mockProfileEndpoints(context, root, {Antigravity: null, 'Antigravity-A6': null});
+	const a0Dir = path.join(roaming, 'Antigravity');
+	const a6Dir = path.join(roaming, 'Antigravity-A6');
+	const idle = await probeProfileEndpoint({id: 'A0', userDataDir: a0Dir}, {isLockfileHeld: () => false});
+	assert.equal(idle.state, 'unavailable');
+	assert.equal(idle.error, undefined);
+	assert.equal(isLockfileHeld(a0Dir, {openSync: () => { throw Object.assign(Error('busy'), {code: 'EBUSY'}); }}), true);
+	assert.equal(require('../Multi-Account/update-state').isLockfileHeld, isLockfileHeld);
+	const lockedNoEndpoint = await probeProfileEndpoint({id: 'A0', userDataDir: a0Dir}, {isLockfileHeld: () => true});
+	assert.equal(lockedNoEndpoint.state, 'error');
+	assert.match(lockedNoEndpoint.error, /Active Antigravity profile A0 has no reachable inspector or CDP endpoint/);
+	const staleInspectorUrl = 'ws://127.0.0.1:25599/00000000-0000-4000-8000-000000000099';
+	fs.writeFileSync(path.join(a6Dir, 'main-runtime.json'), JSON.stringify({id: 'A6', pid: process.pid, inspector: staleInspectorUrl, userDataDir: a6Dir}));
+	const livePidBrokenInspector = await probeProfileEndpoint({id: 'A6', userDataDir: a6Dir}, {
+		isLockfileHeld: () => false,
+		openInspector: async () => { throw Error('Inspector closed'); }
+	});
+	assert.equal(livePidBrokenInspector.state, 'error');
+	assert.match(livePidBrokenInspector.error, /Inspector closed/);
+	context.mock.method(CDP, 'open', async () => { throw Error('Inspector connection refused'); });
+	const companion = new Companion({root});
+	await companion.tick();
+	assert.match(companion.errors.A6, /Inspector connection refused/);
+	await companion.dispose();
+	await assert.rejects(inspectRuntime({expectedTools: ['folders']}), /A6: Inspector connection refused/);
 });
