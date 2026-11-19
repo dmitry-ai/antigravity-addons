@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
@@ -230,13 +233,18 @@ test('Native API adapter tolerates added DTO fields and uses the declared projec
 		await adapter.createProject({id: 'exact-new-id', name: 'New', resources: []});
 		assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/CreateProject')).options.body).project.id, 'exact-new-id');
 		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
-		assert.equal(win.lastUrl, '/c/c1?section=p1');
+		assert.equal(win.lastUrl, '/c/c1?project=p1');
 		assert.equal(win.lastEvent.type, 'popstate');
+		assert.deepEqual(adapter.selection(), {projectId: 'p1', conversationId: 'c1'});
+		win.location.href = 'https://127.0.0.1:2890/c/c1?section=legacy-p1';
+		assert.deepEqual(adapter.selection(), {projectId: 'legacy-p1', conversationId: 'c1'});
+		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
+		assert.equal(win.lastUrl, '/c/c1?project=p1');
 		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 		// "Add Project settings action to project context menu in Folders":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/17
 		adapter.openProjectSettings('p2');
-		assert.equal(win.lastUrl, '/c/c1?section=p1&settingsOpen=true&settingsProjectId=p2');
+		assert.equal(win.lastUrl, '/c/c1?project=p1&settingsOpen=true&settingsProjectId=p2');
 		assert.equal(win.lastEvent.type, 'popstate');
 		assert.throws(() => adapter.openProjectSettings(''), /Project id is required/);
 	}

@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
@@ -101,8 +104,9 @@ class AntigravityAdapter {
 			url.pathname = conversationId ? '/c/' + encodeURIComponent(conversationId) : '/';
 			url.searchParams.delete('cascadeId');
 			url.searchParams.delete('section');
+			url.searchParams.delete('project');
 			if (projectId) {
-				url.searchParams.set('section', projectId);
+				url.searchParams.set('project', projectId);
 			}
 		});
 	}
@@ -161,7 +165,7 @@ class AntigravityAdapter {
 	selection() {
 		const url = new URL(this.win.location.href);
 		const match = /^\/c\/([^/]+)\/?$/.exec(url.pathname);
-		return {projectId: url.searchParams.get('section'), conversationId: match ? decodeURIComponent(match[1]) : null};
+		return {projectId: url.searchParams.get('project') || url.searchParams.get('section'), conversationId: match ? decodeURIComponent(match[1]) : null};
 	}
 	async start() {
 		await this.readProjects({force: true});

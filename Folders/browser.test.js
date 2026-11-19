@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
@@ -184,7 +187,7 @@ test('Thousands of projects remain virtualized and live conversation updates kee
 		}
 	}));
 	await fixture.page.getByRole('button', {name: /Updated conversation/}).waitFor();
-	assert.match(fixture.page.url(), /\/c\/c1\?section=p0/);
+	assert.match(fixture.page.url(), /\/c\/c1\?project=p0/);
 	assert.equal(await fixture.page.locator('[data-folders-row="conversation:c1"]').getAttribute('aria-selected'), 'true');
 	assert.equal(await fixture.page.locator('#untouched-draft').inputValue(), 'Unsaved draft');
 	assert.deepEqual(fixture.errors, []);
@@ -206,13 +209,13 @@ test('The conversation rename UI keeps its ID, native route, project name, live 
 	await fixture.page.getByRole('textbox', {name: 'Conversation title'}).fill('52');
 	await fixture.page.getByRole('button', {name: 'Save', exact: true}).click();
 	await fixture.page.getByRole('button', {name: /52/}).click();
-	assert.match(fixture.page.url(), /\/c\/c1\?section=p1/);
+	assert.match(fixture.page.url(), /\/c\/c1\?project=p1/);
 	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
 	await fixture.page.locator('[data-folders-row="project:p1"] .fg-label').click({button: 'right'});
 	await fixture.page.getByRole('button', {name: 'Project settings…', exact: true}).click();
-	assert.match(fixture.page.url(), /\/c\/c1\?section=p1&settingsOpen=true&settingsProjectId=p1$/);
+	assert.match(fixture.page.url(), /\/c\/c1\?project=p1&settingsOpen=true&settingsProjectId=p1$/);
 	await fixture.page.evaluate(() => {
 		const s = window.__foldersFixture.summaries.c1;
 		window.__foldersFixture.emit({updates: {c1: {...s, stepCount: 121}}});
