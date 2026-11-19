@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
@@ -16,7 +19,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const {CDP} = require('./cdp-client');
+const {openTargetSession} = require('./cdp-client');
 const {isPidAlive, writeFileAtomic} = require('./process-io');
 const registry = require('./registry');
 const {shellProbe, isShell} = require('./antigravity-shell');
@@ -30,7 +33,7 @@ const binding = '__antigravityToolsCall';
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
 const runtimeVersion = () => {
-	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'process-io.js', 'profile-endpoints.js', 'profiles.js', 'registry.js', 'runtime-health.js'].map(filename => path.join(__dirname, filename));
+	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'main-debugger-bridge.js', 'process-io.js', 'profile-endpoints.js', 'profiles.js', 'registry.js', 'runtime-health.js'].map(filename => path.join(__dirname, filename));
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
@@ -59,8 +62,8 @@ class Companion {
 		this.stopped = false;
 	}
 	async attach(target) {
-		const cdp = await CDP.open(target.webSocketDebuggerUrl);
 		const key = target.key || target.id;
+		const cdp = await openTargetSession(target, {ownerKey: 'companion:' + key});
 		const r = {
 			cdp,
 			id: key,

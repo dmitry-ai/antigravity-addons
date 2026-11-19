@@ -1,3 +1,6 @@
+# 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+# https://github.com/dmitry-ai/antigravity-addons/issues/52
 # 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 # "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 # https://github.com/dmitry-ai/antigravity-addons/issues/12
@@ -55,3 +58,11 @@ foreach ($profile in $config.profiles) {
 		}
 	}
 }
+$protocolKey = 'HKCU:\Software\Classes\antigravity'
+$commandKey = Join-Path $protocolKey 'shell\open\command'
+New-Item -Path $commandKey -Force | Out-Null
+Set-ItemProperty -Path $protocolKey -Name '(Default)' -Value 'URL:Antigravity Protocol'
+Set-ItemProperty -Path $protocolKey -Name 'URL Protocol' -Value ''
+$protocolCmd = '"' + $wscriptPath + '" "' + $launchScript + '" A0 "%1"'
+Set-ItemProperty -Path $commandKey -Name '(Default)' -Value $protocolCmd
+Write-Output $commandKey

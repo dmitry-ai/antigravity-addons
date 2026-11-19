@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
@@ -28,7 +31,7 @@
 const cp = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const {CDP} = require('../Upgrade/cdp-client');
+const {CDP, openTargetSession} = require('../Upgrade/cdp-client');
 const {readJsonSafe} = require('../Upgrade/process-io');
 const {probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const {readProfiles} = require('./profiles');
@@ -42,6 +45,7 @@ const activateExisting = async (profile, options = {}) => {
 	const cdpClient = options.CDP || CDP;
 	const request = options.fetch || globalThis.fetch;
 	const locked = options.isLockfileHeld || (dir => isLockfileHeld(dir, fileSystem));
+	const extraArgs = Array.isArray(options.args) ? options.args.filter(arg => 'string' === typeof arg && arg.length) : [];
 	const record = readJsonSafe(path.join(profile.userDataDir, 'main-runtime.json'), fileSystem);
 	if (record && record.id === profile.id && record.userDataDir === profile.userDataDir && /^ws:\/\/127\.0\.0\.1:\d+\/[\da-f-]+$/i.test(record.inspector)) {
 		let cdp;
@@ -50,7 +54,7 @@ const activateExisting = async (profile, options = {}) => {
 			const state = await cdp.evaluate('({pid:process.pid,account:globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__})');
 			const expectedTokenStorage = 'A0' === profile.id ? 'native-credential-manager' : 'server-headless-file-store';
 			if (state?.pid === record.pid && state.account?.id === profile.id && state.account.userDataDir === profile.userDataDir && state.account.tokenStorage === expectedTokenStorage) {
-				const activated = await cdp.evaluate('globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__()');
+				const activated = await cdp.evaluate(`globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__(${JSON.stringify(extraArgs)})`);
 				if (activated?.windows > 0) {
 					r = activated;
 				}
@@ -68,7 +72,7 @@ const activateExisting = async (profile, options = {}) => {
 		if ('available' === endpoint.state && endpoint.pages.length) {
 			try {
 				for (const page of endpoint.pages) {
-					const pageCdp = await cdpClient.open(page.webSocketDebuggerUrl);
+					const pageCdp = await (options.CDP ? cdpClient.open(page.webSocketDebuggerUrl) : openTargetSession(page));
 					try {
 						await pageCdp.call('Page.bringToFront');
 					}
@@ -110,12 +114,13 @@ const spawnOptions = (executable, profile, original = process.env) => ({
 	detached: true,
 	stdio: ['ignore', 'ignore', 'pipe']
 });
-const launch = async id => {
+const launch = async (id, extraArgs = []) => {
 	result: {
 		const profile = readProfiles().find(item => item.id === id);
 		if (!profile) {
 			throw Error('Unknown profile: ' + id);
 		}
+		const cleanArgs = Array.isArray(extraArgs) ? extraArgs.filter(arg => 'string' === typeof arg && arg.length) : [];
 		const chrome = 'A0' === profile.id ? null : readChromeShortcut(profile);
 		prepareProfile(profile);
 		const log = message => appendLauncherLog(profile.userDataDir, message, {fs});
@@ -123,7 +128,7 @@ const launch = async id => {
 		// "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/13
 		await require('../Upgrade/runtime-control').ensureRunning();
-		const activated = await activateExisting(profile);
+		const activated = await activateExisting(profile, {args: cleanArgs});
 		if (activated) {
 			console.log(JSON.stringify(activated));
 			break result;
@@ -136,7 +141,7 @@ const launch = async id => {
 		// 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 		// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/15
-		const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0'], spawnOptions(executable, profile));
+		const child = cp.spawn(executable, ['--user-data-dir=' + profile.userDataDir, '--inspect-brk=127.0.0.1:0', ...cleanArgs], spawnOptions(executable, profile));
 		let inspector;
 		let exited;
 		let spawnError;
@@ -261,7 +266,7 @@ const readChromeShortcut = profile => {
 };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (module === require.main) {
-	launch(process.argv[2] || 'A6').catch(error => {
+	launch(process.argv[2] || 'A6', process.argv.slice(3)).catch(error => {
 		console.error(error.message);
 		process.exitCode = 1;
 	});

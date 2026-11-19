@@ -1,8 +1,11 @@
+' 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+' "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+' https://github.com/dmitry-ai/antigravity-addons/issues/52
 ' 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 ' "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 ' https://github.com/dmitry-ai/antigravity-addons/issues/26
 Option Explicit
-Dim fso, nodePath, pattern, profile, root, script, sh
+Dim fso, nodePath, pattern, profile, root, script, sh, cmd, idx, arg
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 profile = "A6"
@@ -20,4 +23,9 @@ If Not fso.FileExists(nodePath) Then
 End If
 root = fso.GetParentFolderName(WScript.ScriptFullName)
 script = fso.BuildPath(root, "launcher.js")
-sh.Run """" & nodePath & """ """ & script & """ " & profile, 0, False
+cmd = """" & nodePath & """ """ & script & """ " & profile
+For idx = 1 To WScript.Arguments.Count - 1
+	arg = Replace(WScript.Arguments(idx), """", "\""")
+	cmd = cmd & " """ & arg & """"
+Next
+sh.Run cmd, 0, False

@@ -1,6 +1,11 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+const crypto = require('node:crypto');
+const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
 class CDP {
 	constructor(socket) {
 		this.socket = socket;
@@ -80,4 +85,121 @@ class CDP {
 		this.socket.close();
 	}
 }
-module.exports = {CDP};
+class MainDebuggerClient {
+	constructor({bindingName = null, clientId = '', inspector, readOnly = false, target}) {
+		this.inspector = inspector;
+		this.target = target;
+		this.readOnly = readOnly;
+		this.clientId = clientId;
+		this.bindingName = bindingName;
+		this.closed = false;
+		this.listeners = new Map();
+		inspector.on?.('close', () => this.handleDisconnect());
+		if (!readOnly && bindingName) {
+			inspector.on?.('Runtime.bindingCalled', event => {
+				if (event?.name !== this.bindingName || this.closed) {
+					return;
+				}
+				let msg;
+				try {
+					msg = JSON.parse(event.payload);
+				}
+				catch {
+					return;
+				}
+				if ('event' === msg?.type) {
+					this.emitEvent(msg.method, msg.params);
+				}
+				else if ('close' === msg?.type) {
+					this.handleDisconnect();
+				}
+			});
+		}
+	}
+	static async open(target, {cdpFactory = url => CDP.open(url), ownerKey = null, readOnly = false} = {}) {
+		const inspector = await cdpFactory(target.mainInspectorUrl);
+		try {
+			await ensureRemoteBridge(inspector);
+			if (readOnly) {
+				return new MainDebuggerClient({inspector, readOnly: true, target});
+			}
+			const clientId = crypto.randomUUID();
+			const bindingName = '__antigravityDbg_' + clientId.replace(/-/g, '');
+			await inspector.call('Runtime.enable');
+			await inspector.call('Runtime.addBinding', {name: bindingName});
+			const attached = await inspector.evaluate(`globalThis[${JSON.stringify(BRIDGE_GLOBAL)}].attach(${JSON.stringify(clientId)}, ${JSON.stringify(String(target.id))}, ${JSON.stringify(bindingName)}, ${JSON.stringify({ownerKey})})`);
+			if (!attached?.attached) {
+				throw Error(`Could not attach main-process debugger to target ${target.id}`);
+			}
+			return new MainDebuggerClient({bindingName, clientId, inspector, readOnly: false, target});
+		}
+		catch (error) {
+			inspector.close();
+			throw error;
+		}
+	}
+	on(event, handler) {
+		const handlers = this.listeners.get(event) || new Set();
+		handlers.add(handler);
+		this.listeners.set(event, handlers);
+	}
+	emitEvent(event, params) {
+		for (const handler of this.listeners.get(event) || []) {
+			try {
+				handler(params);
+			}
+			catch {}
+		}
+	}
+	handleDisconnect() {
+		if (!this.closed) {
+			this.closed = true;
+			this.emitEvent('close');
+		}
+	}
+	async evalInspector(expression, timeout = 5000) {
+		const response = await this.inspector.call('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}, timeout);
+		if (response?.exceptionDetails) {
+			throw Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text);
+		}
+		return response?.result?.value;
+	}
+	async call(method, params = {}, timeout = 5000) {
+		if (this.closed) {
+			throw Error('CDP disconnected');
+		}
+		const expr = `globalThis[${JSON.stringify(BRIDGE_GLOBAL)}].send(${JSON.stringify(this.clientId)}, ${JSON.stringify(String(this.target.id))}, ${JSON.stringify(method)}, ${JSON.stringify(params)})`;
+		return this.evalInspector(expr, timeout);
+	}
+	async evaluate(expression, timeout = 5000) {
+		if (this.closed) {
+			throw Error('CDP disconnected');
+		}
+		if (this.readOnly) {
+			const expr = `globalThis[${JSON.stringify(BRIDGE_GLOBAL)}].evaluate(${JSON.stringify(String(this.target.id))}, ${JSON.stringify(expression)})`;
+			return this.evalInspector(expr, timeout);
+		}
+		const response = await this.call('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}, timeout);
+		if (response?.exceptionDetails) {
+			throw Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text);
+		}
+		return response?.result?.value;
+	}
+	close() {
+		if (!this.closed) {
+			this.closed = true;
+			this.emitEvent('close');
+			if (this.readOnly) {
+				this.inspector.close();
+			}
+			else {
+				const expr = `globalThis[${JSON.stringify(BRIDGE_GLOBAL)}]?.detach(${JSON.stringify(this.clientId)}, ${JSON.stringify(String(this.target.id))})`;
+				void this.inspector.call('Runtime.evaluate', {expression: expr, awaitPromise: true, returnByValue: true}).catch(() => {}).finally(() => this.inspector.close());
+			}
+		}
+	}
+}
+const openTargetSession = (target, options = {}) => target?.mainInspectorUrl
+	? MainDebuggerClient.open(target, {cdpFactory: url => CDP.open(url), ...options})
+	: CDP.open(target.webSocketDebuggerUrl);
+module.exports = {CDP, MainDebuggerClient, openTargetSession};

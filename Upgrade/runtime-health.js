@@ -1,7 +1,10 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
-const {CDP} = require('./cdp-client');
+const {openTargetSession} = require('./cdp-client');
 const {shellProbe, isShell} = require('./antigravity-shell');
 const {discoverEndpoints} = require('./profile-endpoints');
 const registry = require('./registry');
@@ -29,7 +32,7 @@ const inspectRuntime = async ({expectedTools, toolsRoot} = {}) => {
 			profiles
 				.flatMap(profile => profile.pages.map(page => ({...page, profileId: profile.id})))
 				.map(async page => {
-					const cdp = await CDP.open(page.webSocketDebuggerUrl);
+					const cdp = await openTargetSession(page, {readOnly: true});
 					try {
 						if (isShell(await cdp.evaluate(shellProbe))) {
 							windows.push({profile: page.profileId, url: page.url, ...await cdp.evaluate(expression)});

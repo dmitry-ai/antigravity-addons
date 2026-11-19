@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
@@ -373,4 +376,154 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	});
 	assert.equal(inspected.state, 'ready');
 	assert.equal(inspected.projects, 3);
+});
+test('Main-process WebContents debugger bridge discovers and attaches shells without DevToolsActivePort while readOnly health skips detach', async context => {
+	const {EventEmitter} = require('node:events');
+	const vm = require('node:vm');
+	const {probeProfileEndpoint} = require('./profile-endpoints');
+	const {installMainDebuggerBridge} = require('./main-debugger-bridge');
+	const {inspectRuntime} = require('./runtime-health');
+	const root = fixture(context);
+	const roaming = mockProfileEndpoints(context, root, {Antigravity: null, 'Antigravity-A6': null});
+	const a6Dir = path.join(roaming, 'Antigravity-A6');
+	const inspectorUrl = 'ws://127.0.0.1:25517/00000000-0000-4000-8000-000000000006';
+	fs.writeFileSync(path.join(a6Dir, 'main-runtime.json'), JSON.stringify({id: 'A6', pid: process.pid, inspector: inspectorUrl, userDataDir: a6Dir}));
+	const pageWin = {
+		window: null,
+		document: {readyState: 'complete', querySelector: selector => '#root' === selector ? {} : null},
+		__APP_CONFIG__: {productName: 'Antigravity', csrfToken: 'tok'},
+		nativeStorage: {getItems: () => {}},
+		location: {origin: 'https://127.0.0.1:25522'},
+		setTimeout,
+		clearTimeout
+	};
+	pageWin.window = pageWin;
+	vm.createContext(pageWin);
+	const dbg = new EventEmitter();
+	let attached = false;
+	let attachCount = 0;
+	let detachCount = 0;
+	let executeCalls = 0;
+	let sheetText = '';
+	Object.assign(dbg, {
+		isAttached: () => attached,
+		attach: version => {
+			assert.equal(version, '1.3');
+			attached = true;
+			attachCount++;
+		},
+		detach: () => {
+			if (attached) {
+				attached = false;
+				detachCount++;
+			}
+		},
+		sendCommand: async (method, params = {}) => {
+			if ('Page.getFrameTree' === method) {
+				return {frameTree: {frame: {id: 'main-frame'}}};
+			}
+			if ('Runtime.enable' === method) {
+				queueMicrotask(() => dbg.emit('message', {}, 'Runtime.executionContextCreated', {context: {id: 7, auxData: {isDefault: true, frameId: 'main-frame'}}}));
+				return {};
+			}
+			if ('Runtime.addBinding' === method) {
+				pageWin[params.name] = payload => queueMicrotask(() => dbg.emit('message', {}, 'Runtime.bindingCalled', {name: params.name, payload, executionContextId: 7}));
+				return {};
+			}
+			if ('CSS.createStyleSheet' === method) {
+				return {styleSheetId: 'sheet-1'};
+			}
+			if ('CSS.setStyleSheetText' === method) {
+				sheetText = params.text;
+				return {};
+			}
+			if ('Runtime.evaluate' === method) {
+				return {result: {value: vm.runInContext(params.expression, pageWin)}};
+			}
+			return {};
+		}
+	});
+	const wc = {
+		id: 1,
+		getType: () => 'window',
+		getURL: () => 'https://127.0.0.1:25522/c/test?project=p1',
+		getTitle: () => 'Antigravity',
+		isDestroyed: () => false,
+		executeJavaScript: async expr => {
+			executeCalls++;
+			return vm.runInContext(expr, pageWin);
+		},
+		debugger: dbg,
+		once: () => {}
+	};
+	const bridge = installMainDebuggerBridge({
+		electron: {app: {getPath: () => a6Dir, getVersion: () => '2.33.0'}, BaseWindow: {getAllWindows: () => [{isDestroyed: () => false, webContents: wc}]}, BrowserWindow: {getAllWindows: () => []}, webContents: {getAllWebContents: () => [wc]}},
+		utils: {getHubWindows: () => [{isDestroyed: () => false, webContents: wc}], getHubWebContents: w => w.webContents}
+	});
+	context.after(() => bridge.dispose());
+	const makeInspectorSession = () => {
+		const session = new EventEmitter();
+		session.closed = false;
+		session.close = () => {
+			if (!session.closed) {
+				session.closed = true;
+				session.emit('close');
+			}
+		};
+		session.call = async (method, params = {}) => {
+			if ('Runtime.enable' === method) {
+				return {};
+			}
+			if ('Runtime.addBinding' === method) {
+				globalThis[params.name] = payload => session.emit('Runtime.bindingCalled', {name: params.name, payload});
+				context.after(() => delete globalThis[params.name]);
+				return {};
+			}
+			if ('Runtime.evaluate' === method) {
+				return {result: {value: await eval(params.expression)}};
+			}
+			return {};
+		};
+		session.evaluate = async expr => eval(expr);
+		return session;
+	};
+	context.mock.method(CDP, 'open', async url => {
+		assert.equal(url, inspectorUrl);
+		return makeInspectorSession();
+	});
+	const probed = await probeProfileEndpoint({id: 'A6', userDataDir: a6Dir});
+	assert.equal(probed.state, 'available');
+	assert.equal(probed.transport, 'main-debugger');
+	assert.equal(probed.appVersion, '2.33.0');
+	assert.equal(probed.pages.length, 1);
+	const companion = new Companion({root});
+	companion.modules.set('css', {styleSheet: () => '.sidebar{color:green}', inspectExpression: '({state:"ready"})'});
+	companion.modules.set('folders', {
+		request: msg => ({ok: msg.id}),
+		inspectExpression: 'window.__FOLDERS_OK__?{state:"ready"}:{state:"missing"}',
+		source: () => 'window.__FOLDERS_OK__=true;({attached:true})'
+	});
+	await companion.tick();
+	const conn = companion.connections.get('A6:1');
+	assert.equal(conn?.shell, true);
+	assert.match(sheetText, /sidebar/);
+	assert.equal(attachCount, 1);
+	const rpcResult = await pageWin.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {id: 'folder-rpc-1'});
+	assert.equal(rpcResult.ok, 'folder-rpc-1');
+	const healthToolsRoot = path.join(root, 'tools');
+	fs.mkdirSync(path.join(healthToolsRoot, 'folders'), {recursive: true});
+	fs.writeFileSync(path.join(healthToolsRoot, 'folders/tool.json'), JSON.stringify({id: 'folders', name: 'Folders', cdp: 'health-cdp.js'}));
+	fs.writeFileSync(path.join(healthToolsRoot, 'folders/health-cdp.js'), 'module.exports=()=>({});module.exports.inspectExpression="({state:\\"ready\\"})";');
+	context.mock.method(require('./registry'), 'discover', () => [
+		{id: 'folders', cdp: path.join(healthToolsRoot, 'folders/health-cdp.js')}
+	]);
+	const health = await inspectRuntime({expectedTools: ['folders'], toolsRoot: healthToolsRoot});
+	assert.equal(health.state, 'ready');
+	assert.equal(health.windows[0].profile, 'A6');
+	assert.ok(2 <= executeCalls);
+	assert.equal(attachCount, 1);
+	assert.equal(detachCount, 0);
+	await companion.dispose();
+	assert.equal(attached, false);
+	assert.equal(detachCount, 1);
 });

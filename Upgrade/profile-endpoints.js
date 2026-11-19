@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under primary account A0":
 // https://github.com/dmitry-ai/antigravity-addons/issues/5
@@ -12,8 +15,11 @@
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
-const {readProfiles} = require('./profiles');
+const {CDP} = require('./cdp-client');
 const {isCandidateTarget} = require('./antigravity-shell');
+const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
+const {isPidAlive, readJsonSafe} = require('./process-io');
+const {readProfiles} = require('./profiles');
 const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
 const isLocalEndpointSocket = (value, port) => {
 	let r = false;
@@ -26,11 +32,58 @@ const isLocalEndpointSocket = (value, port) => {
 	}
 	return r;
 };
-const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs} = {}) => {
+const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs, isPidAlive: checkPid = isPidAlive, openInspector = url => CDP.open(url)} = {}) => {
 	const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
+	const mainRuntimeFile = path.join(profile.userDataDir, 'main-runtime.json');
 	let r = {id: profile.id, email: profile.email, userDataDir: profile.userDataDir, state: 'unavailable', pages: []};
 	result: {
+		let mainError = null;
+		const defaultPortFile = path.join(profile.userDataDir, 'DevToolsActivePort');
+		const isDefaultPortFile = !profile.portFile || path.resolve(profile.portFile).toLowerCase() === path.resolve(defaultPortFile).toLowerCase();
+		const mainRecord = isDefaultPortFile && fileSystem.existsSync(mainRuntimeFile) ? readJsonSafe(mainRuntimeFile, fileSystem) : null;
+		const validMainRecord = Boolean(
+			mainRecord
+			&& mainRecord.id === profile.id
+			&& path.resolve(String(mainRecord.userDataDir || '')).toLowerCase() === path.resolve(profile.userDataDir).toLowerCase()
+			&& /^ws:\/\/(127\.0\.0\.1|localhost):\d+\/[\da-f-]+$/i.test(mainRecord.inspector || '')
+			&& checkPid(mainRecord.pid)
+		);
+		if (validMainRecord) {
+			let inspector;
+			try {
+				inspector = await openInspector(mainRecord.inspector);
+				await ensureRemoteBridge(inspector);
+				const discovered = await inspector.evaluate(`globalThis[${JSON.stringify(BRIDGE_GLOBAL)}].discover()`);
+				if (discovered?.pid !== mainRecord.pid || (discovered.accountId && discovered.accountId !== profile.id)) {
+					throw Error('Main inspector belongs to another Antigravity instance');
+				}
+				const rawTargets = Array.isArray(discovered.targets) ? discovered.targets : [];
+				const pages = rawTargets.filter(candidateFilter).map(target => ({
+					...target,
+					mainInspectorUrl: mainRecord.inspector,
+					webContentsId: target.id
+				}));
+				r = {
+					...r,
+					state: 'available',
+					transport: 'main-debugger',
+					endpoint: mainRecord.inspector,
+					appVersion: discovered.appVersion || undefined,
+					pages
+				};
+				break result;
+			}
+			catch (error) {
+				mainError = error.message;
+			}
+			finally {
+				inspector?.close?.();
+			}
+		}
 		if (!fileSystem.existsSync(portFile)) {
+			if (mainError) {
+				r = {...r, state: 'error', error: mainError};
+			}
 			break result;
 		}
 		try {

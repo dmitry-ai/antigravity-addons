@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
@@ -26,6 +29,7 @@ const defaultProcesses = require('node:child_process');
 const fs = require('node:fs');
 const defaultOs = require('node:os');
 const path = require('node:path');
+const {installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
 const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const defaultOAuthBridge = require('./oauth-bridge');
 const {installUpdateGuard} = require('./update-guard');
@@ -45,6 +49,8 @@ const bootstrap = (appRequire, config) => {
 	app.setPath('userData', config.userDataDir);
 	app.setPath('sessionData', config.userDataDir);
 	app.setPath('logs', path.join(config.userDataDir, 'logs'));
+	installMainDebuggerBridge({appRequire});
+	configureProtocolHandler({app, codeRoot, config, isPrimary});
 	if (!isPrimary) {
 		configureSecondaryProfile({app, appRequire, codeRoot, config, processes, shell, windowIdentity});
 	}
@@ -58,7 +64,7 @@ const bootstrap = (appRequire, config) => {
 		tokenStorage: isPrimary ? 'native-credential-manager' : 'server-headless-file-store',
 		updateGuard: true
 	};
-	globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__ = () => {
+	globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__ = (extraArgs = []) => {
 		let windows = listManagedWindows({appRequire, BaseWindow, BrowserWindow, windowIdentity});
 		if (!windows.length) {
 			const utils = resolveModule(appRequire, './utils');
@@ -78,6 +84,15 @@ const bootstrap = (appRequire, config) => {
 		if (windows.length) {
 			app.focus?.({steal: true});
 		}
+		const links = Array.isArray(extraArgs) ? extraArgs.filter(arg => 'string' === typeof arg && arg.length) : [];
+		if (links.length && 'function' === typeof app?.emit) {
+			app.emit('second-instance', {preventDefault() {}}, ['Antigravity.exe', ...links], process.cwd());
+			for (const item of links) {
+				if (/^antigravity:/i.test(item)) {
+					app.emit('open-url', {preventDefault() {}}, item);
+				}
+			}
+		}
 		return {id: config.id, pid: process.pid, windows: windows.length};
 	};
 	if (config.inspector) {
@@ -90,6 +105,25 @@ const bootstrap = (appRequire, config) => {
 		});
 	}
 	return globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+};
+const configureProtocolHandler = ({app, codeRoot, config, isPrimary}) => {
+	if ('function' !== typeof app?.setAsDefaultProtocolClient) {
+		return;
+	}
+	const rawRegister = app.__antigravityRawProtocolRegister ||= app.setAsDefaultProtocolClient.bind(app);
+	const launchVbs = path.join(codeRoot, 'launch.vbs');
+	const wscript = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/wscript.exe');
+	app.setAsDefaultProtocolClient = (scheme, ...args) => {
+		if ('antigravity' !== scheme) {
+			return rawRegister(scheme, ...args);
+		}
+		if (!isPrimary) {
+			return false;
+		}
+		return 'win32' === process.platform && fs.existsSync(launchVbs)
+			? rawRegister('antigravity', wscript, [launchVbs, config.id])
+			: rawRegister(scheme, ...args);
+	};
 };
 const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes, shell, windowIdentity}) => {
 	app.setAppUserModelId('Google.Antigravity.' + config.id);
@@ -108,7 +142,7 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 				child: r,
 				chromePort: config.chrome.debugPort,
 				expectedEmail: config.email,
-				onAuthenticated: () => refreshInitialPage({id: config.id, userDataDir: config.userDataDir}),
+				onAuthenticated: () => refreshInitialPage({appRequire, id: config.id, userDataDir: config.userDataDir}),
 				open: url => shell.openExternal(url),
 				report: message => appendLauncherLog(config.userDataDir, message, {fs})
 			});
@@ -118,8 +152,6 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 		}
 		return r;
 	};
-	const register = app.setAsDefaultProtocolClient.bind(app);
-	app.setAsDefaultProtocolClient = (scheme, ...args) => 'antigravity' === scheme ? false : register(scheme, ...args);
 	const originalOpen = shell.openExternal.bind(shell);
 	shell.openExternal = async (url, options) => {
 		let r;

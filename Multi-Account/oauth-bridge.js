@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
@@ -37,22 +40,38 @@ const callbackCode = (targets, pending) => {
 	}
 	return r;
 };
-const {CDP} = require('../Upgrade/cdp-client');
+const {isCandidateTarget} = require('../Upgrade/antigravity-shell');
+const {CDP, openTargetSession} = require('../Upgrade/cdp-client');
+const {installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
 const {isLocalEndpointSocket, probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
-const refreshInitialPage = async ({id, userDataDir}) => {
+const EMPTY_SHELL_EXPRESSION = "document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())";
+const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
 		throw Error('Only a managed secondary profile can refresh its initial page');
 	}
-	await new Promise(resolve => setTimeout(resolve, 1500));
+	if (0 < delayMs) {
+		await new Promise(resolve => setTimeout(resolve, delayMs));
+	}
+	if (appRequire) {
+		const targets = installMainDebuggerBridge({appRequire}).listWebContents().filter(isCandidateTarget);
+		if (!targets.length) {
+			throw Error(`Invalid ${id} browser endpoint`);
+		}
+		for (const target of targets) {
+			if (await target.wc.executeJavaScript(EMPTY_SHELL_EXPRESSION, false)) {
+				target.wc.reload?.();
+			}
+		}
+		return;
+	}
 	const endpoint = await probeProfileEndpoint({id, userDataDir});
 	if ('available' !== endpoint.state) {
-		throw Error(endpoint.error || 'Invalid A6 browser endpoint');
+		throw Error(endpoint.error || `Invalid ${id} browser endpoint`);
 	}
 	for (const target of endpoint.pages) {
-		const cdp = await CDP.open(target.webSocketDebuggerUrl);
+		const cdp = await openTargetSession(target);
 		try {
-			const empty = await cdp.evaluate("document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())");
-			if (empty) {
+			if (await cdp.evaluate(EMPTY_SHELL_EXPRESSION)) {
 				await cdp.call('Page.reload');
 			}
 		}

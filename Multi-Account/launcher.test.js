@@ -1,3 +1,6 @@
+// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
@@ -613,4 +616,66 @@ test('spawnOptions disables windowsHide and cold bootstrap reveals and focuses a
 	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.dispose();
 	globalThis.__ANTIGRAVITY_UPDATE_GUARD__.dispose();
 	assert.equal(app.listenerCount('web-contents-created'), 0);
+});
+test('Protocol handler keeps A0 launch.vbs command, activateExisting forwards antigravity:// URLs, and in-process refreshInitialPage reloads empty targets', async context => {
+	const root = fixture(context);
+	const protocolCalls = [];
+	const {app, baseWindows, fakeRequire} = createElectronHarness({codeRoot: __dirname, homedir: root, realModules: true, windows: [new MockBaseWindow(1, 'Antigravity', false)]});
+	app.setAsDefaultProtocolClient = (scheme, execPath, args) => {
+		protocolCalls.push({scheme, execPath, args});
+		return true;
+	};
+	bootstrap(fakeRequire, {id: 'A0', homeDir: root, userDataDir: root, codeRoot: __dirname});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.();
+		globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose?.();
+		globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose?.();
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose?.();
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	const regA0 = app.setAsDefaultProtocolClient('antigravity');
+	assert.equal(regA0, true);
+	if ('win32' === process.platform) {
+		assert.match(protocolCalls[0].execPath, /wscript\.exe$/i);
+		assert.equal(protocolCalls[0].args[0], path.join(__dirname, 'launch.vbs'));
+		assert.equal(protocolCalls[0].args[1], 'A0');
+	}
+	const secondInstances = [];
+	const openUrls = [];
+	app.on('second-instance', (_ev, argv) => secondInstances.push(argv));
+	app.on('open-url', (_ev, url) => openUrls.push(url));
+	const act = globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__(['antigravity://oauth?code=xyz']);
+	assert.equal(act.windows, 1);
+	assert.equal(secondInstances[0][1], 'antigravity://oauth?code=xyz');
+	assert.deepEqual(openUrls, ['antigravity://oauth?code=xyz']);
+	const reloaded = [];
+	const blankWc = {
+		id: 11,
+		getType: () => 'window',
+		getURL: () => 'https://127.0.0.1:25522/',
+		getTitle: () => '',
+		isDestroyed: () => false,
+		executeJavaScript: async () => true,
+		reload: () => reloaded.push('blank')
+	};
+	const loadedWc = {
+		id: 12,
+		getType: () => 'window',
+		getURL: () => 'https://127.0.0.1:25522/',
+		getTitle: () => 'App',
+		isDestroyed: () => false,
+		executeJavaScript: async () => false,
+		reload: () => reloaded.push('loaded')
+	};
+	const oauthWindows = [{isDestroyed: () => false, webContents: blankWc}, {isDestroyed: () => false, webContents: loadedWc}];
+	baseWindows.splice(0, baseWindows.length, ...oauthWindows);
+	globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.();
+	const {refreshInitialPage} = require('./oauth-bridge');
+	await refreshInitialPage({appRequire: name => 'electron' === name ? fakeRequire('electron') : './utils' === name ? {getHubWindows: () => oauthWindows, getHubWebContents: w => w.webContents} : null, delayMs: 0, id: 'A6', userDataDir: root});
+	assert.deepEqual(reloaded, ['blank']);
+	const launchVbs = fs.readFileSync(path.join(__dirname, 'launch.vbs'), 'utf8');
+	assert.match(launchVbs, /WScript\.Arguments\.Count/);
+	const installPs1 = fs.readFileSync(path.join(__dirname, 'install.ps1'), 'utf8');
+	assert.match(installPs1, /Software\\Classes\\antigravity/);
 });
