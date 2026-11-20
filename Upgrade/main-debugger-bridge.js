@@ -1,9 +1,13 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
 const fs = require('node:fs');
 const path = require('node:path');
 const BRIDGE_GLOBAL = '__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__';
+const BRIDGE_VERSION = 2;
 const NON_PAGE_TYPES = new Set(['backgroundPage', 'devtools', 'offscreen', 'webview']);
 const resolveAppModule = (appRequire, id) => {
 	let r = null;
@@ -31,13 +35,51 @@ const resolveAppModule = (appRequire, id) => {
 	}
 	return r;
 };
-const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, utils: explicitUtils} = {}) => {
+const resolveInspector = (appRequire, explicitInspector) => {
+	if (explicitInspector) {
+		return explicitInspector;
+	}
+	try {
+		const builtin = process.getBuiltinModule?.('node:inspector');
+		if (builtin) {
+			return builtin;
+		}
+	}
+	catch {}
+	return resolveAppModule(appRequire, 'node:inspector');
+};
+const deactivateInspector = (appRequire, explicitInspector) => {
+	const inspector = resolveInspector(appRequire, explicitInspector);
+	if (!inspector || 'function' !== typeof inspector.close) {
+		return false;
+	}
+	if (!explicitInspector && 'function' === typeof inspector.url && !inspector.url()) {
+		return false;
+	}
+	try {
+		inspector.close();
+		return true;
+	}
+	catch {
+		return false;
+	}
+};
+const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, inspector: explicitInspector, utils: explicitUtils} = {}) => {
 	const existing = globalThis[BRIDGE_GLOBAL];
-	if (1 === existing?.version && !explicitElectron && !explicitUtils) {
+	if (BRIDGE_VERSION === existing?.version && !explicitElectron && !explicitInspector && !explicitUtils) {
 		if (appRequire) {
 			existing.setAppRequire?.(appRequire);
 		}
 		return existing;
+	}
+	if (existing && (BRIDGE_VERSION !== existing.version || (!explicitElectron && !explicitInspector && !explicitUtils))) {
+		if (!appRequire && 'function' === typeof existing.getAppRequire) {
+			appRequire = existing.getAppRequire();
+		}
+		try {
+			existing.dispose?.();
+		}
+		catch {}
 	}
 	let currentAppRequire = appRequire || null;
 	const attachments = new Map();
@@ -235,9 +277,13 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, util
 		}
 		return true;
 	};
-	const dispose = () => {
+	const detachAll = (reason = null) => {
 		for (const [key, attachment] of [...attachments.entries()]) {
+			attachments.delete(key);
 			removeListeners(attachment);
+			if (reason) {
+				dispatch(attachment, {type: 'close', reason});
+			}
 			try {
 				if (attachment.wc.debugger?.isAttached?.()) {
 					attachment.wc.debugger.detach();
@@ -245,18 +291,51 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, util
 			}
 			catch {}
 			attachment.subscribers.clear();
-			attachments.delete(key);
 		}
+	};
+	let lifecycleApp = null;
+	const onWillQuit = event => {
+		if (!event?.defaultPrevented) {
+			detachAll('will-quit');
+		}
+	};
+	const onQuit = () => {
+		detachAll('quit');
+		dispose();
+		deactivateInspector(currentAppRequire, explicitInspector);
+	};
+	const unbindAppLifecycle = () => {
+		if (lifecycleApp) {
+			lifecycleApp.removeListener?.('will-quit', onWillQuit);
+			lifecycleApp.removeListener?.('quit', onQuit);
+			lifecycleApp = null;
+		}
+	};
+	const bindAppLifecycle = () => {
+		const app = getElectron()?.app;
+		if (!app || app === lifecycleApp || 'function' !== typeof app.on) {
+			return;
+		}
+		unbindAppLifecycle();
+		lifecycleApp = app;
+		app.on('will-quit', onWillQuit);
+		app.on('quit', onQuit);
+	};
+	const dispose = () => {
+		unbindAppLifecycle();
+		detachAll();
 		byId.clear();
 		if (globalThis[BRIDGE_GLOBAL] === bridge) {
 			delete globalThis[BRIDGE_GLOBAL];
 		}
 	};
 	const bridge = {
-		version: 1,
+		version: BRIDGE_VERSION,
+		getAppRequire: () => currentAppRequire,
 		setAppRequire: fn => {
 			if ('function' === typeof fn) {
 				currentAppRequire = fn;
+				bindAppLifecycle();
 			}
 		},
 		listWebContents,
@@ -267,15 +346,16 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, util
 		detach,
 		dispose
 	};
+	bindAppLifecycle();
 	globalThis[BRIDGE_GLOBAL] = bridge;
 	return bridge;
 };
 const ensureRemoteBridge = async (inspectorCdp, {bridgePath = __filename} = {}) => {
-	const expr = `(()=>{const k=${JSON.stringify(BRIDGE_GLOBAL)};if(1===globalThis[k]?.version)return true;const loader='function'===typeof require?require:process.getBuiltinModule('node:module').createRequire(${JSON.stringify(bridgePath)});return 1===loader(${JSON.stringify(bridgePath)}).installMainDebuggerBridge().version;})()`;
+	const expr = `(()=>{const k=${JSON.stringify(BRIDGE_GLOBAL)};if(${BRIDGE_VERSION}===globalThis[k]?.version)return true;const loader='function'===typeof require?require:process.getBuiltinModule('node:module').createRequire(${JSON.stringify(bridgePath)});try{const resolved=loader.resolve(${JSON.stringify(bridgePath)});delete loader.cache?.[resolved];}catch{}return ${BRIDGE_VERSION}===loader(${JSON.stringify(bridgePath)}).installMainDebuggerBridge().version;})()`;
 	const ok = await inspectorCdp.evaluate(expr);
 	if (true !== ok) {
 		throw Error('Failed to install main-process debugger bridge');
 	}
 	return true;
 };
-module.exports = {BRIDGE_GLOBAL, ensureRemoteBridge, installMainDebuggerBridge};
+module.exports = {BRIDGE_GLOBAL, BRIDGE_VERSION, deactivateInspector, ensureRemoteBridge, installMainDebuggerBridge};

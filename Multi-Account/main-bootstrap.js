@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -29,7 +32,7 @@ const defaultProcesses = require('node:child_process');
 const fs = require('node:fs');
 const defaultOs = require('node:os');
 const path = require('node:path');
-const {installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
+const {deactivateInspector, installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
 const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const defaultOAuthBridge = require('./oauth-bridge');
 const {installUpdateGuard} = require('./update-guard');
@@ -49,7 +52,7 @@ const bootstrap = (appRequire, config) => {
 	app.setPath('userData', config.userDataDir);
 	app.setPath('sessionData', config.userDataDir);
 	app.setPath('logs', path.join(config.userDataDir, 'logs'));
-	installMainDebuggerBridge({appRequire});
+	installMainDebuggerBridge({appRequire, inspector: config.inspectorModule});
 	configureProtocolHandler({app, codeRoot, config, isPrimary});
 	if (!isPrimary) {
 		configureSecondaryProfile({app, appRequire, codeRoot, config, processes, shell, windowIdentity});
@@ -95,14 +98,37 @@ const bootstrap = (appRequire, config) => {
 		}
 		return {id: config.id, pid: process.pid, windows: windows.length};
 	};
+	globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__?.dispose?.();
 	if (config.inspector) {
 		const runtimeFile = path.join(config.userDataDir, 'main-runtime.json');
 		writeFileAtomic(runtimeFile, JSON.stringify({id: config.id, pid: process.pid, inspector: config.inspector, userDataDir: config.userDataDir}), {fs});
-		app.on('will-quit', () => {
+		const removeRuntimeFile = () => {
 			if (readJsonSafe(runtimeFile, fs)?.pid === process.pid) {
 				fs.rmSync(runtimeFile, {force: true});
 			}
-		});
+		};
+		const onWillQuit = event => {
+			if (!event?.defaultPrevented) {
+				removeRuntimeFile();
+			}
+		};
+		const onQuit = () => {
+			removeRuntimeFile();
+			globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.();
+			deactivateInspector(appRequire, config.inspectorModule);
+			disposeShutdown();
+		};
+		const disposeShutdown = () => {
+			app.removeListener?.('will-quit', onWillQuit);
+			app.removeListener?.('quit', onQuit);
+			if (shutdownHandle === globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__) {
+				delete globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__;
+			}
+		};
+		const shutdownHandle = {dispose: disposeShutdown};
+		app.on('will-quit', onWillQuit);
+		app.on('quit', onQuit);
+		globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__ = shutdownHandle;
 	}
 	return globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
 };
