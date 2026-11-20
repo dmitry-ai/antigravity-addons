@@ -1,4 +1,7 @@
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/60
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Add real-process inspector disconnect and clean-exit regression tests":
 // https://github.com/dmitry-ai/antigravity-addons/issues/58
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -722,4 +725,41 @@ test('main-bootstrap respects prevented will-quit, cleans main-runtime.json, dis
 	assert.equal(globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__, undefined);
 	assert.equal(globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__, undefined);
 	assert.ok(1 <= inspectorClosed);
+});
+test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and rejects cyclic or unknown templates', context => {
+	const {expandPathTemplate} = require('../Upgrade/profiles');
+	const root = fixture(context);
+	const skillsDir = path.join(root, 'Artifacts', '\u227b', 'Deliverables', '\u26ef', 'skills');
+	fs.mkdirSync(path.join(skillsDir, 'upwork-init'), {recursive: true});
+	fs.writeFileSync(path.join(skillsDir, 'upwork-init', 'SKILL.md'), '---\nname: upwork-init\ndescription: test\n---\n');
+	const regFile = path.join(root, 'paths.json');
+	fs.writeFileSync(regFile, JSON.stringify({
+		version: 1,
+		variables: {
+			HARNESS_ROOT: root.replaceAll('\\', '/'),
+			HARNESS_CODE: '${HARNESS_ROOT}/Artifacts/\u227b/Deliverables/\u26ef',
+			HARNESS_SKILLS_DIR: '${HARNESS_CODE}/skills'
+		}
+	}));
+	const cfgFile = path.join(root, 'profiles.json');
+	const base = {
+		schemaVersion: 1,
+		skillsRoot: '${HARNESS_SKILLS_DIR}',
+		profiles: [
+			{id: 'A0', userData: 'Antigravity'},
+			{id: 'A6', userData: 'Antigravity-A6', email: 'admin6@mage2.pro', chromeShortcut: '6'}
+		]
+	};
+	fs.writeFileSync(cfgFile, JSON.stringify(base));
+	const loaded = readProfiles({roaming: root, filename: cfgFile, pathsRegistry: regFile});
+	assert.equal(path.resolve(loaded[1].skillsRoot), path.resolve(skillsDir));
+	prepareProfile(loaded[1]);
+	assert.equal(fs.existsSync(path.join(loaded[1].homeDir, '.gemini/config/skills.json')), true);
+	const liveProfiles = readProfiles({roaming: root});
+	const liveA6 = liveProfiles.find(item => 'A6' === item.id);
+	assert.ok(liveA6);
+	assert.equal(fs.existsSync(liveA6.skillsRoot), true);
+	assert.throws(() => expandPathTemplate('${A}', {A: '${B}', B: '${A}'}), /unresolved variable/);
+	assert.throws(() => expandPathTemplate('${MISSING_VAR}', {}), /unresolved variable/);
+	assert.throws(() => expandPathTemplate('C:/work/${UNCLOSED', {}), /unclosed variable/);
 });
