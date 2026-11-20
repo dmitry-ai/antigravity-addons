@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
+// https://github.com/dmitry-ai/antigravity-addons/issues/56
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -9,6 +12,7 @@ const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
 class CDP {
 	constructor(socket) {
 		this.socket = socket;
+		this.closed = false;
 		this.sequence = 0;
 		this.pending = new Map();
 		this.listeners = new Map();
@@ -82,7 +86,11 @@ class CDP {
 		return response.result?.value;
 	}
 	close() {
-		this.socket.close();
+		this.closed = true;
+		try {
+			this.socket.close();
+		}
+		catch {}
 	}
 }
 class MainDebuggerClient {
@@ -154,6 +162,10 @@ class MainDebuggerClient {
 	handleDisconnect() {
 		if (!this.closed) {
 			this.closed = true;
+			try {
+				this.inspector?.close?.();
+			}
+			catch {}
 			this.emitEvent('close');
 		}
 	}
@@ -189,12 +201,20 @@ class MainDebuggerClient {
 		if (!this.closed) {
 			this.closed = true;
 			this.emitEvent('close');
-			if (this.readOnly) {
-				this.inspector.close();
+			if (this.readOnly || this.inspector?.closed) {
+				try {
+					this.inspector?.close?.();
+				}
+				catch {}
 			}
 			else {
 				const expr = `globalThis[${JSON.stringify(BRIDGE_GLOBAL)}]?.detach(${JSON.stringify(this.clientId)}, ${JSON.stringify(String(this.target.id))})`;
-				void this.inspector.call('Runtime.evaluate', {expression: expr, awaitPromise: true, returnByValue: true}).catch(() => {}).finally(() => this.inspector.close());
+				void this.inspector.call('Runtime.evaluate', {expression: expr, awaitPromise: true, returnByValue: true}, 500).catch(() => {}).finally(() => {
+					try {
+						this.inspector?.close?.();
+					}
+					catch {}
+				});
 			}
 		}
 	}
