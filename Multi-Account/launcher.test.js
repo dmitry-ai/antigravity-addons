@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add real-process inspector disconnect and clean-exit regression tests":
+// https://github.com/dmitry-ai/antigravity-addons/issues/58
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -678,4 +681,45 @@ test('Protocol handler keeps A0 launch.vbs command, activateExisting forwards an
 	assert.match(launchVbs, /WScript\.Arguments\.Count/);
 	const installPs1 = fs.readFileSync(path.join(__dirname, 'install.ps1'), 'utf8');
 	assert.match(installPs1, /Software\\Classes\\antigravity/);
+});
+test('main-bootstrap respects prevented will-quit, cleans main-runtime.json, disposes bridge, and closes active inspector on quit', context => {
+	const root = fixture(context);
+	const {app, fakeRequire} = createElectronHarness({codeRoot: __dirname, homedir: root, realModules: true});
+	let inspectorClosed = 0;
+	const mockInspector = {
+		url: () => 'ws://127.0.0.1:51337/00000000-0000-4000-8000-000000000001',
+		close: () => {
+			inspectorClosed++;
+		}
+	};
+	bootstrap(fakeRequire, {
+		id: 'A0',
+		homeDir: root,
+		userDataDir: root,
+		codeRoot: __dirname,
+		inspector: mockInspector.url(),
+		inspectorModule: mockInspector
+	});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__?.dispose?.();
+		globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.();
+		globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose?.();
+		globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose?.();
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose?.();
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	const runtimeFile = path.join(root, 'main-runtime.json');
+	assert.equal(fs.existsSync(runtimeFile), true);
+	app.emit('will-quit', {defaultPrevented: true});
+	assert.equal(fs.existsSync(runtimeFile), true);
+	assert.equal(inspectorClosed, 0);
+	assert.ok(globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__);
+	app.emit('will-quit', {defaultPrevented: false});
+	assert.equal(fs.existsSync(runtimeFile), false);
+	assert.equal(inspectorClosed, 0);
+	app.emit('quit', {}, 0);
+	assert.equal(globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__, undefined);
+	assert.equal(globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__, undefined);
+	assert.ok(1 <= inspectorClosed);
 });

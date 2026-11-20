@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Add real-process inspector disconnect and clean-exit regression tests":
+// https://github.com/dmitry-ai/antigravity-addons/issues/58
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
 // https://github.com/dmitry-ai/antigravity-addons/issues/53
@@ -560,4 +563,123 @@ test('Idle closed profiles report unavailable while active profiles without a re
 	assert.match(companion.errors.A6, /Inspector connection refused/);
 	await companion.dispose();
 	await assert.rejects(inspectRuntime({expectedTools: ['folders']}), /A6: Inspector connection refused/);
+});
+test('Real --inspect-brk processes exit cleanly on target destruction and on app quit even with leaked inspector sockets, and v1 bridges hot-upgrade to v2', async context => {
+	const cp = require('node:child_process');
+	const {MainDebuggerClient} = require('./cdp-client');
+	const {BRIDGE_GLOBAL, BRIDGE_VERSION, ensureRemoteBridge} = require('./main-debugger-bridge');
+	const root = fixture(context);
+	const bridgePath = path.join(__dirname, 'main-debugger-bridge.js');
+	const hostScript = path.join(root, 'inspect-brk-host.js');
+	fs.writeFileSync(hostScript, [
+		"const {EventEmitter} = require('node:events');",
+		`const {installMainDebuggerBridge} = require(${JSON.stringify(bridgePath)});`,
+		'const app = new EventEmitter();',
+		'app.getPath = () => process.cwd();',
+		"app.getVersion = () => '2.33.0';",
+		'const dbg = new EventEmitter();',
+		'let attached = false;',
+		'Object.assign(dbg, {isAttached: () => attached, attach: () => { attached = true; }, detach: () => { attached = false; }, sendCommand: async () => ({})});',
+		'const wc = new EventEmitter();',
+		"Object.assign(wc, {id: 1, getType: () => 'window', getURL: () => 'https://127.0.0.1:25522/', getTitle: () => 'Antigravity', isDestroyed: () => false, debugger: dbg});",
+		'installMainDebuggerBridge({electron: {app, BaseWindow: {getAllWindows: () => [{isDestroyed: () => false, webContents: wc}]}, BrowserWindow: {getAllWindows: () => []}, webContents: {getAllWebContents: () => [wc]}}, utils: {getHubWindows: () => [{isDestroyed: () => false, webContents: wc}], getHubWebContents: w => w.webContents}});',
+		'globalThis.__TEST_APP__ = app;',
+		'globalThis.__TEST_WC__ = wc;',
+		'const keepAlive = setInterval(() => {}, 60000);',
+		'globalThis.__END_PROCESS__ = () => clearInterval(keepAlive);',
+		"console.log('HOST_READY');"
+	].join('\n'));
+	const spawnHost = async () => {
+		const child = cp.spawn(process.execPath, ['--inspect-brk=127.0.0.1:0', hostScript], {stdio: ['ignore', 'pipe', 'pipe']});
+		let stdout = '';
+		let stderr = '';
+		let inspectorUrl = null;
+		let exitInfo = null;
+		child.stdout.setEncoding('utf8');
+		child.stderr.setEncoding('utf8');
+		child.stdout.on('data', chunk => {
+			stdout += chunk;
+		});
+		child.stderr.on('data', chunk => {
+			stderr += chunk;
+			inspectorUrl ||= stderr.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
+		});
+		const exited = new Promise(resolve => child.once('exit', (code, signal) => {
+			exitInfo = {code, signal};
+			resolve(exitInfo);
+		}));
+		context.after(() => {
+			if (!exitInfo) {
+				child.kill();
+			}
+		});
+		const deadline = Date.now() + 5000;
+		while (!inspectorUrl && !exitInfo && Date.now() < deadline) {
+			await new Promise(resolve => setTimeout(resolve, 20));
+		}
+		assert.ok(inspectorUrl, `Inspector URL was not published: ${stderr}`);
+		const boot = await CDP.open(inspectorUrl);
+		try {
+			const paused = new Promise(resolve => {
+				const timer = setTimeout(() => resolve(false), 2000);
+				boot.on('Debugger.paused', () => {
+					clearTimeout(timer);
+					resolve(true);
+				});
+			});
+			await boot.call('Debugger.enable', {}, 2000);
+			await boot.call('Runtime.runIfWaitingForDebugger', {}, 2000);
+			if (await paused) {
+				await boot.call('Debugger.resume', {}, 2000);
+			}
+			await boot.call('Debugger.disable', {}, 2000);
+		}
+		finally {
+			boot.close();
+		}
+		const readyDeadline = Date.now() + 5000;
+		while (!stdout.includes('HOST_READY') && !exitInfo && Date.now() < readyDeadline) {
+			await new Promise(resolve => setTimeout(resolve, 20));
+		}
+		assert.match(stdout, /HOST_READY/);
+		return {child, exited, getExitInfo: () => exitInfo, getStderr: () => stderr, inspectorUrl};
+	};
+	// 1. Target destruction closes the underlying real WebSocket inside MainDebuggerClient so the --inspect-brk child exits cleanly
+	const host1 = await spawnHost();
+	const client = await MainDebuggerClient.open({id: '1', mainInspectorUrl: host1.inspectorUrl}, {ownerKey: 'companion:A6:1'});
+	context.after(() => client.close());
+	let clientClosed = false;
+	const closedNotice = new Promise(resolve => client.on('close', () => {
+		clientClosed = true;
+		resolve();
+	}));
+	await client.evalInspector('void setTimeout(() => { globalThis.__TEST_WC__.emit("destroyed"); setTimeout(() => globalThis.__END_PROCESS__(), 50); }, 20);');
+	await Promise.race([closedNotice, new Promise((_, reject) => setTimeout(() => reject(Error('MainDebuggerClient did not emit close')), 3000))]);
+	assert.equal(clientClosed, true);
+	assert.equal(client.closed, true);
+	assert.equal(client.inspector.closed, true);
+	const exit1 = await Promise.race([host1.exited, new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
+	assert.deepEqual(exit1, {code: 0, signal: null}, `Child hung on exit: ${host1.getStderr()}`);
+	// 2. Even with a deliberately leaked raw inspector WebSocket, app.emit('quit') invokes node:inspector.close() and exits cleanly
+	const host2 = await spawnHost();
+	const rogue = await CDP.open(host2.inspectorUrl);
+	context.after(() => rogue.close());
+	let rogueClosed = false;
+	const rogueNotice = new Promise(resolve => rogue.on('close', () => {
+		rogueClosed = true;
+		resolve();
+	}));
+	await rogue.evaluate('void setTimeout(() => { globalThis.__TEST_APP__.emit("will-quit", {defaultPrevented: false}); globalThis.__TEST_APP__.emit("quit", {}, 0); globalThis.__END_PROCESS__(); }, 20);');
+	await Promise.race([rogueNotice, new Promise((_, reject) => setTimeout(() => reject(Error('Rogue inspector socket was not forcibly disconnected on quit')), 3000))]);
+	assert.equal(rogueClosed, true);
+	const exit2 = await Promise.race([host2.exited, new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
+	assert.deepEqual(exit2, {code: 0, signal: null}, `Child hung with rogue client: ${host2.getStderr()}`);
+	// 3. ensureRemoteBridge hot-upgrades a v1 bridge to v2 and disposes the superseded v1 instance
+	let disposedV1 = 0;
+	globalThis[BRIDGE_GLOBAL] = {version: 1, dispose: () => { disposedV1++; }};
+	context.after(() => globalThis[BRIDGE_GLOBAL]?.dispose?.());
+	const fakeInspector = {evaluate: async expr => eval(expr)};
+	assert.equal(await ensureRemoteBridge(fakeInspector, {bridgePath}), true);
+	assert.equal(disposedV1, 1);
+	assert.equal(globalThis[BRIDGE_GLOBAL]?.version, BRIDGE_VERSION);
 });
