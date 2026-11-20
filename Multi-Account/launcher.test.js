@@ -1,4 +1,7 @@
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
+// https://github.com/dmitry-ai/antigravity-addons/issues/61
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/60
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -762,4 +765,41 @@ test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and re
 	assert.throws(() => expandPathTemplate('${A}', {A: '${B}', B: '${A}'}), /unresolved variable/);
 	assert.throws(() => expandPathTemplate('${MISSING_VAR}', {}), /unresolved variable/);
 	assert.throws(() => expandPathTemplate('C:/work/${UNCLOSED', {}), /unclosed variable/);
+});
+test('Pre-spawn profile preparation failures write ERROR to launcher.log and exit cleanly in a real launcher process', async context => {
+	const {launch} = require('./launcher');
+	const root = fixture(context);
+	const missingSkills = path.join(root, 'missing-skills');
+	const cfgFile = path.join(root, 'profiles.json');
+	fs.writeFileSync(cfgFile, JSON.stringify({
+		schemaVersion: 1,
+		skillsRoot: missingSkills,
+		profiles: [
+			{id: 'A0', userData: 'Antigravity'},
+			{id: 'A6', userData: 'Antigravity-A6', email: 'admin6@mage2.pro', chromeShortcut: '6'}
+		]
+	}));
+	await assert.rejects(launch('A6', [], {
+		roaming: root,
+		profilesFile: cfgFile,
+		readChrome: () => ({executable: 'chrome.exe', arguments: [], directory: 'Profile 8', userData: root, debugPort: 9222})
+	}), /shared skills source is unavailable/);
+	const logPath = path.join(root, 'Antigravity-A6', 'launcher.log');
+	assert.equal(fs.existsSync(logPath), true);
+	assert.match(fs.readFileSync(logPath, 'utf8'), /ERROR: The shared skills source is unavailable/);
+	const realDir = path.join(root, 'real-roaming');
+	const child = cp.spawnSync(process.execPath, [path.join(__dirname, 'launcher.js'), 'A0'], {
+		encoding: 'utf8',
+		timeout: 10000,
+		env: {
+			...process.env,
+			LOCALAPPDATA: path.join(root, 'missing-localappdata'),
+			ANTIGRAVITY_ROAMING_DIR: realDir,
+			ANTIGRAVITY_PROFILES_FILE: cfgFile
+		}
+	});
+	assert.equal(child.status, 1);
+	const a0LogPath = path.join(realDir, 'Antigravity', 'launcher.log');
+	assert.equal(fs.existsSync(a0LogPath), true);
+	assert.match(fs.readFileSync(a0LogPath, 'utf8'), /ERROR: /);
 });

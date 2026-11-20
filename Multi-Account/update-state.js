@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
+// https://github.com/dmitry-ai/antigravity-addons/issues/61
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
 // https://github.com/dmitry-ai/antigravity-addons/issues/53
@@ -48,6 +51,7 @@ const appendGuardLog = (userDataDir, message, fileSystem = fs) => appendLauncher
 const appendLauncherLog = (userDataDir, message, {fs: fileSystem = fs, prefix = ''} = {}) => {
 	if (userDataDir) {
 		try {
+			fileSystem.mkdirSync(userDataDir, {recursive: true});
 			fileSystem.appendFileSync(path.join(userDataDir, 'launcher.log'), new Date().toISOString() + ' ' + prefix + message + '\n');
 		}
 		catch {}

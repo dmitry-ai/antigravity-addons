@@ -1,3 +1,6 @@
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
+// https://github.com/dmitry-ai/antigravity-addons/issues/61
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -114,28 +117,43 @@ const spawnOptions = (executable, profile, original = process.env) => ({
 	detached: true,
 	stdio: ['ignore', 'ignore', 'pipe']
 });
-const launch = async (id, extraArgs = []) => {
+const launch = async (id, extraArgs = [], options = {}) => {
 	result: {
-		const profile = readProfiles().find(item => item.id === id);
+		const profilesOptions = {};
+		if (options.roaming || process.env.ANTIGRAVITY_ROAMING_DIR) {
+			profilesOptions.roaming = options.roaming || process.env.ANTIGRAVITY_ROAMING_DIR;
+		}
+		if (options.profilesFile || process.env.ANTIGRAVITY_PROFILES_FILE) {
+			profilesOptions.filename = options.profilesFile || process.env.ANTIGRAVITY_PROFILES_FILE;
+		}
+		const profile = readProfiles(profilesOptions).find(item => item.id === id);
 		if (!profile) {
 			throw Error('Unknown profile: ' + id);
 		}
 		const cleanArgs = Array.isArray(extraArgs) ? extraArgs.filter(arg => 'string' === typeof arg && arg.length) : [];
-		const chrome = 'A0' === profile.id ? null : readChromeShortcut(profile);
-		prepareProfile(profile);
 		const log = message => appendLauncherLog(profile.userDataDir, message, {fs});
-		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/13
-		await require('../Upgrade/runtime-control').ensureRunning();
-		const activated = await activateExisting(profile, {args: cleanArgs});
-		if (activated) {
-			console.log(JSON.stringify(activated));
-			break result;
+		let chrome = null;
+		let executable = '';
+		try {
+			chrome = 'A0' === profile.id ? null : (options.readChrome || readChromeShortcut)(profile);
+			prepareProfile(profile);
+			// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+			// "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/13
+			await (options.ensureRuntime || (() => require('../Upgrade/runtime-control').ensureRunning()))();
+			const activated = await activateExisting(profile, {args: cleanArgs});
+			if (activated) {
+				console.log(JSON.stringify(activated));
+				break result;
+			}
+			executable = options.executable || path.join(process.env.LOCALAPPDATA, 'Programs/antigravity/Antigravity.exe');
+			if (!fs.existsSync(executable)) {
+				throw Error('Antigravity is not installed at ' + executable);
+			}
 		}
-		const executable = path.join(process.env.LOCALAPPDATA, 'Programs/antigravity/Antigravity.exe');
-		if (!fs.existsSync(executable)) {
-			throw Error('Antigravity is not installed at ' + executable);
+		catch (error) {
+			log('ERROR: ' + error.message);
+			throw error;
 		}
 		log('Launch requested for ' + id);
 		// 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
