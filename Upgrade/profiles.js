@@ -1,4 +1,7 @@
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/63
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/60
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -117,6 +120,7 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 			for (let cur = anchor; ; cur = path.dirname(cur)) {
 				const harnessRoot = path.join(cur, 'harness');
 				candidates.push(
+					path.join(harnessRoot, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'paths.json'),
 					path.join(harnessRoot, 'Artifacts', '\u227b', 'Deliverables', '\u26ef', 'paths.json'),
 					path.join(harnessRoot, 'code', 'paths.json')
 				);
@@ -132,11 +136,16 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 	}
 	const registry = readJsonFile(regFile);
 	const r = {...(registry?.variables ?? {})};
-	const projectRoot = path.resolve(baseDir, '..', '..');
-	for (const rel of ['_/\ua616/paths.json', '\ua616/paths.json', '.agents/paths.json']) {
-		const overlay = path.join(projectRoot, rel);
-		if (fs.existsSync(overlay)) {
-			Object.assign(r, readJsonFile(overlay)?.variables ?? {});
+	const resolvedReg = path.resolve(regFile);
+	overlayLoop: for (let cur = path.resolve(baseDir, '..'), depth = 0; 6 > depth; cur = path.dirname(cur), depth++) {
+		for (const rel of ['_/\ua616/paths.json', '\ua616/paths.json', '.agents/paths.json']) {
+			const overlay = path.join(cur, rel);
+			if (fs.existsSync(overlay) && path.resolve(overlay) !== resolvedReg) {
+				Object.assign(r, readJsonFile(overlay)?.variables ?? {});
+				break overlayLoop;
+			}
+		}
+		if (path.dirname(cur) === cur) {
 			break;
 		}
 	}

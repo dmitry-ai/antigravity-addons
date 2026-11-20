@@ -1,4 +1,7 @@
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/63
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
 // https://github.com/dmitry-ai/antigravity-addons/issues/61
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -732,7 +735,7 @@ test('main-bootstrap respects prevented will-quit, cleans main-runtime.json, dis
 test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and rejects cyclic or unknown templates', context => {
 	const {expandPathTemplate} = require('../Upgrade/profiles');
 	const root = fixture(context);
-	const skillsDir = path.join(root, 'Artifacts', '\u227b', 'Deliverables', '\u26ef', 'skills');
+	const skillsDir = path.join(root, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'skills');
 	fs.mkdirSync(path.join(skillsDir, 'upwork-init'), {recursive: true});
 	fs.writeFileSync(path.join(skillsDir, 'upwork-init', 'SKILL.md'), '---\nname: upwork-init\ndescription: test\n---\n');
 	const regFile = path.join(root, 'paths.json');
@@ -740,7 +743,7 @@ test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and re
 		version: 1,
 		variables: {
 			HARNESS_ROOT: root.replaceAll('\\', '/'),
-			HARNESS_CODE: '${HARNESS_ROOT}/Artifacts/\u227b/Deliverables/\u26ef',
+			HARNESS_CODE: '${HARNESS_ROOT}/\u2c0f/\u227b/\u2655/\u26ef',
 			HARNESS_SKILLS_DIR: '${HARNESS_CODE}/skills'
 		}
 	}));
@@ -758,6 +761,21 @@ test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and re
 	assert.equal(path.resolve(loaded[1].skillsRoot), path.resolve(skillsDir));
 	prepareProfile(loaded[1]);
 	assert.equal(fs.existsSync(path.join(loaded[1].homeDir, '.gemini/config/skills.json')), true);
+	const tree = path.join(root, 'sim-ai');
+	const simHarnessReg = path.join(tree, 'harness', '\u2c0f', '\u227b', '\u2655', '\u26ef', 'paths.json');
+	const simAddonsRoot = path.join(tree, 'products', 'Google', 'Antigravity', 'Addons');
+	const simOverlay = path.join(simAddonsRoot, '\ua616', 'paths.json');
+	const simProfilesFile = path.join(simAddonsRoot, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'Multi-Account', 'profiles.json');
+	fs.mkdirSync(path.dirname(simHarnessReg), {recursive: true});
+	fs.mkdirSync(path.dirname(simOverlay), {recursive: true});
+	fs.mkdirSync(path.dirname(simProfilesFile), {recursive: true});
+	const customSkills = path.join(root, 'overlay-skills');
+	fs.mkdirSync(customSkills, {recursive: true});
+	fs.writeFileSync(simHarnessReg, JSON.stringify({version: 1, variables: {HARNESS_SKILLS_DIR: skillsDir.replaceAll('\\', '/')}}));
+	fs.writeFileSync(simOverlay, JSON.stringify({version: 1, variables: {OVERLAY_SKILLS: customSkills.replaceAll('\\', '/')}}));
+	fs.writeFileSync(simProfilesFile, JSON.stringify({...base, skillsRoot: '${OVERLAY_SKILLS}'}));
+	const simLoaded = readProfiles({roaming: root, filename: simProfilesFile, env: {}});
+	assert.equal(path.resolve(simLoaded[1].skillsRoot), path.resolve(customSkills));
 	const liveProfiles = readProfiles({roaming: root});
 	const liveA6 = liveProfiles.find(item => 'A6' === item.id);
 	assert.ok(liveA6);
