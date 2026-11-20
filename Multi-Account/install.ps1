@@ -1,3 +1,6 @@
+# 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
+# https://github.com/dmitry-ai/antigravity-addons/issues/64
 # 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 # "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 # https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -11,6 +14,7 @@
 # "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 # https://github.com/dmitry-ai/antigravity-addons/issues/26
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '..\Upgrade\shortcut.ps1')
 & (Join-Path $PSScriptRoot 'build-icon.ps1') | Out-Null
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 if (-not $desktopPath) {
@@ -24,18 +28,17 @@ $wscriptPath = Join-Path $env:SystemRoot 'System32/wscript.exe'
 $launchScript = Join-Path $PSScriptRoot 'launch.vbs'
 $exeIcon = (Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe') + ',0'
 $dash = [char]0x2014
-$shell = New-Object -ComObject WScript.Shell
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 foreach ($profile in $config.profiles) {
 	if ('A0' -ne $profile.id) {
 		$shortcutPath = Join-Path $desktopPath ($profile.id + '.lnk')
-		$shortcut = $shell.CreateShortcut($shortcutPath)
-		$shortcut.TargetPath = $wscriptPath
-		$shortcut.Arguments = '"' + $launchScript + '" ' + $profile.id
-		$shortcut.WorkingDirectory = $PSScriptRoot
-		$shortcut.Description = "Antigravity $($profile.id) $dash $($profile.email); Chrome $($profile.chromeShortcut); isolated account"
-		$shortcut.IconLocation = (Join-Path $PSScriptRoot ($profile.id + '.ico')) + ',0'
-		$shortcut.Save()
+		Save-UnicodeShortcut `
+			-ShortcutPath $shortcutPath `
+			-TargetPath $wscriptPath `
+			-Arguments ('"' + $launchScript + '" ' + $profile.id) `
+			-WorkingDirectory $PSScriptRoot `
+			-Description "Antigravity $($profile.id) $dash $($profile.email); Chrome $($profile.chromeShortcut); isolated account" `
+			-IconLocation ((Join-Path $PSScriptRoot ($profile.id + '.ico')) + ',0')
 		Write-Output $shortcutPath
 	}
 	else {
@@ -47,13 +50,13 @@ foreach ($profile in $config.profiles) {
 			}
 		}
 		foreach ($target in $targets) {
-			$shortcut = $shell.CreateShortcut($target)
-			$shortcut.TargetPath = $wscriptPath
-			$shortcut.Arguments = '"' + $launchScript + '" A0'
-			$shortcut.WorkingDirectory = $PSScriptRoot
-			$shortcut.Description = "Antigravity A0 $dash primary account"
-			$shortcut.IconLocation = $exeIcon
-			$shortcut.Save()
+			Save-UnicodeShortcut `
+				-ShortcutPath $target `
+				-TargetPath $wscriptPath `
+				-Arguments ('"' + $launchScript + '" A0') `
+				-WorkingDirectory $PSScriptRoot `
+				-Description "Antigravity A0 $dash primary account" `
+				-IconLocation $exeIcon
 			Write-Output $target
 		}
 	}

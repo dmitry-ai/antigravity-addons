@@ -1,4 +1,7 @@
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/64
+// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/63
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -820,4 +823,31 @@ test('Pre-spawn profile preparation failures write ERROR to launcher.log and exi
 	const a0LogPath = path.join(realDir, 'Antigravity', 'launcher.log');
 	assert.equal(fs.existsSync(a0LogPath), true);
 	assert.match(fs.readFileSync(a0LogPath, 'utf8'), /ERROR: /);
+});
+test('Save-UnicodeShortcut writes UTF-16 IShellLinkW .lnk files preserving Ⰿ/≻/♕/⛯ paths without ? corruption', {skip: 'win32' !== process.platform}, context => {
+	const root = fixture(context);
+	const uniDir = path.join(root, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'Multi-Account');
+	fs.mkdirSync(uniDir, {recursive: true});
+	const vbsPath = path.join(uniDir, 'launch.vbs');
+	fs.writeFileSync(vbsPath, '');
+	const lnkPath = path.join(root, 'A6.lnk');
+	const helperPath = path.resolve(__dirname, '../Upgrade/shortcut.ps1');
+	const psExe = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+	const script = [
+		'[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
+		'. $env:TEST_SHORTCUT_HELPER',
+		'Save-UnicodeShortcut -ShortcutPath $env:TEST_LNK -TargetPath "C:\\Windows\\System32\\wscript.exe" -Arguments (\'"\' + $env:TEST_VBS + \'" A6\') -WorkingDirectory $env:TEST_UNI_DIR -Description "Antigravity A6" -WindowStyle 7',
+		'Read-UnicodeShortcut -ShortcutPath $env:TEST_LNK | ConvertTo-Json -Compress'
+	].join('; ');
+	const res = cp.spawnSync(psExe, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+		encoding: 'utf8',
+		timeout: 15000,
+		env: {...process.env, TEST_SHORTCUT_HELPER: helperPath, TEST_LNK: lnkPath, TEST_VBS: vbsPath, TEST_UNI_DIR: uniDir}
+	});
+	assert.equal(res.status, 0, res.stderr);
+	const parsed = JSON.parse(res.stdout.trim());
+	assert.equal(parsed.Arguments, `"${vbsPath}" A6`);
+	assert.equal(parsed.WorkingDirectory, uniDir);
+	assert.equal(parsed.WindowStyle, 7);
+	assert.equal(parsed.Arguments.includes('?'), false);
 });
