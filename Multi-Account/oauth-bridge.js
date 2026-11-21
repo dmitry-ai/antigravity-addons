@@ -1,3 +1,6 @@
+// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
+// https://github.com/dmitry-ai/antigravity-addons/issues/65
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
@@ -44,6 +47,7 @@ const {isCandidateTarget} = require('../Upgrade/antigravity-shell');
 const {CDP, openTargetSession} = require('../Upgrade/cdp-client');
 const {installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
 const {isLocalEndpointSocket, probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
+const {resolveModule} = require('./update-state');
 const EMPTY_SHELL_EXPRESSION = "document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())";
 const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
@@ -53,13 +57,20 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 		await new Promise(resolve => setTimeout(resolve, delayMs));
 	}
 	if (appRequire) {
+		const utils = resolveModule(appRequire, './utils');
 		const targets = installMainDebuggerBridge({appRequire}).listWebContents().filter(isCandidateTarget);
 		if (!targets.length) {
 			throw Error(`Invalid ${id} browser endpoint`);
 		}
 		for (const target of targets) {
 			if (await target.wc.executeJavaScript(EMPTY_SHELL_EXPRESSION, false)) {
-				target.wc.reload?.();
+				const win = utils?.resolveHubWindowFromWebContents?.(target.wc);
+				if (win && 'function' === typeof utils?.loadHubWindowUrl) {
+					await utils.loadHubWindowUrl(win, target.url);
+				}
+				else {
+					target.wc.reload?.();
+				}
 			}
 		}
 		return;
@@ -91,7 +102,23 @@ class OAuthBridge {
 		this.expectedEmail = expectedEmail;
 		this.seen = new Set();
 		this.buffer = '';
-		child.stdin.end = () => child.stdin;
+		child.stdin.end = (chunk, encoding, callback) => {
+			if (undefined !== chunk && null !== chunk && 'function' !== typeof chunk) {
+				const args = [chunk];
+				if (undefined !== encoding) {
+					args.push(encoding);
+				}
+				if (undefined !== callback) {
+					args.push(callback);
+				}
+				child.stdin.write(...args);
+			}
+			else {
+				const done = 'function' === typeof chunk ? chunk : 'function' === typeof encoding ? encoding : 'function' === typeof callback ? callback : null;
+				done?.();
+			}
+			return child.stdin;
+		};
 		child.stdin.on?.('error', () => {
 			this.pending = null;
 			clearTimeout(this.timer);

@@ -1,3 +1,6 @@
+// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
+// https://github.com/dmitry-ai/antigravity-addons/issues/65
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/64
@@ -850,4 +853,116 @@ test('Save-UnicodeShortcut writes UTF-16 IShellLinkW .lnk files preserving â°/â
 	assert.equal(parsed.WorkingDirectory, uniDir);
 	assert.equal(parsed.WindowStyle, 7);
 	assert.equal(parsed.Arguments.includes('?'), false);
+});
+test('OAuthBridge forwards host bridge stdin payload written via child.stdin.end in a real child process while keeping stdin open, and refreshInitialPage uses loadHubWindowUrl when available', async context => {
+	const {OAuthBridge, refreshInitialPage} = require('./oauth-bridge');
+	const root = fixture(context);
+	const mockChild = new EventEmitter();
+	const writeCalls = [];
+	mockChild.stdin = {
+		end: () => {
+			throw Error('stdin must stay open');
+		},
+		write: (...args) => {
+			writeCalls.push(args);
+			const cb = args.find(arg => 'function' === typeof arg);
+			cb?.();
+			return true;
+		}
+	};
+	mockChild.stderr = new EventEmitter();
+	mockChild.stdout = new EventEmitter();
+	const mockBridge = new OAuthBridge({child: mockChild, chromePort: 9222, open: async () => {}});
+	context.after(() => mockBridge.dispose());
+	let emptyEndCb = 0;
+	let payloadEndCb = 0;
+	assert.equal(mockChild.stdin.end(), mockChild.stdin);
+	assert.equal(mockChild.stdin.end(() => {
+		emptyEndCb++;
+	}), mockChild.stdin);
+	assert.equal(mockChild.stdin.end('host-token-1\n\n'), mockChild.stdin);
+	assert.equal(mockChild.stdin.end('host-token-2\n\n', 'utf8', () => {
+		payloadEndCb++;
+	}), mockChild.stdin);
+	assert.equal(emptyEndCb, 1);
+	assert.equal(payloadEndCb, 1);
+	assert.deepEqual(writeCalls.map(call => call.slice(0, 2).filter(item => 'function' !== typeof item)), [
+		['host-token-1\n\n'],
+		['host-token-2\n\n', 'utf8']
+	]);
+	const childScript = [
+		"const readline = require('node:readline');",
+		'const rl = readline.createInterface({input: process.stdin, crlfDelay: Infinity});',
+		'const lines = [];',
+		'let sawEof = false;',
+		"rl.on('close', () => { sawEof = true; });",
+		"rl.on('line', line => {",
+		'  lines.push(line);',
+		'  if (2 === lines.length) {',
+		"    process.stdout.write('TOKEN:' + lines[0] + '\\n');",
+		"    process.stdout.write('https://accounts.google.com/o/oauth2/auth?state=real-stdin-state&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback\\n');",
+		'  } else if (3 === lines.length) {',
+		"    process.stdout.write('CODE:' + line + ':EOF:' + sawEof + '\\n');",
+		'    rl.close();',
+		'    process.exit(0);',
+		'  }',
+		'});'
+	].join('\n');
+	const realChild = cp.spawn(process.execPath, ['-e', childScript], {stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true});
+	context.after(() => {
+		if (null === realChild.exitCode && !realChild.killed) {
+			realChild.kill();
+		}
+	});
+	let stdoutText = '';
+	realChild.stdout.on('data', chunk => {
+		stdoutText += chunk.toString('utf8');
+	});
+	const realBridge = new OAuthBridge({
+		child: realChild,
+		chromePort: 9222,
+		open: async () => {},
+		request: async () => Response.json([{type: 'page', url: 'https://antigravity.google/oauth-callback?state=real-stdin-state&code=live-oauth-code'}])
+	});
+	context.after(() => realBridge.dispose());
+	realChild.stdin.end('bridge-secret-234\n\n');
+	assert.equal(realChild.stdin.writableEnded, false);
+	const exitCode = await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(Error('Timed out waiting for real child process: ' + stdoutText)), 10000);
+		realChild.once('exit', code => {
+			clearTimeout(timer);
+			resolve(code);
+		});
+	});
+	assert.equal(exitCode, 0);
+	assert.match(stdoutText, /TOKEN:bridge-secret-234/);
+	assert.match(stdoutText, /CODE:live-oauth-code:EOF:false/);
+	const loadedCalls = [];
+	const reloadedCalls = [];
+	const emptyWc = {
+		id: 21,
+		getType: () => 'window',
+		getURL: () => 'https://127.0.0.1:51827/',
+		getTitle: () => '',
+		isDestroyed: () => false,
+		executeJavaScript: async () => true,
+		reload: () => reloadedCalls.push('empty')
+	};
+	const hubWin = {id: 1, isDestroyed: () => false, webContents: emptyWc};
+	const {fakeRequire} = createElectronHarness({codeRoot: __dirname, homedir: root, realModules: true, windows: [hubWin]});
+	globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.();
+	context.after(() => globalThis.__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__?.dispose?.());
+	await refreshInitialPage({
+		appRequire: name => 'electron' === name ? fakeRequire('electron') : './utils' === name ? {
+			getHubWindows: () => [hubWin],
+			getHubWebContents: w => w.webContents,
+			resolveHubWindowFromWebContents: wc => wc === emptyWc ? hubWin : null,
+			loadHubWindowUrl: async (win, url) => loadedCalls.push({winId: win.id, url})
+		} : null,
+		delayMs: 0,
+		id: 'A6',
+		userDataDir: root
+	});
+	assert.deepEqual(loadedCalls, [{winId: 1, url: 'https://127.0.0.1:51827/'}]);
+	assert.deepEqual(reloadedCalls, []);
 });
