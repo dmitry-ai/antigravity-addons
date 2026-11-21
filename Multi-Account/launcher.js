@@ -1,3 +1,6 @@
+// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Launch Antigravity profiles even when the addons CDP runtime fails to start":
+// https://github.com/dmitry-ai/antigravity-addons/issues/66
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
 // https://github.com/dmitry-ai/antigravity-addons/issues/61
@@ -140,7 +143,15 @@ const launch = async (id, extraArgs = [], options = {}) => {
 			// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 			// "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 			// https://github.com/dmitry-ai/antigravity-addons/issues/13
-			await (options.ensureRuntime || (() => require('../Upgrade/runtime-control').ensureRunning()))();
+			// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+			// "Launch Antigravity profiles even when the addons CDP runtime fails to start":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/66
+			try {
+				await (options.ensureRuntime || (() => require('../Upgrade/runtime-control').ensureRunning()))();
+			}
+			catch (error) {
+				log('WARNING: Addons runtime unavailable (' + error.message + '); launching without addons');
+			}
 			const activated = await activateExisting(profile, {args: cleanArgs});
 			if (activated) {
 				console.log(JSON.stringify(activated));

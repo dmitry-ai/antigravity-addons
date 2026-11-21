@@ -1,4 +1,7 @@
 // 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// "Launch Antigravity profiles even when the addons CDP runtime fails to start":
+// https://github.com/dmitry-ai/antigravity-addons/issues/66
+// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 // "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
 // https://github.com/dmitry-ai/antigravity-addons/issues/65
 // 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
@@ -965,4 +968,36 @@ test('OAuthBridge forwards host bridge stdin payload written via child.stdin.end
 	});
 	assert.deepEqual(loadedCalls, [{winId: 1, url: 'https://127.0.0.1:51827/'}]);
 	assert.deepEqual(reloadedCalls, []);
+});
+test('A failing addons CDP runtime is logged as a warning and does not abort the profile launch', async context => {
+	const {launch} = require('./launcher');
+	const root = fixture(context);
+	const skillsRoot = path.join(root, 'skills');
+	fs.mkdirSync(path.join(skillsRoot, 'upwork-init'), {recursive: true});
+	fs.writeFileSync(path.join(skillsRoot, 'upwork-init', 'SKILL.md'), '---\nname: upwork-init\ndescription: test\n---\n');
+	const cfgFile = path.join(root, 'profiles.json');
+	fs.writeFileSync(cfgFile, JSON.stringify({
+		schemaVersion: 1,
+		skillsRoot,
+		profiles: [
+			{id: 'A0', userData: 'Antigravity'},
+			{id: 'A6', userData: 'Antigravity-A6', email: 'admin6@mage2.pro', chromeShortcut: '6'}
+		]
+	}));
+	let runtimeCalls = 0;
+	const missingExe = path.join(root, 'missing', 'Antigravity.exe');
+	await assert.rejects(launch('A6', [], {
+		roaming: root,
+		profilesFile: cfgFile,
+		executable: missingExe,
+		readChrome: () => ({executable: 'chrome.exe', arguments: [], directory: 'Profile 8', userData: root, debugPort: 9222}),
+		ensureRuntime: async () => {
+			runtimeCalls++;
+			throw Error('CDP runtime did not start; inspect test-root');
+		}
+	}), /Antigravity is not installed at/);
+	assert.equal(runtimeCalls, 1);
+	const log = fs.readFileSync(path.join(root, 'Antigravity-A6', 'launcher.log'), 'utf8');
+	assert.match(log, /WARNING: Addons runtime unavailable \(CDP runtime did not start; inspect test-root\); launching without addons/);
+	assert.doesNotMatch(log, /ERROR: CDP runtime did not start/);
 });
