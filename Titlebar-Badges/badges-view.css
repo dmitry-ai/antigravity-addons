@@ -1,0 +1,119 @@
+/* 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Relocate titlebar update and announcement badges into the Antigravity app menu":
+	https://github.com/dmitry-ai/antigravity-addons/issues/67 */
+[data-main-content-header='true'] :is(
+	[data-testid='app-update-button'],
+	[data-testid='manual-update-button'],
+	.update-nudge,
+	.animate-nudge-bounce:has([data-testid='app-update-button'], [data-testid='manual-update-button'], .update-nudge),
+	[data-testid='jetbox-service-announcement-banner']
+),
+[data-testid='pane-titlebar-toolbar'] :is(
+	[data-testid='app-update-button'],
+	[data-testid='manual-update-button'],
+	.update-nudge,
+	.animate-nudge-bounce,
+	[data-testid*='update'][role='button'],
+	[data-testid*='nudge'],
+	[data-testid*='banner'],
+	[data-testid*='announcement'],
+	div[role='button'].rounded-full
+) {
+	animation: none !important;
+	display: none !important;
+}
+.antigravity-relocated-badges {
+	display: flex;
+	flex-direction: column;
+}
+.antigravity-relocated-badges-separator {
+	background: var(--border, rgba(128, 128, 128, 0.2));
+	height: 1px;
+	margin: 4px 0;
+}
+.antigravity-relocated-badge {
+	align-items: center;
+	background: transparent;
+	border: 0;
+	color: var(--foreground, inherit);
+	cursor: pointer;
+	display: flex;
+	font: inherit;
+	gap: 8px;
+	justify-content: space-between;
+	line-height: 18px;
+	outline: none;
+	padding: 6px 12px;
+	text-align: left;
+	transition: background-color 100ms ease;
+	user-select: none;
+	width: 100%;
+}
+.antigravity-relocated-badge.is-actionable {
+	color: var(--primary, #2563eb);
+	font-weight: 500;
+}
+.antigravity-relocated-badge:not(:disabled):hover,
+.antigravity-relocated-badge:not(:disabled):focus-visible {
+	background: var(--secondary, rgba(128, 128, 128, 0.14));
+}
+.antigravity-relocated-badge.is-loading,
+.antigravity-relocated-badge:disabled {
+	color: var(--muted-foreground, inherit);
+	cursor: default;
+	opacity: 0.75;
+}
+.antigravity-relocated-badge-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.antigravity-relocated-badge-meta {
+	flex-shrink: 0;
+	font-size: 11px;
+	opacity: 0.75;
+	white-space: nowrap;
+}
+.antigravity-relocated-announcement {
+	align-items: flex-start;
+	color: var(--foreground, inherit);
+	display: flex;
+	font-size: 12px;
+	gap: 6px;
+	line-height: 16px;
+	max-width: 300px;
+	padding: 6px 12px;
+}
+.antigravity-relocated-announcement-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+.antigravity-relocated-announcement-link {
+	color: var(--primary, #2563eb);
+	text-decoration: underline;
+}
+.antigravity-relocated-dismiss {
+	align-items: center;
+	background: transparent;
+	border: 0;
+	border-radius: 4px;
+	color: var(--muted-foreground, inherit);
+	cursor: pointer;
+	display: inline-flex;
+	flex-shrink: 0;
+	font-size: 13px;
+	height: 18px;
+	justify-content: center;
+	line-height: 1;
+	padding: 0;
+	width: 18px;
+}
+.antigravity-relocated-dismiss:hover,
+.antigravity-relocated-dismiss:focus-visible {
+	background: var(--secondary, rgba(128, 128, 128, 0.18));
+	color: var(--foreground, inherit);
+	outline: none;
+}

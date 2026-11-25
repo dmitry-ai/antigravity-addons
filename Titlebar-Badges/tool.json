@@ -1,0 +1,11 @@
+{
+	"schemaVersion": 1
+	,"id": "titlebar-badges"
+	,"name": "Titlebar Badges"
+	,"enabled": true
+	,"order": 15
+	,"dependsOn": ["css"]
+	,"cdp": "cdp-runtime.js"
+	,"runtimeFiles": ["badges-client.js", "badges-view.css"]
+	,"validate": "verify.js"
+}
