@@ -774,3 +774,42 @@ test('Main debugger bridge recovers from ungraceful companion crash with detach-
 	assert.equal(disposedV2, 1);
 	assert.equal(globalThis[BRIDGE_GLOBAL]?.version, 3);
 });
+// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+test('resolveStateRoot honors ANTIGRAVITY_TOOLS_STATE_DIR and runtime-control refuses linked worktree hijack without explicit isolation', async context => {
+	const cp = require('node:child_process');
+	const {resolveStateRoot} = require('./cdp-companion');
+	const control = require('./runtime-control');
+	const root = fixture(context);
+	const roaming = path.join(root, 'roaming');
+	const defaultToolsDir = path.join(roaming, 'AntigravityTools');
+	const customState = path.join(root, 'custom-state');
+	const fakeWt = path.join(root, 'wt-checkout/Upgrade');
+	const fakeMain = path.join(root, 'main-checkout/Upgrade');
+	fs.mkdirSync(defaultToolsDir, {recursive: true});
+	fs.mkdirSync(fakeWt, {recursive: true});
+	fs.mkdirSync(path.join(root, 'main-checkout/.git'), {recursive: true});
+	fs.mkdirSync(fakeMain, {recursive: true});
+	fs.writeFileSync(path.join(root, 'wt-checkout/.git'), 'gitdir: ../main-checkout/.git/worktrees/demo\n');
+	assert.equal(resolveStateRoot({APPDATA: roaming, ANTIGRAVITY_TOOLS_STATE_DIR: customState}), path.resolve(customState));
+	assert.equal(resolveStateRoot({APPDATA: roaming}), path.join(roaming, 'AntigravityTools'));
+	assert.equal(control.isLinkedWorktree(fakeWt), true);
+	assert.equal(control.isLinkedWorktree(fakeMain), false);
+	const liveState = {instance: 'live-main', version: 'other-version', pid: process.pid, runtimePath: path.join(fakeMain, 'cdp-companion.js'), state: 'connected', updated: new Date().toISOString()};
+	fs.writeFileSync(path.join(defaultToolsDir, 'runtime.json'), JSON.stringify(liveState));
+	withEnv(context, {APPDATA: roaming, ANTIGRAVITY_TOOLS_STATE_DIR: undefined});
+	const spawns = [];
+	context.mock.method(cp, 'spawn', (command, args, options) => {
+		spawns.push({command, args, options});
+		setImmediate(() => fs.writeFileSync(path.join(customState, 'runtime.json'), JSON.stringify({instance: 'isolated-ok', version: runtimeVersion(), pid: process.pid, runtimePath: path.join(__dirname, 'cdp-companion.js'), state: 'connected', updated: new Date().toISOString()})));
+		return {unref() {}};
+	});
+	await assert.rejects(control.ensureRunning({delay: 5, checkoutDir: fakeWt}), /linked Git worktree/i);
+	await assert.rejects(control.stopRuntime({delay: 5, checkoutDir: fakeWt}), /linked Git worktree/i);
+	assert.equal(fs.existsSync(path.join(defaultToolsDir, 'control.json')), false);
+	assert.equal(spawns.length, 0);
+	withEnv(context, {APPDATA: roaming, ANTIGRAVITY_TOOLS_STATE_DIR: customState});
+	const started = await control.ensureRunning({delay: 5, checkoutDir: fakeWt});
+	assert.equal(started.instance, 'isolated-ok');
+	assert.equal(spawns.length, 1);
+	assert.equal(spawns[0].options?.env?.ANTIGRAVITY_TOOLS_STATE_DIR, path.resolve(customState));
+});

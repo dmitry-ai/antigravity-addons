@@ -10,7 +10,19 @@ const {discoverEndpoints} = require('./profile-endpoints');
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
-const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
+// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+/**
+ * @used-by {@link Companion#constructor}
+ * @used-by {@link import('./runtime-control.js').ensureRunning}
+ * @used-by {@link import('./runtime-control.js').readState}
+ * @used-by {@link import('./runtime-control.js').stopRuntime}
+ * @used-by {@link import('./test-cdp-runtime.js')}
+ */
+const resolveStateRoot = (env = process.env) => {
+	const explicit = String(env?.ANTIGRAVITY_TOOLS_STATE_DIR || '').trim();
+	return explicit ? path.resolve(explicit) : path.join(env?.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
+};
+const stateRoot = resolveStateRoot();
 const binding = '__antigravityToolsCall';
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
@@ -53,7 +65,8 @@ window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__=1;
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
 class Companion {
-	constructor({root = stateRoot} = {}) {
+	// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+	constructor({root = resolveStateRoot()} = {}) {
 		this.root = root;
 		this.connections = new Map();
 		this.modules = new Map();
@@ -464,4 +477,5 @@ if (module === require.main) {
 	process.on('SIGINT', () => runtime.dispose());
 	process.on('SIGTERM', () => runtime.dispose());
 }
-module.exports = {Companion, stateRoot, bridgeSource, runtimeVersion};
+// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+module.exports = {Companion, bridgeSource, resolveStateRoot, runtimeVersion, stateRoot};

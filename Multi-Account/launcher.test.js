@@ -821,21 +821,59 @@ test('Pre-spawn profile preparation failures write ERROR to launcher.log and exi
 	const logPath = path.join(root, 'Antigravity-A6', 'launcher.log');
 	assert.equal(fs.existsSync(logPath), true);
 	assert.match(fs.readFileSync(logPath, 'utf8'), /ERROR: The shared skills source is unavailable/);
+	// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+	const {runtimeVersion} = require('../Upgrade/cdp-companion');
 	const realDir = path.join(root, 'real-roaming');
+	const toolsState = path.join(root, 'tools-state');
+	fs.mkdirSync(toolsState, {recursive: true});
+	fs.writeFileSync(path.join(toolsState, 'runtime.json'), JSON.stringify({
+		instance: 'test-isolated-instance',
+		version: runtimeVersion(),
+		pid: process.pid,
+		runtimePath: path.resolve(__dirname, '../Upgrade/cdp-companion.js'),
+		state: 'connected',
+		updated: new Date().toISOString()
+	}));
+	const readLiveSnapshot = () => {
+		const liveDir = process.env.APPDATA ? path.join(process.env.APPDATA, 'AntigravityTools') : '';
+		const readPart = name => {
+			let out = null;
+			const target = liveDir ? path.join(liveDir, name) : '';
+			if (target && fs.existsSync(target)) {
+				try {
+					const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+					out = {instance: parsed.instance ?? null, pid: parsed.pid ?? null, runtimePath: parsed.runtimePath ?? null, version: parsed.version ?? null};
+				}
+				catch {
+					out = null;
+				}
+			}
+			return out;
+		};
+		return {runtime: readPart('runtime.json'), lock: readPart('instance.lock')};
+	};
+	const beforeHost = readLiveSnapshot();
+	const startedAt = Date.now();
 	const child = cp.spawnSync(process.execPath, [path.join(__dirname, 'launcher.js'), 'A0'], {
 		encoding: 'utf8',
 		timeout: 10000,
 		env: {
 			...process.env,
+			APPDATA: realDir,
+			ANTIGRAVITY_TOOLS_STATE_DIR: toolsState,
 			LOCALAPPDATA: path.join(root, 'missing-localappdata'),
 			ANTIGRAVITY_ROAMING_DIR: realDir,
 			ANTIGRAVITY_PROFILES_FILE: cfgFile
 		}
 	});
+	const elapsedMs = Date.now() - startedAt;
 	assert.equal(child.status, 1);
+	assert.equal(5000 > elapsedMs, true, `Isolated launcher test took ${elapsedMs} ms`);
+	assert.deepEqual(readLiveSnapshot(), beforeHost);
 	const a0LogPath = path.join(realDir, 'Antigravity', 'launcher.log');
 	assert.equal(fs.existsSync(a0LogPath), true);
 	assert.match(fs.readFileSync(a0LogPath, 'utf8'), /ERROR: /);
+	assert.doesNotMatch(fs.readFileSync(a0LogPath, 'utf8'), /WARNING: Addons runtime unavailable/);
 });
 // 2026-11-20
 // "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
