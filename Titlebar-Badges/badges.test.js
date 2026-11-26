@@ -6,6 +6,10 @@ const {discover} = require('../Upgrade/registry');
 const createBadgesRuntime = require('./cdp-runtime');
 const {TitlebarBadgesController, extractTitlebarBadges, labelForUpdaterState} = require('./badges-client');
 const verifyBadges = require('./verify');
+/**
+ * @used-by {@link createDoc}
+ * @used-by {@link import('./badges.test.js')}
+ */
 const createElement = (tag, {attrs = {}, children = [], className = '', dataset = {}, text = ''} = {}) => {
 	const el = {
 		attributes: {...attrs},
@@ -122,6 +126,10 @@ const createElement = (tag, {attrs = {}, children = [], className = '', dataset 
 	}
 	return el;
 };
+/**
+ * @used-by {@link createElement}
+ * @used-by {@link import('./badges.test.js')}
+ */
 const matchSingle = (el, selector) => {
 	let r = true;
 	const tokens = selector.trim().split(/\s+/);
@@ -147,6 +155,10 @@ const matchSingle = (el, selector) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./badges.test.js')}
+ * @used-by {@link matchSingle}
+ */
 const matchSimple = (el, simple) => {
 	let r = true;
 	let rest = simple;
@@ -190,6 +202,9 @@ const matchSimple = (el, simple) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./badges.test.js')}
+ */
 const createDoc = children => {
 	const root = createElement('body', {children});
 	return {

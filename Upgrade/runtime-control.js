@@ -8,6 +8,7 @@ const {isPidAlive, readJsonSafe, writeFileAtomic} = require('./process-io');
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
 /**
  * @used-by {@link ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
  * @used-by {@link stopRuntime}
  */
 const assertSafeWorktreeTarget = (explicitRoot, checkoutDir, env = process.env) => {
@@ -18,7 +19,7 @@ const assertSafeWorktreeTarget = (explicitRoot, checkoutDir, env = process.env) 
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
 /**
  * @used-by {@link assertSafeWorktreeTarget}
- * @used-by {@link import('./test-cdp-runtime.js')}
+ * @used-by {@link import('./runtime-control.js')}
  */
 const isLinkedWorktree = (dir = __dirname) => {
 	let r = false;
@@ -45,17 +46,40 @@ const isLinkedWorktree = (dir = __dirname) => {
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link stopRuntime}
+ */
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+/**
+ * @used-by {@link ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ * @used-by {@link stopRuntime}
+ */
 const readState = (root = resolveStateRoot()) => readJsonSafe(path.join(root, 'runtime.json'));
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ * @used-by {@link stopRuntime}
+ */
 const alive = state => Boolean(state?.pid && isPidAlive(state.pid) && 'stopped' !== state.state && 30000 > Date.now() - Date.parse(state.updated));
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+/**
+ * @used-by {@link import('../Multi-Account/launcher.js').launch}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ * @uses {@link import('./cdp-companion.js').Companion#start}
+ */
 const ensureRunning = async ({root, delay = 200, checkoutDir = __dirname} = {}) => {
 	let r;
 	result: {
@@ -103,6 +127,10 @@ const ensureRunning = async ({root, delay = 200, checkoutDir = __dirname} = {}) 
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ */
 const installStartup = () => {
 	if ('win32' !== process.platform) {
 		throw Error('This setup is for Windows');
@@ -114,6 +142,11 @@ const installStartup = () => {
 // "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 // https://github.com/dmitry-ai/antigravity-addons/issues/13
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+/**
+ * @used-by {@link ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ */
 const stopRuntime = async ({root, delay = 200, checkoutDir = __dirname} = {}) => {
 	result: {
 		assertSafeWorktreeTarget(root, checkoutDir);

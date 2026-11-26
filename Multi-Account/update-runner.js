@@ -10,6 +10,10 @@ const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/W
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
 class UpdateRunner {
+	/**
+	 * @used-by {@link applyUpdate}
+	 * @used-by {@link import('./update-guard.js')}
+	 */
 	constructor(options = {}) {
 		this.options = options;
 		this.fileSystem = options.fs || fs;
@@ -27,9 +31,17 @@ class UpdateRunner {
 		this.waitTimeoutMs = options.waitTimeoutMs ?? 30000;
 		this.pollMs = options.pollMs ?? 100;
 	}
+	/**
+	 * @used-by {@link UpdateRunner#run}
+	 */
 	log(message) {
 		appendGuardLog(this.userDataDir, message, this.fileSystem);
 	}
+	/**
+	 * @used-by {@link applyUpdate}
+	 * @used-by {@link import('../Folders/folders-manager.js')}
+	 * @used-by {@link import('./launcher.test.js')}
+	 */
 	async run() {
 		let r = {status: 'noop'};
 		result: {
@@ -82,6 +94,9 @@ class UpdateRunner {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateRunner#run}
+	 */
 	runInstaller() {
 		return new Promise((resolve, reject) => {
 			const child = this.processes.spawn(this.installerPath, ['--updated', '/S'], {
@@ -97,6 +112,9 @@ class UpdateRunner {
 			}
 		});
 	}
+	/**
+	 * @used-by {@link UpdateRunner#run}
+	 */
 	saveDeferred() {
 		if (this.installerPath && this.fileSystem.existsSync(this.installerPath)) {
 			writeDeferredManifest({
@@ -108,6 +126,9 @@ class UpdateRunner {
 			});
 		}
 	}
+	/**
+	 * @used-by {@link UpdateRunner#run}
+	 */
 	async waitForProcessExit() {
 		let r = true;
 		if (Number.isInteger(this.waitPid) && 0 < this.waitPid) {
@@ -123,7 +144,17 @@ class UpdateRunner {
 		return r;
 	}
 }
+/**
+ * @used-by {@link import('./update-guard.js')}
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#spawnManagedUpdate)
+ * @used-by {@link import('./update-runner.js')}
+ */
 const applyUpdate = async (options = {}) => new UpdateRunner(options).run();
+/**
+ * @used-by {@link import('./update-guard.js')}
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#spawnManagedUpdate)
+ * @used-by {@link import('./update-runner.js')}
+ */
 const parseCliOptions = (argv = process.argv.slice(2)) => {
 	const flags = {
 		'--installer=': ['installerPath', String],
@@ -150,6 +181,11 @@ const parseCliOptions = (argv = process.argv.slice(2)) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link UpdateRunner#run}
+ * @used-by {@link import('./update-guard.js')}
+ * @used-by {@link import('./update-runner.js')}
+ */
 const repairShortcuts = ({codeRoot = __dirname, cp: processes = cp, fs: fileSystem = fs, log = () => {}} = {}) => {
 	let r = false;
 	const script = path.join(codeRoot, 'install.ps1');
@@ -167,6 +203,10 @@ const repairShortcuts = ({codeRoot = __dirname, cp: processes = cp, fs: fileSyst
 	}
 	return r;
 };
+/**
+ * @used-by {@link UpdateRunner#constructor}
+ * @used-by {@link import('./update-runner.js')}
+ */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (module === require.main) {
 	const cli = parseCliOptions();

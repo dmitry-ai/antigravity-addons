@@ -9,6 +9,9 @@ const {parseArguments} = require('./upgrade');
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link import('./test-registry.js')}
+ */
 const fixture = context => {
 	// 2026-11-14
 	// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":

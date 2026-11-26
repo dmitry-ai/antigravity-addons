@@ -14,6 +14,9 @@ const {UpdateGuard, UpdateRunner, installUpdateGuard, activeSiblingProfiles, isL
 // 2026-11-14
 // "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/37
+/**
+ * @used-by {@link import('./launcher.test.js')}
+ */
 const fixture = context => createTempDir(context, 'antigravity-accounts-');
 // 2026-10-16
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
@@ -537,7 +540,10 @@ test('launcher.js avoids bootstrap.toString and update-guard loading, executes b
 	assert.equal(launcherCode.includes('bootstrap.toString'), false);
 	const prodFiles = fs.readdirSync(__dirname).filter(name => name.endsWith('.js') && !name.endsWith('.test.js'));
 	for (const name of prodFiles) {
-		const lines = fs.readFileSync(path.join(__dirname, name), 'utf8').split(/\r?\n/);
+		// 2026-11-26
+		// "Adopt navigable JSDoc cross-reference annotations across Antigravity Addons":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/71
+		const lines = fs.readFileSync(path.join(__dirname, name), 'utf8').replace(/^[ \t]*\/\*\*[\s\S]*?\*\/\r?\n?/gm, '').split(/\r?\n/);
 		const count = '' === lines.at(-1) ? lines.length - 1 : lines.length;
 		assert.ok(360 >= count, `Expected ${name} <= 360 lines, got ${count}`);
 	}

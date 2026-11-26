@@ -18,10 +18,23 @@ const {readProfiles} = require('./profiles');
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link import('./cdp-companion.js').Companion#tick}
+ * @used-by {@link import('./cdp-companion.js')}
+ * @used-by {@link import('./profile-endpoints.js')}
+ * @used-by {@link import('./runtime-health.js').inspectRuntime}
+ * @used-by {@link import('./runtime-health.js')}
+ */
 const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js').OAuthBridge#poll}
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js')}
+ * @used-by {@link import('./profile-endpoints.js')}
+ * @used-by {@link probeProfileEndpoint}
+ */
 const isLocalEndpointSocket = (value, port) => {
 	let r = false;
 	try {
@@ -39,6 +52,14 @@ const isLocalEndpointSocket = (value, port) => {
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link discoverEndpoints}
+ * @used-by {@link import('../Multi-Account/launcher.js').activateExisting}
+ * @used-by {@link import('../Multi-Account/launcher.js')}
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js').refreshInitialPage}
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js')}
+ * @used-by {@link import('./profile-endpoints.js')}
+ */
 const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs, isLockfileHeld: checkLockfile = isLockfileHeld, isPidAlive: checkPid = isPidAlive, openInspector = url => CDP.open(url)} = {}) => {
 	const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
 	const mainRuntimeFile = path.join(profile.userDataDir, 'main-runtime.json');

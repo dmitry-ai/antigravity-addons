@@ -2,10 +2,30 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {writeFileAtomic} = require('../Upgrade/process-io');
+/**
+ * @used-by {@link import('./skills-manifest.js')}
+ * @used-by {@link validate}
+ */
 const object = value => value && 'object' === typeof value && !Array.isArray(value);
+/**
+ * @used-by {@link canonical}
+ * @used-by {@link import('./skills-manifest.js')}
+ */
 const identity = value => 'win32' === process.platform ? value.toLowerCase() : value;
+/**
+ * @used-by {@link ensureSharedSkills}
+ * @used-by {@link import('./skills-manifest.js')}
+ */
 const canonical = value => identity(fs.realpathSync(value));
+/**
+ * @used-by {@link ensureSharedSkills}
+ * @used-by {@link import('./skills-manifest.js')}
+ */
 const location = (filename, value) => path.resolve('.agents' === path.basename(path.dirname(filename)) ? path.dirname(path.dirname(filename)) : path.dirname(filename), value);
+/**
+ * @used-by {@link import('./skills-manifest.js')}
+ * @used-by {@link read}
+ */
 const validate = (manifest, filename) => {
 	if (!object(manifest)) {
 		throw Error('Invalid skills manifest object: ' + filename);
@@ -29,6 +49,10 @@ const validate = (manifest, filename) => {
 		throw Error('Invalid exclude in skills manifest: ' + filename);
 	}
 };
+/**
+ * @used-by {@link ensureSharedSkills}
+ * @used-by {@link import('./skills-manifest.js')}
+ */
 const read = filename => {
 	let data;
 	try {
@@ -50,6 +74,11 @@ const read = filename => {
 // 2026-11-02
 // "Preserve inherited shared skills during A6 profile preparation":
 // https://github.com/dmitry-ai/antigravity-addons/issues/19
+/**
+ * @used-by {@link import('./launcher.js').prepareProfile}
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./skills-manifest.js')}
+ */
 const ensureSharedSkills = (filename, skillsRoot) => {
 	filename = path.resolve(filename);
 	const original = fs.existsSync(filename) ? read(filename) : {data: null, manifest: {entries: []}};

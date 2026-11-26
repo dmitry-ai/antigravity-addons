@@ -20,6 +20,10 @@ const BROWSER_ARGS = [
 	'--no-first-run',
 	'--no-default-browser-check'
 ];
+/**
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link resolveLaunchOptions}
+ */
 const resolveHeadlessShell = () => {
 	let r = null;
 	const binary = 'win32' === process.platform ? 'chrome-headless-shell.exe' : 'chrome-headless-shell';
@@ -44,6 +48,10 @@ const resolveHeadlessShell = () => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link getSharedBrowser}
+ * @used-by {@link import('./browser-fixture.js')}
+ */
 const resolveLaunchOptions = () => {
 	let r;
 	const envBrowser = process.env.FOLDERS_TEST_BROWSER;
@@ -63,12 +71,20 @@ const resolveLaunchOptions = () => {
 	return r;
 };
 let sharedBrowser = null;
+/**
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link openFixture}
+ */
 const getSharedBrowser = async () => {
 	if (!sharedBrowser || !sharedBrowser.isConnected()) {
 		sharedBrowser = await chromium.launch(resolveLaunchOptions());
 	}
 	return sharedBrowser;
 };
+/**
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./browser.test.js')}
+ */
 const closeSharedBrowser = async () => {
 	const current = sharedBrowser;
 	sharedBrowser = null;
@@ -79,6 +95,10 @@ const closeSharedBrowser = async () => {
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./browser.test.js')}
+ */
 const openFixture = async ({
 	data,
 	projects,

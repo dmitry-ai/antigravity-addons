@@ -4,10 +4,16 @@ const defaultModel = require('./folders-model');
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
 class FolderMenuController {
+	/**
+	 * @used-by {@link import('./folders-client.js').FoldersView#constructor}
+	 */
 	constructor(view) {
 		this.view = view;
 		this.activeMenu = null;
 	}
+	/**
+	 * @used-by {@link FolderMenuController#show}
+	 */
 	appendFolderTree(menu, {selectedId, excludedIds, onSelect}) {
 		const {children, expanded} = folderPickerModel(this.view.data?.folders, selectedId, excludedIds, this.view.model);
 		const tree = this.view.element('div', 'antigravity-folder-targets', undefined, {attrs: {role: 'tree', 'aria-label': 'Folders'}});
@@ -42,10 +48,18 @@ class FolderMenuController {
 		render();
 		menu.append(tree);
 	}
+	/**
+	 * @used-by {@link FolderMenuController#createFolderTreeRow}
+	 * @used-by {@link FolderMenuController#createMenuItemRow}
+	 * @used-by {@link FolderMenuController#show}
+	 */
 	close() {
 		this.activeMenu?.remove();
 		this.activeMenu = null;
 	}
+	/**
+	 * @used-by {@link FolderMenuController#appendFolderTree}
+	 */
 	createFolderTreeRow({folder, depth, hasChildren, selectedId, expanded, rows, tree, onSelect, render}) {
 		const isExpanded = expanded.has(folder.id);
 		const toggle = this.view.element(hasChildren ? 'button' : 'span', 'antigravity-folder-target-toggle', hasChildren ? (isExpanded ? '▾' : '▸') : undefined, hasChildren ? {
@@ -67,6 +81,9 @@ class FolderMenuController {
 		});
 		return row;
 	}
+	/**
+	 * @used-by {@link FolderMenuController#show}
+	 */
 	createMenuItemRow(menu, item, hasTree) {
 		const row = this.view.element('div', `antigravity-folder-menu-item ${item.danger ? 'danger' : ''}`, undefined, {
 			attrs: {tabindex: '0', role: hasTree ? 'button' : 'menuitem'},
@@ -91,6 +108,9 @@ class FolderMenuController {
 		});
 		return row;
 	}
+	/**
+	 * @used-by {@link FolderMenuController#createFolderTreeRow}
+	 */
 	handleTreeRowKeydown(e, {row, folder, hasChildren, expanded, rows, tree, render}) {
 		const visible = [...tree.querySelectorAll('[role=treeitem]')];
 		const index = visible.indexOf(row);
@@ -118,6 +138,9 @@ class FolderMenuController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderConversationRow}
+	 */
 	openConversationMenu(event, row) {
 		event.preventDefault();
 		event.stopPropagation();
@@ -128,6 +151,9 @@ class FolderMenuController {
 			{label: 'Archive', onClick: () => this.view.adapter.updateConversation(row.id, {archived: true, archivalStatusTimestamp: new Date().toISOString()}).catch(error => this.view.updateStatus('action', error.message))}
 		], 'Conversation');
 	}
+	/**
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#bindRoot}
+	 */
 	openFolderMenu(e, folderHeaderEl, folderId, folderName) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -144,6 +170,9 @@ class FolderMenuController {
 			{icon: '🗑️', label: 'Delete folder', danger: true, onClick: () => this.view.win.confirm(`Delete folder "${folderName}"? (Subfolders and projects will be promoted one level up)`) && this.view.postAction('remove-folder', {id: folderId})}
 		]);
 	}
+	/**
+	 * @used-by {@link FolderMenuController#openFolderMenu}
+	 */
 	openMoveFolderMenu(coords, folderId) {
 		const folder = this.view.getFolder(folderId);
 		if (folder) {
@@ -156,12 +185,25 @@ class FolderMenuController {
 			], 'Move folder');
 		}
 	}
+	/**
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#bindRoot}
+	 */
 	openProjectMenu(e, projectId) {
 		openProjectContextMenu(e, projectId, {showContextMenu: (...args) => this.show(...args), showCreateFolderDialog: id => this.view.dialogs.openCreateFolder(id), view: this.view, win: this.view.win});
 	}
+	/**
+	 * @used-by {@link FolderMenuController#appendFolderTree}
+	 * @used-by {@link FolderMenuController#show}
+	 */
 	position(menu) {
 		positionContextMenu(menu, this.view.win);
 	}
+	/**
+	 * @used-by {@link FolderMenuController#openConversationMenu}
+	 * @used-by {@link FolderMenuController#openFolderMenu}
+	 * @used-by {@link FolderMenuController#openMoveFolderMenu}
+	 * @used-by {@link FolderMenuController#openProjectMenu}
+	 */
 	show(x, y, items, title = '') {
 		this.close();
 		const hasTree = items.some(item => item.folderTree);
@@ -188,6 +230,14 @@ class FolderMenuController {
 // 2026-11-14
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+/**
+ * @used-by {@link FolderMenuController#appendFolderTree}
+ * @used-by {@link import('./folder-dialogs.js').FolderDialogController#populateFolderSelect}
+ * @used-by {@link import('./folder-dialogs.js')}
+ * @used-by {@link import('./folder-menu.js')}
+ * @used-by {@link import('./folder-picker.test.js')}
+ * @used-by {@link import('./folder-picker.test.js')} (modelFor)
+ */
 const folderPickerModel = (foldersSource, selectedId, excludedIds = new Set(), model = defaultModel) => {
 	const raw = Array.isArray(foldersSource) ? foldersSource : foldersSource?.data?.folders || foldersSource?.folders || [];
 	const {byId, children} = (model?.indexTree || defaultModel.indexTree)(raw, {compare: model?.compare, excludedIds, sort: true});
@@ -197,6 +247,11 @@ const folderPickerModel = (foldersSource, selectedId, excludedIds = new Set(), m
 	}
 	return {byId, children, expanded};
 };
+/**
+ * @used-by {@link FolderMenuController#openProjectMenu}
+ * @used-by {@link import('./folder-menu.js')}
+ * @used-by {@link import('./folder-picker.test.js')}
+ */
 const openProjectContextMenu = (e, projectId, {showContextMenu, showCreateFolderDialog, view, win = 'undefined' !== typeof window ? window : undefined} = {}) => {
 	e.preventDefault();
 	e.stopPropagation();
@@ -224,6 +279,11 @@ const openProjectContextMenu = (e, projectId, {showContextMenu, showCreateFolder
 	}
 	(showContextMenu || ((...args) => activeView.menus.show(...args)))(e.clientX, e.clientY, items, 'Move project');
 };
+/**
+ * @used-by {@link FolderMenuController#position}
+ * @used-by {@link import('./folder-menu.js')}
+ * @used-by {@link import('./folder-picker.test.js')}
+ */
 const positionContextMenu = (menu, viewport = window) => {
 	const {x, y} = menu._folderAnchor;
 	menu.style.left = `${Math.max(8, Math.min(x, viewport.innerWidth - menu.offsetWidth - 8))}px`;

@@ -12,6 +12,11 @@ const defaultWindowIdentity = require('./window-identity');
 // 2026-10-28
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+/**
+ * @used-by {@link import('./launcher.js').buildBootstrapExpression}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link import('./main-bootstrap.js')}
+ */
 const bootstrap = (appRequire, config) => {
 	const codeRoot = config.codeRoot || __dirname;
 	const {app, shell, BrowserWindow, BaseWindow} = appRequire('electron');
@@ -121,6 +126,10 @@ const bootstrap = (appRequire, config) => {
 // 2026-11-19
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
+/**
+ * @used-by {@link bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ */
 const configureProtocolHandler = ({app, codeRoot, config, isPrimary}) => {
 	if ('function' !== typeof app?.setAsDefaultProtocolClient) {
 		return;
@@ -143,6 +152,13 @@ const configureProtocolHandler = ({app, codeRoot, config, isPrimary}) => {
 // 2026-11-14
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+/**
+ * @used-by {@link bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @uses {@link import('./oauth-bridge.js').OAuthBridge#constructor}
+ * @uses {@link import('./oauth-bridge.js').refreshInitialPage}
+ * @uses {@link import('./window-identity.js').installWindowIdentity}
+ */
 const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes, shell, windowIdentity}) => {
 	app.setAppUserModelId('Google.Antigravity.' + config.id);
 	windowIdentity.installWindowIdentity(appRequire, config);
@@ -213,6 +229,10 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 // 2026-11-18
 // "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
 // https://github.com/dmitry-ai/antigravity-addons/issues/50
+/**
+ * @used-by {@link bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ */
 const ensureInitialWindowVisible = ({app, appRequire, BaseWindow}) => {
 	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose?.();
 	if ('headless' === process.env.ELECTRON_OZONE_PLATFORM_HINT) {
@@ -267,6 +287,11 @@ const ensureInitialWindowVisible = ({app, appRequire, BaseWindow}) => {
 // 2026-11-10
 // "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 // https://github.com/dmitry-ai/antigravity-addons/issues/22
+/**
+ * @used-by {@link bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @uses {@link import('./window-identity.js').allWindows}
+ */
 const listManagedWindows = ({appRequire, BaseWindow, BrowserWindow, windowIdentity}) => {
 	const utils = resolveModule(appRequire, './utils');
 	const hubWindows = utils?.getHubWindows?.() || [];

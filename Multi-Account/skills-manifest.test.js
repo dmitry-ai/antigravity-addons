@@ -8,6 +8,9 @@ const {prepareProfile} = require('./launcher');
 // 2026-11-14
 // "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/37
+/**
+ * @used-by {@link import('./skills-manifest.test.js')}
+ */
 const fixture = context => {
 	const root = createTempDir(context, 'antigravity-skills-manifest-');
 	const skillsRoot = path.join(root, 'shared skills');

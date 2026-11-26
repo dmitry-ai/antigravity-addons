@@ -8,16 +8,26 @@ const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base
 // "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FolderActionDispatcher {
+	/**
+	 * @used-by {@link applyAction}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	constructor(original, action) {
 		this.data = structuredClone('save-config' === action.action ? action.data : original);
 		this.action = action;
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	addFolder() {
 		if (this.action.parentId) {
 			this.findFolder(this.action.parentId);
 		}
 		this.data.folders.push({id: this.action.id || `folder-${crypto.randomUUID()}`, name: String(this.action.name || '').trim(), parentId: this.action.parentId || null, color: this.action.color || '#10b981'});
 	}
+	/**
+	 * @used-by {@link applyAction}
+	 */
 	apply() {
 		const handlers = {'add-folder': () => this.addFolder(), 'assign-project': () => this.assignProject(), 'move-folder': () => this.moveFolder(), 'remove-folder': () => this.removeFolder(), 'rename-folder': () => this.renameFolder(), 'save-config': () => {}, 'unassign-project': () => this.unassignProject()};
 		const handler = handlers[this.action.action];
@@ -28,11 +38,21 @@ class FolderActionDispatcher {
 		validateConfig(this.data);
 		return this.data;
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	assignProject() {
 		this.requireProjectId();
 		this.findFolder(this.action.folderId);
 		this.data.projectFolderMap[this.action.projectId] = this.action.folderId;
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#addFolder}
+	 * @used-by {@link FolderActionDispatcher#assignProject}
+	 * @used-by {@link FolderActionDispatcher#moveFolder}
+	 * @used-by {@link FolderActionDispatcher#removeFolder}
+	 * @used-by {@link FolderActionDispatcher#renameFolder}
+	 */
 	findFolder(id) {
 		const r = this.data.folders.find(item => id === item.id);
 		if (!r) {
@@ -40,12 +60,18 @@ class FolderActionDispatcher {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	moveFolder() {
 		if (this.action.newParentId) {
 			this.findFolder(this.action.newParentId);
 		}
 		this.findFolder(this.action.id).parentId = this.action.newParentId || null;
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	removeFolder() {
 		const target = this.findFolder(this.action.id);
 		const parentId = target.parentId || null;
@@ -66,14 +92,24 @@ class FolderActionDispatcher {
 		}
 		this.data.folders = this.data.folders.filter(item => target.id !== item.id);
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	renameFolder() {
 		this.findFolder(this.action.id).name = String(this.action.newName || '').trim();
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#assignProject}
+	 * @used-by {@link FolderActionDispatcher#unassignProject}
+	 */
 	requireProjectId() {
 		if ('string' !== typeof this.action.projectId || !this.action.projectId) {
 			throw Error('Exact project id is required');
 		}
 	}
+	/**
+	 * @used-by {@link FolderActionDispatcher#apply}
+	 */
 	unassignProject() {
 		this.requireProjectId();
 		delete this.data.projectFolderMap[this.action.projectId];
@@ -83,6 +119,10 @@ class FolderActionDispatcher {
 // "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FolderRowBuilder {
+	/**
+	 * @used-by {@link buildRows}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	constructor({collapsed = new Set(), data, hideOutsideProject = false, hideStandaloneConversations = false, projects, summaries = new Map()}) {
 		Object.assign(this, {
 			data, projects, summaries, collapsed, hideOutsideProject, hideStandaloneConversations,
@@ -90,17 +130,45 @@ class FolderRowBuilder {
 			projectIds: new Set(), archivedProjectIds: new Set(), activeProjects: new Set(), activeFolders: new Set(), rows: []
 		});
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#indexProjects}
+	 * @used-by {@link FolderRowBuilder#indexSummaries}
+	 * @used-by {@link import('../Titlebar-Badges/browser.test.js')} (openFixture)
+	 * @used-by {@link import('../Upgrade/test-helpers.js').createMockDocument}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateFolder}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateProject}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openModal}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openText}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#populateFolderSelect}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#appendFolderTree}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#show}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#buildPanel}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderConversationRow}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderFolderRow}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderProjectRow}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderRow}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#syncFaultBanner}
+	 * @used-by {@link import('./folders-client.js').FoldersView#element}
+	 */
 	append(map, key, value) {
 		if (!map.has(key)) {
 			map.set(key, []);
 		}
 		map.get(key).push(value);
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#appendProjectRows}
+	 * @used-by {@link FolderRowBuilder#appendStandaloneSection}
+	 */
 	appendConversationRows(projectId, folderId, depth) {
 		for (const {id, summary} of this.conversations.get(projectId) || []) {
 			this.rows.push(this.conversationRow({depth, folderId, id, pinned: false, projectId, summary}));
 		}
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	appendPinnedSection() {
 		if (this.pinned.length) {
 			this.rows.push({kind: 'section', key: 'pinned', name: 'Pinned conversations', depth: 0});
@@ -109,6 +177,10 @@ class FolderRowBuilder {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 * @used-by {@link FolderRowBuilder#visitFolder}
+	 */
 	appendProjectRows(folderId, depth) {
 		for (const project of this.assigned.get(folderId) || []) {
 			const key = `project:${project.id}`;
@@ -122,12 +194,19 @@ class FolderRowBuilder {
 	// 2026-10-28
 	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/12
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	appendStandaloneSection() {
 		if (!this.hideStandaloneConversations && this.conversations.has(null)) {
 			this.rows.push({kind: 'section', key: 'standalone', name: 'Conversations', depth: 0});
 			this.appendConversationRows(null, null, 0);
 		}
 	}
+	/**
+	 * @used-by {@link buildRows}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	build() {
 		this.indexFolders();
 		this.indexProjects();
@@ -140,14 +219,24 @@ class FolderRowBuilder {
 		this.appendStandaloneSection();
 		return this.rows;
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#appendConversationRows}
+	 * @used-by {@link FolderRowBuilder#appendPinnedSection}
+	 */
 	conversationRow({depth, folderId, id, pinned, projectId, summary}) {
 		return {kind: 'conversation', key: `conversation:${id}`, id, projectId, folderId, depth, name: summaryName(summary), status: summary.status || '', running: active(summary), summary, ...(pinned ? {pinned: true} : {})};
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	indexFolders() {
 		const {byId, children} = indexTree(this.data.folders, {sort: true, validate: true});
 		this.ids = byId;
 		this.children = children;
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	indexProjects() {
 		for (const project of this.projects) {
 			if (!project.id || this.projectIds.has(project.id)) {
@@ -163,6 +252,9 @@ class FolderRowBuilder {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	indexSummaries() {
 		for (const [id, summary] of this.summaries) {
 			if (this.isVisibleSummary(id, summary)) {
@@ -182,11 +274,19 @@ class FolderRowBuilder {
 	// 2026-10-28
 	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/12
+	/**
+	 * @used-by {@link FolderRowBuilder#indexProjects}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	isVisibleProject(project) {
 		return !project.archived
 			&& !(this.hideOutsideProject && 'outside-of-project' === project.id)
 			&& !(INTERNAL_PROJECT_ID === project.id && 'project-folders/folders' === project.name);
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#indexSummaries}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	isVisibleSummary(id, summary) {
 		return !summary.annotations?.archived
 			&& !summary.annotations?.isArchived
@@ -194,6 +294,9 @@ class FolderRowBuilder {
 			&& !(summary.trajectoryMetadata?.rootConversationId && id !== summary.trajectoryMetadata.rootConversationId)
 			&& !this.archivedProjectIds.has(summaryProject(summary));
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	markActiveFolders() {
 		for (const projectId of this.activeProjects) {
 			for (let folder = this.ids.get(this.data.projectFolderMap?.[projectId]); folder; folder = this.ids.get(folder.parentId)) {
@@ -201,6 +304,9 @@ class FolderRowBuilder {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	sortCollections() {
 		for (const list of this.assigned.values()) {
 			list.sort(compare);
@@ -209,6 +315,9 @@ class FolderRowBuilder {
 			list.sort((a, b) => timestamp(b.summary.lastModifiedTime) - timestamp(a.summary.lastModifiedTime) || a.id.localeCompare(b.id));
 		}
 	}
+	/**
+	 * @used-by {@link FolderRowBuilder#build}
+	 */
 	visitFolder(parentId, depth) {
 		for (const folder of this.children.get(parentId) || []) {
 			const key = `folder:${folder.id}`;
@@ -224,11 +333,34 @@ class FolderRowBuilder {
 		}
 	}
 }
+/**
+ * @used-by {@link FolderRowBuilder#conversationRow}
+ * @used-by {@link FolderRowBuilder#indexSummaries}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./browser-fixture.js').openFixture}
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @used-by {@link import('./cdp-runtime.js')} (FoldersStore#dispatch)
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#addFolder}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#assignProject}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#moveFolder}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#removeFolder}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#renameFolder}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#unassignProject}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const applyAction = (original, action) => new FolderActionDispatcher(original, action).apply();
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const applySummaryUpdate = (current, message) => {
 	if (!message || 'object' !== typeof message || Array.isArray(message)) {
 		throw Error('Invalid conversation stream message');
@@ -254,11 +386,25 @@ const applySummaryUpdate = (current, message) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#listAll}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const buildRows = options => new FolderRowBuilder(options).build();
+/**
+ * @used-by {@link FolderRowBuilder#sortCollections}
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#listProjects}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
 // 2026-11-13
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+/**
+ * @used-by {@link import('./folders-manager.js')}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const getDescendantIds = (folderId, folders = []) => {
 	const r = new Set();
 	const {children} = indexTree(folders);
@@ -273,6 +419,11 @@ const getDescendantIds = (folderId, folders = []) => {
 	collect(folderId);
 	return r;
 };
+/**
+ * @used-by {@link import('./folders-manager.js').FoldersCliManager#listProjects}
+ * @used-by {@link import('./folders-manager.js')}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const getFolderPath = (folderId, folders = []) => {
 	const parts = [];
 	const {byId} = indexTree(folders);
@@ -286,6 +437,14 @@ const getFolderPath = (folderId, folders = []) => {
 // 2026-11-14
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+/**
+ * @used-by {@link FolderRowBuilder#indexFolders}
+ * @used-by {@link getDescendantIds}
+ * @used-by {@link getFolderPath}
+ * @used-by {@link import('./folder-menu.js').folderPickerModel}
+ * @used-by {@link import('./folders-model.js')}
+ * @used-by {@link validateFolders}
+ */
 const indexTree = (folders = [], {compare: cmp = compare, excludedIds = null, sort = false, validate = false} = {}) => {
 	if (validate && !Array.isArray(folders)) {
 		throw Error('folders must be an array');
@@ -336,8 +495,21 @@ const indexTree = (folders = [], {compare: cmp = compare, excludedIds = null, so
 	}
 	return {byId, children};
 };
+/**
+ * @used-by {@link FolderRowBuilder#conversationRow}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const summaryName = summary => summary.annotations?.title || summary.summary || 'New conversation';
+/**
+ * @used-by {@link FolderRowBuilder#indexSummaries}
+ * @used-by {@link FolderRowBuilder#isVisibleSummary}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const summaryProject = summary => summary.trajectoryMetadata?.projectId || null;
+/**
+ * @used-by {@link FolderRowBuilder#sortCollections}
+ * @used-by {@link import('./folders-model.js')}
+ */
 const timestamp = value => 'string' === typeof value
 	? Date.parse(value) || 0
 	: value && 'object' === typeof value
@@ -346,6 +518,14 @@ const timestamp = value => 'string' === typeof value
 // 2026-11-14
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+/**
+ * @used-by {@link FolderActionDispatcher#apply}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @used-by {@link import('./cdp-runtime.js')} (FoldersStore#reload)
+ * @used-by {@link import('./folders-manager.js').persistConfig}
+ * @used-by {@link import('./folders-model.js')}
+ * @used-by {@link import('./verify.js')}
+ */
 const validateConfig = data => {
 	if (!data || 'object' !== typeof data || Array.isArray(data)) {
 		throw Error('Invalid folders configuration');
@@ -361,6 +541,11 @@ const validateConfig = data => {
 	}
 	return ids;
 };
+/**
+ * @used-by {@link import('./folders-manager.js')}
+ * @used-by {@link import('./folders-model.js')}
+ * @used-by {@link validateConfig}
+ */
 const validateFolders = folders => indexTree(folders, {validate: true}).byId;
 module.exports = {
 	FolderActionDispatcher, FolderRowBuilder, INTERNAL_PROJECT_ID,

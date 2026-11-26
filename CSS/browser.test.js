@@ -8,6 +8,9 @@ const test = require('node:test');
 const BROWSER_ARGS = ['--disable-background-networking', '--disable-renderer-backgrounding', '--no-first-run', '--no-default-browser-check'];
 const LONG_LINES = Array.from({length: 40}, (_, index) => `Line ${index + 1}: long user prompt text under elevated zoom`).join('\n');
 const SHORT_LINES = 'Line 1\nLine 2\nLine 3';
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const resolvePlaywright = () => {
 	let r = null;
 	const candidates = [path.join(__dirname, '../Upgrade/node_modules/playwright-core')];
@@ -31,6 +34,10 @@ const resolvePlaywright = () => {
 };
 const {chromium} = resolvePlaywright();
 const {styleSheet: cssStyleSheet} = require('./cdp-runtime');
+/**
+ * @used-by {@link getBrowser}
+ * @used-by {@link import('./browser.test.js')}
+ */
 const resolveLaunchOptions = () => {
 	let r = {args: BROWSER_ARGS, headless: true};
 	const envBrowser = process.env.FOLDERS_TEST_BROWSER;
@@ -67,6 +74,10 @@ const resolveLaunchOptions = () => {
 	return r;
 };
 let sharedBrowser = null;
+/**
+ * @used-by {@link import('./browser.test.js')}
+ * @used-by {@link openFixture}
+ */
 const getBrowser = async () => {
 	if (!sharedBrowser || !sharedBrowser.isConnected()) {
 		sharedBrowser = await chromium.launch(resolveLaunchOptions());
@@ -154,6 +165,11 @@ html, body, #root { height: 100%; margin: 0; font-family: system-ui, sans-serif;
 .toolbar-pill { height: 32px; display: inline-flex; align-items: center; padding: 4px 8px; }
 .attachment-thumb { width: 88px; height: 56px; background: #cbd5e1; border-radius: 6px; }
 `;
+/**
+ * @used-by {@link buildConversationHtml}
+ * @used-by {@link buildHomeHtml}
+ * @used-by {@link import('./browser.test.js')}
+ */
 const buildComposerMarkup = ({attachments = 0, text = '', topToolbar = false} = {}) => {
 	const topBarHtml = topToolbar
 		? `<div class="grid" style="grid-template-rows: 1fr;"><div class="min-h-0 overflow-hidden"><div class="h-fit"><div data-testid="input-box-bottom-toolbar" class="relative z-10 flex w-full items-center justify-between py-1 gap-2 pl-1 pr-2"><div class="flex items-center gap-1 min-w-0 flex-1"><button type="button" class="toolbar-pill">This Computer</button><button type="button" class="toolbar-pill">Harness</button><button type="button" class="toolbar-pill">main</button></div></div></div></div></div>`
@@ -166,8 +182,17 @@ const buildComposerMarkup = ({attachments = 0, text = '', topToolbar = false} = 
 		: '<p style="margin: 0;"><br></p>';
 	return `<div class="relative z-10 flex flex-col gap-1 min-h-0"><div class="contents"><div data-testid="agent-input-box" class="flex flex-col w-full shrink-0"><div class="surface-composer relative flex flex-col p-px rounded-2xl bg-card-border">${topBarHtml}<div class="surface-composer-card relative z-10 flex flex-col gap-0 p-1 rounded-2xl bg-card"><div class="relative w-full">${attachmentsHtml}<div class="w-full rounded-lg"><div class="relative w-full"><div class="relative w-full"><div contenteditable="true" aria-label="Message input" class="max-h-300 rounded-md overflow-x-hidden overflow-y-auto leading-6 p-2" style="white-space: pre-wrap; word-break: break-word;">${linesHtml}</div><p class="pointer-events-none absolute left-2 right-2 top-2" style="margin: 0;">Ask anything</p><div data-mention-menu="" class="absolute left-0 bottom-full" style="height: 60px; width: 200px;"></div></div></div></div></div><div class="agy-composer-footer flex w-full items-center justify-between gap-1 p-0.5"><div class="flex min-w-0 flex-1 items-center gap-1"><button type="button" aria-label="Add context" class="w-7 h-7 rounded-full">+</button><button type="button" data-testid="model-selector-trigger">Gemini 4 Neon</button></div><div class="shrink-0 flex items-center gap-1"><button type="button" data-testid="permissions-selector-trigger">Turbo</button><button type="button" aria-label="Send message" data-testid="send-button" class="agy-send-button flex items-center justify-center w-7 h-7 rounded-full bg-primary">-></button></div></div></div></div></div></div></div>`;
 };
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const buildHomeHtml = options => `<div class="shell"><div class="chrome-header"></div><div class="pane-host"><div class="agy-home relative isolate w-full h-full flex"><div data-media-drop-scope="" class="w-full h-full flex flex-col items-center overflow-hidden"><div class="w-full flex-1 min-h-0 overflow-y-auto flex flex-col items-center px-4 gap-6 pt-6 pb-4"><div aria-hidden="true" class="shrink min-h-0 -mb-6" style="flex-basis: clamp(72px, calc(32vh - 66px), 264px);"></div><div data-testid="home-greeting" class="flex flex-col items-center"><h1 class="home-greeting-title text-3xl">Welcome back, Dmitrii. Where should we pick up?</h1></div><div class="mt-auto flex flex-col gap-3 w-full"></div></div><div class="z-10 shrink-0 w-full flex flex-col items-center px-4 pb-6"><div class="flex flex-col gap-2 w-full" style="max-width: 768px;"><div class="relative w-full">${buildComposerMarkup({...options, topToolbar: true})}</div></div></div></div></div></div></div>`;
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const buildConversationHtml = ({paneHeight = null, ...options} = {}) => `<div class="shell"><div class="chrome-header"></div><div class="pane-host" ${paneHeight ? `style="flex: none; height: ${paneHeight}px;"` : ''}><div data-testid="conversation-view" data-media-drop-scope="" class="w-full flex h-full min-h-0 flex-col items-center relative overflow-y-auto"><div class="relative self-stretch flex-grow basis-0 min-h-0"><div data-testid="autoscroll-viewport" class="h-full overflow-y-auto"><p>Earlier assistant reply</p></div></div><div class="relative w-full px-4 pb-4 flex-shrink-0 flex flex-col items-center gap-2 max-h-full min-h-0"><div class="w-full flex flex-col min-h-0" style="max-width: 768px;"><div class="flex flex-col w-full gap-2 min-h-0"><div class="flex flex-col w-full gap-2 min-h-0">${buildComposerMarkup({...options, topToolbar: false})}</div></div></div></div></div></div></div>`;
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const openFixture = async (context, {html, viewport}) => {
 	const browser = await getBrowser();
 	const browserContext = await browser.newContext({viewport});
@@ -177,6 +202,9 @@ const openFixture = async (context, {html, viewport}) => {
 	await page.addStyleTag({content: cssStyleSheet()});
 	return page;
 };
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const measureLayout = async page => page.evaluate(() => {
 	const rect = selector => {
 		const el = document.querySelector(selector);

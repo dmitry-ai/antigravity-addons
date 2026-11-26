@@ -12,6 +12,15 @@ const toolsRoot = path.resolve(__dirname, '..');
 // 2026-10-13
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
+/**
+ * @used-by {@link import('../Titlebar-Badges/badges.test.js')}
+ * @used-by {@link import('./cdp-companion.js').Companion#loadModules}
+ * @used-by {@link import('./cdp-companion.js').runtimeVersion}
+ * @used-by {@link import('./registry.js')}
+ * @used-by {@link import('./runtime-health.js').inspectRuntime}
+ * @used-by {@link import('./test-registry.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ */
 const discover = (root = toolsRoot) => {
 	const r = [];
 	const ids = new Set();
@@ -75,6 +84,10 @@ const discover = (root = toolsRoot) => {
 // 2026-10-13
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
+/**
+ * @used-by {@link discover}
+ * @used-by {@link import('./registry.js')}
+ */
 const resolveFile = (code, relative) => {
 	const r = path.resolve(code, relative);
 	if (!r.startsWith(`${path.resolve(code)}${path.sep}`) || !fs.statSync(r).isFile()) {

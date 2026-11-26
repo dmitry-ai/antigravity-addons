@@ -8,12 +8,19 @@ const defaultModel = require('./folders-model');
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
 class FolderStorageClient {
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link createReadConfig}
+	 */
 	constructor({model = defaultModel, onActionError = () => {}, onSchedule = () => {}, onStatus = () => {}, onUpdate = () => {}, state, window: win}) {
 		Object.assign(this, {win, model, state, onActionError, onSchedule, onStatus, onUpdate, configPromise: null, ready: false});
 	}
 	// 2026-11-14
 	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/38
+	/**
+	 * @used-by {@link FolderStorageClient#readConfig}
+	 */
 	applyPayload(payload) {
 		if (payload.error) {
 			throw Error(payload.error);
@@ -46,6 +53,13 @@ class FolderStorageClient {
 	// 2026-11-14
 	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/38
+	/**
+	 * @used-by {@link FoldersView#notifyUpdate}
+	 * @used-by {@link import('../Multi-Account/launcher.test.js')}
+	 * @used-by {@link import('../Multi-Account/update-guard.js')}
+	 * @used-by {@link import('../Multi-Account/update-runner.js').parseCliOptions}
+	 * @used-by {@link import('../Multi-Account/update-runner.js')}
+	 */
 	applyUpdate(view, newData, revision = '') {
 		const alreadyApplied = Boolean(revision && revision === this.state.revision);
 		view.data = newData;
@@ -64,6 +78,9 @@ class FolderStorageClient {
 			view.schedule();
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#loadViewState}
+	 */
 	handleViewStateEvent(event) {
 		try {
 			const values = event.detail.collapsed;
@@ -78,6 +95,9 @@ class FolderStorageClient {
 			this.onStatus('view-state', error.message);
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#loadViewState}
+	 */
 	async loadViewState() {
 		const saved = 'function' === typeof this.win?.__ANTIGRAVITY_TOOLS_REQUEST__ ? await this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'GET_VIEW_STATE'}) : {};
 		if (undefined === saved?.collapsed) {
@@ -95,6 +115,9 @@ class FolderStorageClient {
 		this.ready = true;
 		this.onStatus('view-state', null);
 	}
+	/**
+	 * @used-by {@link FoldersView#persist}
+	 */
 	persistViewState() {
 		if (this.ready && 'function' === typeof this.win?.__ANTIGRAVITY_TOOLS_REQUEST__) {
 			this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'SET_VIEW_STATE', body: {collapsed: [...this.state.collapsed]}}).catch(error => this.onStatus('view-state', error.message));
@@ -103,6 +126,9 @@ class FolderStorageClient {
 	// 2026-10-28
 	// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/10
+	/**
+	 * @used-by {@link FoldersView#postAction}
+	 */
 	async postAction(action, payload = {}) {
 		let r;
 		try {
@@ -125,6 +151,10 @@ class FolderStorageClient {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link FoldersView#readConfig}
+	 * @used-by {@link createReadConfig}
+	 */
 	readConfig() {
 		if (!this.configPromise) {
 			this.configPromise = (async () => {
@@ -144,12 +174,18 @@ class FolderStorageClient {
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
 class FolderTreeRenderer {
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 */
 	constructor(view) {
 		this.view = view;
 	}
 	// 2026-11-13
 	// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/24
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 */
 	bindRoot(root) {
 		const v = this.view;
 		v.rootAbort?.abort();
@@ -192,6 +228,9 @@ class FolderTreeRenderer {
 		});
 		v.drag.bind(root);
 	}
+	/**
+	 * @used-by {@link FoldersView#mount}
+	 */
 	buildPanel(nativeList) {
 		const v = this.view;
 		Object.assign(v, {nativeList, nativePaddingTop: nativeList.style.paddingTop, canvas: v.element('div', 'fg-canvas')});
@@ -216,6 +255,9 @@ class FolderTreeRenderer {
 			this.render();
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 */
 	buildToolbar() {
 		const v = this.view;
 		const folderButton = v.element('button', 'btn-create-folder', undefined, {
@@ -230,6 +272,9 @@ class FolderTreeRenderer {
 		const projectButton = v.element('button', '', '+', {attrs: {'aria-label': 'Create project'}, props: {title: 'Create project', onclick: () => v.dialogs.openCreateProject(v.detectCurrentFolderId())}});
 		return v.element('div', 'fg-toolbar', undefined, {children: [v.element('strong', '', 'Projects'), v.element('div', 'fg-actions', undefined, {children: [folderButton, nativeButton, projectButton]})]});
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#render}
+	 */
 	computeVisibleRange(totalRows) {
 		const {rowHeight, scroll} = this.view;
 		return {start: Math.max(0, Math.floor(scroll.scrollTop / rowHeight) - 8), end: Math.min(totalRows, Math.ceil((scroll.scrollTop + scroll.clientHeight) / rowHeight) + 8)};
@@ -237,6 +282,9 @@ class FolderTreeRenderer {
 	// 2026-11-13
 	// "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/27
+	/**
+	 * @used-by {@link FoldersView#detectCurrentFolderId}
+	 */
 	detectCurrentFolderId() {
 		const v = this.view;
 		const valid = id => id && v.getFolder(id) ? id : null;
@@ -253,6 +301,9 @@ class FolderTreeRenderer {
 		const hoverFolder = valid(v.hoveredFolderId) || (5000 > Date.now() - v.lastHoveredFolderTime ? valid(v.lastHoveredFolderId) : null);
 		return hoverFolder || focusedFolder || projectFolder(selectedPid) || valid(v.lastActiveFolderId) || projectFolder(v.lastActiveProjectId);
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 */
 	handleKeydown(event) {
 		const v = this.view;
 		if (!event.target.matches('input,textarea')) {
@@ -276,6 +327,10 @@ class FolderTreeRenderer {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 * @used-by {@link FolderTreeRenderer#toggleNativeMode}
+	 */
 	hideNativeSidebar() {
 		if (this.view.nativeList) {
 			this.view.nativeList.style.paddingTop = this.view.nativePaddingTop;
@@ -283,6 +338,12 @@ class FolderTreeRenderer {
 			this.view.nativeList.setAttribute('aria-hidden', 'true');
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 * @used-by {@link FolderTreeRenderer#handleKeydown}
+	 * @used-by {@link FolderTreeRenderer#reveal}
+	 * @used-by {@link FolderTreeRenderer#toggleNativeMode}
+	 */
 	render() {
 		const v = this.view;
 		if (!v.disposed && v.root?.isConnected && v.scroll) {
@@ -313,6 +374,9 @@ class FolderTreeRenderer {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#renderRow}
+	 */
 	renderConversationRow(el, row, selection) {
 		const v = this.view;
 		el.append(v.element('button', 'fg-label', undefined, {
@@ -321,6 +385,9 @@ class FolderTreeRenderer {
 			props: {onclick: () => v.adapter.navigate({projectId: row.projectId, conversationId: row.id}), oncontextmenu: event => v.menus.openConversationMenu(event, row)}
 		}));
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#renderRow}
+	 */
 	renderFolderRow(el, row) {
 		const v = this.view;
 		el.draggable = true;
@@ -330,6 +397,9 @@ class FolderTreeRenderer {
 			props: {onclick: () => v.toggle(row)}
 		})]}));
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#renderRow}
+	 */
 	renderProjectRow(el, row) {
 		const v = this.view;
 		const icon = v.element('span', row.running ? 'fg-icon fg-project-running' : 'fg-icon', undefined, {html: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3z"/></svg>'});
@@ -339,6 +409,9 @@ class FolderTreeRenderer {
 			props: {draggable: true, title: 'Project: ' + row.name, onclick: () => v.adapter.navigate({projectId: row.id})}
 		}));
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#render}
+	 */
 	renderRow(row, index) {
 		const v = this.view;
 		const selection = v.adapter.selection();
@@ -365,12 +438,19 @@ class FolderTreeRenderer {
 		}
 		return el;
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#render}
+	 */
 	restoreFocus(focused, focusKey) {
 		if (focusKey && focused && !focused.isConnected) {
 			const row = [...this.view.canvas.children].find(el => focusKey === el.dataset.foldersRow);
 			row?.querySelector(focused.classList.contains('fg-toggle') ? '.fg-toggle' : '.fg-label')?.focus({preventScroll: true});
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#toggleNativeMode}
+	 * @used-by {@link FoldersView#dispose}
+	 */
 	restoreNativeSidebar(paddingTop = this.view.nativePaddingTop) {
 		if (this.view.nativeList) {
 			this.view.nativeList.style.paddingTop = paddingTop;
@@ -378,6 +458,9 @@ class FolderTreeRenderer {
 			this.view.nativeList.removeAttribute('aria-hidden');
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#reveal}
+	 */
 	reveal(projectId, folderId) {
 		const v = this.view;
 		for (let folder = v.getFolder(folderId); folder; folder = v.getFolder(folder.parentId)) {
@@ -392,6 +475,9 @@ class FolderTreeRenderer {
 			this.render();
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#updateStatus}
+	 */
 	syncFaultBanner(message) {
 		const v = this.view;
 		const banner = v.root?.querySelector('.fg-state');
@@ -414,6 +500,9 @@ class FolderTreeRenderer {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildToolbar}
+	 */
 	toggleNativeMode(nativeButton) {
 		const v = this.view;
 		const native = !v.root.classList.contains('fg-native-mode');
@@ -438,6 +527,11 @@ class FolderTreeRenderer {
 // "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
 // https://github.com/dmitry-ai/antigravity-addons/issues/34
 class FoldersView {
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @used-by {@link installFoldersView}
+	 */
 	constructor(win = 'undefined' !== typeof window ? window : undefined, options = {}) {
 		this.win = win;
 		this.doc = options.document || win?.document || ('undefined' !== typeof document ? document : undefined);
@@ -468,18 +562,38 @@ class FoldersView {
 	// 2026-11-14
 	// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/39
+	/**
+	 * @used-by {@link FolderTreeRenderer#render}
+	 * @used-by {@link FoldersView#bindGlobalListeners}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	get activeMenu() {
 		return this.menus.activeMenu;
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#render}
+	 * @used-by {@link FoldersView#bindGlobalListeners}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	get activeModal() {
 		return this.dialogs.activeModal;
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	get storageReady() {
 		return this.storage.ready;
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	set storageReady(value) {
 		this.storage.ready = Boolean(value);
 	}
+	/**
+	 * @used-by {@link installFoldersView}
+	 * @uses {@link import('./folder-dialogs.js').FolderDialogController#close}
+	 */
 	bindGlobalListeners() {
 		const listen = (type, listener, capture = false) => this.win.addEventListener(type, listener, {capture, signal: this.lifetime.signal});
 		listen('click', e => {
@@ -510,9 +624,19 @@ class FoldersView {
 			}
 		}, true);
 	}
+	/**
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @uses {@link FolderTreeRenderer#detectCurrentFolderId}
+	 */
 	detectCurrentFolderId() {
 		return this.renderer.detectCurrentFolderId();
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @uses {@link import('./folder-dialogs.js').FolderDialogController#close}
+	 */
 	dispose() {
 		if (this.scroll && this.win) {
 			this.win.__FOLDERS_RESTORE_SCROLL__ = this.scroll.scrollTop;
@@ -539,6 +663,25 @@ class FoldersView {
 	// 2026-11-14
 	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/44
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 * @used-by {@link FolderTreeRenderer#buildToolbar}
+	 * @used-by {@link FolderTreeRenderer#renderConversationRow}
+	 * @used-by {@link FolderTreeRenderer#renderFolderRow}
+	 * @used-by {@link FolderTreeRenderer#renderProjectRow}
+	 * @used-by {@link FolderTreeRenderer#renderRow}
+	 * @used-by {@link FolderTreeRenderer#syncFaultBanner}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateFolder}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateProject}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openModal}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openText}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#populateFolderSelect}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#appendFolderTree}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#createFolderTreeRow}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#createMenuItemRow}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#show}
+	 */
 	element(tag, className, text, {attrs, children, dataset, html, on, props, style} = {}) {
 		const el = this.doc.createElement(tag);
 		if (className) {
@@ -578,18 +721,45 @@ class FoldersView {
 		}
 		return el;
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateFolder}
+	 * @used-by {@link import('./folder-drag.js').SidebarDragController#executeDrop}
+	 */
 	expandFolder(folderId) {
 		if (folderId && this.state.collapsed.delete(`folder:${folderId}`)) {
 			this.persist();
 			this.render();
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#bindRoot}
+	 * @used-by {@link FolderTreeRenderer#detectCurrentFolderId}
+	 * @used-by {@link FolderTreeRenderer#reveal}
+	 * @used-by {@link FoldersView#bindGlobalListeners}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateFolder}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateProject}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openRenameFolder}
+	 * @used-by {@link import('./folder-drag.js').SidebarDragController#canDropOnTarget}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openMoveFolderMenu}
+	 */
 	getFolder(id) {
 		return Array.isArray(this.data?.folders) ? this.data.folders.find(f => id === f.id) || null : null;
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#bindRoot}
+	 * @used-by {@link FolderTreeRenderer#detectCurrentFolderId}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateFolder}
+	 * @used-by {@link import('./folder-menu.js').openProjectContextMenu}
+	 */
 	getProjectFolderId(projectId) {
 		return this.data?.projectFolderMap?.[projectId] || null;
 	}
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	handleProjects(projects) {
 		if (!this.state.savedView) {
 			for (const project of projects) {
@@ -609,24 +779,47 @@ class FoldersView {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 */
 	handleSummaries(summaries) {
 		this.state.haveSummaries = true;
 		this.state.summaries = summaries;
 		this.schedule();
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	inspect() {
 		return {...this.win?.__PROJECT_FOLDERS_STATUS__, rowCount: this.state.rows.length, renderedRows: this.canvas?.children.length || 0, collapsed: [...this.state.collapsed]};
 	}
+	/**
+	 * @used-by {@link FoldersView#mount}
+	 * @used-by {@link FoldersView#updateStatus}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	isOnboardingRoute() {
 		return /^\/onboarding(?:\/|$)/.test(this.win?.location?.pathname || '');
 	}
+	/**
+	 * @used-by {@link FoldersView#mount}
+	 * @used-by {@link FoldersView#updateStatus}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	isStandaloneRoute() {
 		return /^\/(?:artifact|s|settings-standalone|terminal-standalone)(?:\/|$)/.test(this.win?.location?.pathname || '');
 	}
+	/**
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	async loadViewState() {
 		await this.storage.loadViewState();
 		this.win?.addEventListener?.('antigravity-folders-view-state', event => this.storage.handleViewStateEvent(event), {signal: this.lifetime.signal});
 	}
+	/**
+	 * @used-by {@link FoldersView#start}
+	 */
 	mount() {
 		if (!this.disposed && !this.root?.isConnected && this.state.haveConfig && this.state.haveProjects) {
 			if (this.isOnboardingRoute() || this.isStandaloneRoute()) {
@@ -646,30 +839,70 @@ class FoldersView {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link FoldersView#mount}
+	 */
 	nativeSidebarPending() {
 		return this.mountDeadline > Date.now() && ((!this.doc.querySelector('[role="navigation"]') && !this.doc.querySelector('.agy-shell')) || !!this.doc.querySelector('[role="navigation"] [data-testid="sidebar-list-skeleton"]'));
 	}
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link createReadConfig}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./cdp-runtime.js')} (createFoldersRuntime)
+	 * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+	 */
 	notifyUpdate(newData, revision = '') {
 		this.storage.applyUpdate(this, newData, revision);
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#reveal}
+	 * @used-by {@link FoldersView#expandFolder}
+	 * @used-by {@link FoldersView#toggle}
+	 */
 	persist() {
 		this.storage.persistViewState();
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	postAction(action, payload = {}) {
 		return this.storage.postAction(action, payload);
 	}
+	/**
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	readConfig() {
 		return this.storage.readConfig();
 	}
+	/**
+	 * @used-by {@link FoldersView#expandFolder}
+	 * @used-by {@link FoldersView#schedule}
+	 * @used-by {@link FoldersView#toggle}
+	 */
 	render() {
 		this.renderer.render();
 	}
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./cdp-runtime.js')} (createFoldersRuntime)
+	 * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+	 * @used-by {@link import('./cdp-runtime.js')} (reportExpression)
+	 */
 	reportAction(error) {
 		this.updateStatus('action', error);
 	}
 	// 2026-11-14
 	// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/46
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	retargetObserver() {
 		if (this.observer && this.doc?.documentElement) {
 			this.observer.disconnect();
@@ -685,9 +918,20 @@ class FoldersView {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @uses {@link FolderTreeRenderer#reveal}
+	 */
 	reveal(projectId, folderId) {
 		this.renderer.reveal(projectId, folderId);
 	}
+	/**
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link FoldersView#handleProjects}
+	 * @used-by {@link FoldersView#handleSummaries}
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	schedule() {
 		if (!this.paintTimer) {
 			this.paintTimer = setTimeout(() => {
@@ -696,6 +940,10 @@ class FoldersView {
 			}, 40);
 		}
 	}
+	/**
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @used-by {@link installFoldersView}
+	 */
 	async start() {
 		this.win?.addEventListener?.('popstate', () => this.schedule(), {signal: this.lifetime.signal});
 		const MutationObserverCtor = this.win?.MutationObserver || ('undefined' !== typeof MutationObserver ? MutationObserver : null);
@@ -724,11 +972,21 @@ class FoldersView {
 			this.updateStatus('startup', error.message);
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#handleKeydown}
+	 * @used-by {@link FolderTreeRenderer#renderFolderRow}
+	 * @used-by {@link FolderTreeRenderer#renderRow}
+	 * @used-by {@link FolderTreeRenderer#toggleNativeMode}
+	 */
 	toggle(row) {
 		this.state.collapsed.has(row.key) ? this.state.collapsed.delete(row.key) : this.state.collapsed.add(row.key);
 		this.persist();
 		this.render();
 	}
+	/**
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	unmountDetached() {
 		if (this.root && (!this.root.isConnected || !this.nativeList?.isConnected)) {
 			this.sizing?.unobserve?.(this.scroll);
@@ -736,6 +994,16 @@ class FoldersView {
 			this.root = null;
 		}
 	}
+	/**
+	 * @used-by {@link FolderTreeRenderer#buildPanel}
+	 * @used-by {@link FolderTreeRenderer#render}
+	 * @used-by {@link FoldersView#constructor}
+	 * @used-by {@link FoldersView#mount}
+	 * @used-by {@link FoldersView#reportAction}
+	 * @used-by {@link FoldersView#start}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openConversationMenu}
+	 */
 	updateStatus(channel, error) {
 		if (!this.disposed) {
 			error ? this.state.errors.set(channel, error) : this.state.errors.delete(channel);
@@ -751,6 +1019,10 @@ class FoldersView {
 		}
 	}
 }
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./folders-client.js')}
+ */
 const createReadConfig = ({model = defaultModel, onUpdate, state, status, view, window: win}) => {
 	const client = new FolderStorageClient({model, onStatus: status, onUpdate: onUpdate || ((data, revision) => view?.notifyUpdate?.(data, revision)), state, window: win});
 	return () => client.readConfig();
@@ -758,6 +1030,10 @@ const createReadConfig = ({model = defaultModel, onUpdate, state, status, view, 
 // 2026-11-14
 // "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
 // https://github.com/dmitry-ai/antigravity-addons/issues/34
+/**
+ * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+ * @used-by {@link import('./folders-client.js')}
+ */
 const installFoldersView = () => {
 	let r;
 	if ('undefined' !== typeof window && !window.__PROJECT_FOLDERS_VIEW__) {

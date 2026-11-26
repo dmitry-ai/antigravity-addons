@@ -14,6 +14,10 @@ const defaultRunnerScript = path.join(__dirname, 'update-runner.js');
 // "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/29
 class UpdateGuard {
+	/**
+	 * @used-by {@link import('./launcher.test.js')}
+	 * @used-by {@link installUpdateGuard}
+	 */
 	constructor(appRequire, config, options = {}) {
 		Object.assign(this, {
 			appRequire,
@@ -44,9 +48,21 @@ class UpdateGuard {
 		this.onUpdateDownloaded = info => this.handleUpdateDownloaded(info);
 		this.onWebContentsCreated = (event, contents) => this.handleWebContentsCreated(event, contents);
 	}
+	/**
+	 * @used-by {@link UpdateGuard#getAutoInstallOnAppQuit}
+	 * @used-by {@link UpdateGuard#handleInstall}
+	 * @used-by {@link UpdateGuard#handleQuitAndInstall}
+	 * @used-by {@link UpdateGuard#handleQuit}
+	 * @used-by {@link UpdateGuard#status}
+	 */
 	activeSiblings() {
 		return state.activeSiblingProfiles(this.config, this.options);
 	}
+	/**
+	 * @used-by {@link UpdateGuard#getAutoInstallOnAppQuit}
+	 * @used-by {@link UpdateGuard#handleInstall}
+	 * @used-by {@link UpdateGuard#handleQuitAndInstall}
+	 */
 	blockForSiblings(siblings, action, {resetQuitFlag = false, restoreReady = false} = {}) {
 		let r = false;
 		if (siblings.length) {
@@ -63,15 +79,34 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 * @used-by {@link UpdateGuard#handleInstall}
+	 * @used-by {@link UpdateGuard#handleQuitAndInstall}
+	 * @used-by {@link UpdateGuard#spawnManagedUpdate}
+	 */
 	clearDeferredUpdate() {
 		state.clearDeferredManifest(this.deferredFile, this.fileSystem);
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	clearQuitting() {
 		this.quitting = false;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 * @used-by {@link UpdateGuard#handleQuit}
+	 * @used-by {@link UpdateGuard#handleUpdateDownloaded}
+	 * @used-by {@link UpdateGuard#recordDeferredUpdate}
+	 * @used-by {@link UpdateGuard#restoreReadyState}
+	 */
 	currentVersion() {
 		return this.electron.app?.getVersion?.() || '0.0.0';
 	}
+	/**
+	 * @used-by {@link import('./launcher.test.js')}
+	 */
 	dispose() {
 		const {app} = this.electron;
 		for (const [event, handler] of [['before-quit', this.onMarkQuitting], ['will-quit', this.onMarkQuitting], ['browser-window-focus', this.onClearQuitting], ['web-contents-created', this.onWebContentsCreated], ['quit', this.onQuit]]) {
@@ -101,6 +136,9 @@ class UpdateGuard {
 			delete globalThis.__ANTIGRAVITY_UPDATE_GUARD__;
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#patchAutoUpdater}
+	 */
 	getAutoInstallOnAppQuit() {
 		let r = this.configuredAutoInstall;
 		if (this.configuredAutoInstall && (this.quitting || Boolean(this.autoUpdater?.quitHandlerAdded)) && this.blockForSiblings(this.activeSiblings(), 'Deferred autoInstallOnAppQuit')) {
@@ -108,9 +146,18 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 * @used-by {@link UpdateGuard#handleUpdateAvailable}
+	 * @used-by {@link UpdateGuard#recordDeferredUpdate}
+	 * @used-by {@link UpdateGuard#restoreReadyState}
+	 */
 	getUpdater() {
 		return this.options.updater || state.resolveModule(this.appRequire, './updater');
 	}
+	/**
+	 * @used-by {@link UpdateGuard#patchAutoUpdater}
+	 */
 	handleInstall(isSilent = false, isForceRunAfter = false) {
 		let r = false;
 		if (!this.blockForSiblings(this.activeSiblings(), 'Blocked autoUpdater.install', {resetQuitFlag: true, restoreReady: true}) && !this.autoUpdater.quitAndInstallCalled) {
@@ -122,6 +169,9 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	handleQuit(_event, exitCode = 0) {
 		this.quitting = true;
 		if (0 === exitCode && !this.autoUpdater?.quitAndInstallCalled && !(this.autoUpdater?.quitHandlerAdded && this.configuredAutoInstall && this.autoUpdater?.installerPath) && !this.activeSiblings().length) {
@@ -131,6 +181,9 @@ class UpdateGuard {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#patchAutoUpdater}
+	 */
 	handleQuitAndInstall(isSilent = false, isForceRunAfter = false) {
 		let r = false;
 		const siblings = this.activeSiblings();
@@ -155,6 +208,9 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	handleUpdateAvailable() {
 		if (false !== this.autoUpdater?.autoDownload) {
 			setImmediate(() => {
@@ -165,15 +221,27 @@ class UpdateGuard {
 			});
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	handleUpdateDownloaded(info) {
 		if (info?.version && info.version !== this.currentVersion()) {
 			this.downloadedVersion = info.version;
 			this.recordDeferredUpdate(info.version);
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	handleWebContentsCreated(_event, contents) {
 		contents?.on?.('focus', this.onClearQuitting);
 	}
+	/**
+	 * @used-by {@link UpdateGuard#dispose}
+	 * @used-by {@link UpdateGuard#patchAutoUpdater}
+	 * @used-by {@link import('./launcher.test.js')}
+	 * @used-by {@link installUpdateGuard}
+	 */
 	install() {
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose?.();
 		state.silenceBrokenStdio(this.options.process || process);
@@ -185,15 +253,25 @@ class UpdateGuard {
 		globalThis.__ANTIGRAVITY_UPDATE_GUARD__ = this;
 		return this;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#blockForSiblings}
+	 * @used-by {@link UpdateGuard#spawnManagedUpdate}
+	 */
 	log(message) {
 		state.appendGuardLog(this.config.userDataDir, message, this.fileSystem);
 	}
+	/**
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	markQuitting() {
 		this.quitting = true;
 	}
 	// 2026-11-10
 	// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/21
+	/**
+	 * @used-by {@link UpdateGuard#install}
+	 */
 	patchAutoUpdater() {
 		this.configuredAutoInstall = Boolean(this.autoUpdater?.autoInstallOnAppQuit ?? true);
 		this.originalDescriptor = this.autoUpdater ? Object.getOwnPropertyDescriptor(this.autoUpdater, 'autoInstallOnAppQuit') : undefined;
@@ -226,6 +304,11 @@ class UpdateGuard {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#blockForSiblings}
+	 * @used-by {@link UpdateGuard#handleUpdateDownloaded}
+	 * @used-by {@link UpdateGuard#spawnManagedUpdate}
+	 */
 	recordDeferredUpdate(version) {
 		let r = null;
 		const targetVersion = version || this.downloadedVersion || this.getUpdater()?.getLastState?.()?.update?.version || state.readDeferredManifest(this.deferredFile, this.fileSystem)?.version || null;
@@ -235,6 +318,12 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#recordDeferredUpdate}
+	 * @used-by {@link UpdateGuard#restoreReadyState}
+	 * @used-by {@link UpdateGuard#spawnManagedUpdate}
+	 * @used-by {@link import('./launcher.test.js')}
+	 */
 	resolveInstaller(version) {
 		let r = null;
 		const direct = this.autoUpdater?.installerPath;
@@ -246,6 +335,10 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link UpdateGuard#blockForSiblings}
+	 * @used-by {@link UpdateGuard#constructor}
+	 */
 	restoreReadyState() {
 		if (this.downloadedVersion && this.downloadedVersion !== this.currentVersion() && this.resolveInstaller(this.downloadedVersion)) {
 			setImmediate(() => {
@@ -266,6 +359,10 @@ class UpdateGuard {
 	// 2026-11-10
 	// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/22
+	/**
+	 * @used-by {@link UpdateGuard#handleQuitAndInstall}
+	 * @used-by {@link import('./launcher.test.js')}
+	 */
 	showDeferredDialog(siblings) {
 		const {dialog, BaseWindow, BrowserWindow} = this.electron;
 		if (dialog?.showMessageBox) {
@@ -275,6 +372,13 @@ class UpdateGuard {
 			void (win ? dialog.showMessageBox(win, boxOptions) : dialog.showMessageBox(boxOptions));
 		}
 	}
+	/**
+	 * @used-by {@link UpdateGuard#handleInstall}
+	 * @used-by {@link UpdateGuard#handleQuitAndInstall}
+	 * @used-by {@link UpdateGuard#handleQuit}
+	 * @uses {@link import('./update-runner.js').applyUpdate}
+	 * @uses {@link import('./update-runner.js').parseCliOptions}
+	 */
 	spawnManagedUpdate({version = null, relaunchProfile = null} = {}) {
 		let r = false;
 		const installer = this.resolveInstaller(version);
@@ -317,6 +421,15 @@ class UpdateGuard {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link import('../Folders/antigravity-adapter.js')} (AntigravityAdapter#rpc)
+	 * @used-by {@link import('../Folders/antigravity-adapter.js')} (ConnectSummaryStream#readOnce)
+	 * @used-by {@link import('../Folders/browser.test.js')}
+	 * @used-by {@link import('../Folders/folders-model.js').FolderRowBuilder#conversationRow}
+	 * @used-by {@link import('../Folders/folders-model.js').active}
+	 * @used-by {@link import('../Upgrade/upgrade.js')}
+	 * @used-by {@link import('./launcher.test.js')}
+	 */
 	status() {
 		return {
 			id: this.config.id,
@@ -330,6 +443,12 @@ class UpdateGuard {
 		};
 	}
 }
+/**
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link import('./main-bootstrap.js').bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @used-by {@link import('./update-guard.js')}
+ */
 const installUpdateGuard = (appRequire, config, options = {}) => new UpdateGuard(appRequire, config, options).install();
 if (module === require.main) {
 	const runner = require('./update-runner');
@@ -344,6 +463,12 @@ if (module === require.main) {
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
 const exportsObject = {...state, UpdateGuard, installUpdateGuard};
+/**
+ * @uses {@link import('./update-runner.js').UpdateRunner#constructor}
+ * @uses {@link import('./update-runner.js').applyUpdate}
+ * @uses {@link import('./update-runner.js').parseCliOptions}
+ * @uses {@link import('./update-runner.js').repairShortcuts}
+ */
 for (const key of ['UpdateRunner', 'applyUpdate', 'parseCliOptions', 'repairShortcuts']) {
 	Object.defineProperty(exportsObject, key, {enumerable: true, get: () => require('./update-runner')[key]});
 }

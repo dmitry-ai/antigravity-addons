@@ -3,6 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const resolvePlaywright = () => {
 	let r = null;
 	const candidates = [path.join(__dirname, '../Upgrade/node_modules/playwright-core')];
@@ -28,6 +31,10 @@ const {chromium} = resolvePlaywright();
 const {styleSheet: cssStyleSheet} = require('../CSS/cdp-runtime');
 const {rendererSource, styleSheet: badgesStyleSheet} = require('./cdp-runtime');
 const BROWSER_ARGS = ['--disable-background-networking', '--disable-renderer-backgrounding', '--no-first-run', '--no-default-browser-check'];
+/**
+ * @used-by {@link getBrowser}
+ * @used-by {@link import('./browser.test.js')}
+ */
 const resolveLaunchOptions = () => {
 	let r = {args: BROWSER_ARGS, headless: true};
 	const envBrowser = process.env.FOLDERS_TEST_BROWSER;
@@ -64,6 +71,10 @@ const resolveLaunchOptions = () => {
 	return r;
 };
 let sharedBrowser = null;
+/**
+ * @used-by {@link import('./browser.test.js')}
+ * @used-by {@link openFixture}
+ */
 const getBrowser = async () => {
 	if (!sharedBrowser || !sharedBrowser.isConnected()) {
 		sharedBrowser = await chromium.launch(resolveLaunchOptions());
@@ -77,6 +88,9 @@ test.after(async () => {
 		await current.close().catch(() => {});
 	}
 });
+/**
+ * @used-by {@link import('./browser.test.js')}
+ */
 const openFixture = async (context, {badges = ['app-update'], updaterState = {type: 'ready', update: {version: '2.35.2'}}} = {}) => {
 	const browser = await getBrowser();
 	const browserContext = await browser.newContext({viewport: {width: 1000, height: 700}});

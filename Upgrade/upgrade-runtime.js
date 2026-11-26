@@ -5,6 +5,12 @@ const {inspectRuntime} = require('./runtime-health');
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link import('./upgrade-runtime.js')}
+ * @used-by {@link import('./upgrade.js')}
+ * @uses {@link import('../Folders/verify.js')}
+ * @uses {@link import('../Titlebar-Badges/verify.js')}
+ */
 const run = async (options = {}) => {
 	let r;
 	result: {

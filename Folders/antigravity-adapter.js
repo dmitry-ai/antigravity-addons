@@ -7,6 +7,10 @@ const defaultModel = require('./folders-model');
 // "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
 // https://github.com/dmitry-ai/antigravity-addons/issues/36
 class AntigravityAdapter {
+	/**
+	 * @used-by {@link createAdapter}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	constructor({window: win, fetch: request = win.fetch.bind(win), model = defaultModel, onProjects = () => {}, onSummaries = () => {}, onStatus = () => {}}) {
 		this.contract = 'antigravity-local-rpc-v2';
 		this.service = '/exa.language_server_pb.LanguageServerService/';
@@ -39,6 +43,10 @@ class AntigravityAdapter {
 			url: this.service + 'JetboxSubscribeToSummaries'
 		});
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateProject}
+	 */
 	async createProject({id, name, resources = []}) {
 		if (!id || !name.trim()) {
 			throw Error('Project id and name are required');
@@ -60,12 +68,18 @@ class AntigravityAdapter {
 		}
 		return id;
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	dispose() {
 		this.stopped = true;
 		this.stream.dispose();
 		this.lifetime.abort();
 		clearInterval(this.poll);
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#readProjects}
+	 */
 	async fetchProjects(force = false) {
 		const ids = this.validateProjectIds(await this.rpc('ListProjects', {}));
 		const idsKey = JSON.stringify(ids);
@@ -85,15 +99,33 @@ class AntigravityAdapter {
 		this.onStatus('projects', null);
 		return projects;
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#createProject}
+	 */
 	async hasProject(id) {
 		return (await this.readProjects()).some(project => id === project.id);
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#constructor}
+	 * @used-by {@link AntigravityAdapter#rpc}
+	 * @used-by {@link ConnectSummaryStream#readOnce}
+	 * @used-by {@link import('../Titlebar-Badges/badges-client.js').TitlebarBadgesController#bindObservers}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	headers(type) {
 		if ('string' !== typeof this.win.__APP_CONFIG__?.csrfToken) {
 			throw Error('Antigravity API contract: csrfToken is unavailable');
 		}
 		return {'content-type': type, 'x-codeium-csrf-token': this.win.__APP_CONFIG__.csrfToken, 'connect-protocol-version': '1'};
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openCreateProject}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openConversationMenu}
+	 * @used-by {@link import('./folder-menu.js').openProjectContextMenu}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderConversationRow}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderProjectRow}
+	 */
 	navigate({projectId, conversationId}) {
 		this.pushUrl(url => {
 			url.pathname = conversationId ? '/c/' + encodeURIComponent(conversationId) : '/';
@@ -111,6 +143,10 @@ class AntigravityAdapter {
 	// 2026-10-31
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-menu.js').openProjectContextMenu}
+	 */
 	openProjectSettings(projectId, screen) {
 		if (!projectId || 'string' !== typeof projectId) {
 			throw Error('Project id is required');
@@ -125,12 +161,22 @@ class AntigravityAdapter {
 	// 2026-11-14
 	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/44
+	/**
+	 * @used-by {@link AntigravityAdapter#navigate}
+	 * @used-by {@link AntigravityAdapter#openProjectSettings}
+	 */
 	pushUrl(mutate) {
 		const url = new URL(this.win.location.href);
 		mutate(url);
 		this.win.history.pushState(null, '', url.pathname + url.search);
 		this.win.dispatchEvent(new this.win.PopStateEvent('popstate', {state: null}));
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#hasProject}
+	 * @used-by {@link AntigravityAdapter#start}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openRenameProject}
+	 */
 	readProjects({force = false} = {}) {
 		if (!this.projectsPromise || force) {
 			const prev = this.projectsPromise;
@@ -143,6 +189,13 @@ class AntigravityAdapter {
 		}
 		return this.projectsPromise;
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#createProject}
+	 * @used-by {@link AntigravityAdapter#fetchProjects}
+	 * @used-by {@link AntigravityAdapter#updateConversation}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-dialogs.js').FolderDialogController#openRenameProject}
+	 */
 	async rpc(method, body) {
 		const signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(15000)]);
 		const response = await this.request(this.service + method, {
@@ -163,6 +216,11 @@ class AntigravityAdapter {
 		}
 		return result;
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#detectCurrentFolderId}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#renderRow}
+	 */
 	selection() {
 		const url = new URL(this.win.location.href);
 		const match = /^\/c\/([^/]+)\/?$/.exec(url.pathname);
@@ -171,6 +229,9 @@ class AntigravityAdapter {
 		// https://github.com/dmitry-ai/antigravity-addons/issues/54
 		return {projectId: url.searchParams.get('project') || url.searchParams.get('section'), conversationId: match ? decodeURIComponent(match[1]) : null};
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	async start() {
 		await this.readProjects({force: true});
 		void this.stream.watch();
@@ -180,6 +241,10 @@ class AntigravityAdapter {
 			}
 		}, 5000);
 	}
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openConversationMenu}
+	 */
 	async updateConversation(id, annotations) {
 		if (!this.summaries.get(id)) {
 			throw Error('Conversation is not present in the current snapshot');
@@ -192,6 +257,10 @@ class AntigravityAdapter {
 			this.onSummaries(this.summaries);
 		}
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#fetchProjects}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	validateProjectIds(listed) {
 		const ids = listed.projectIds || [];
 		if (!Array.isArray(ids) || ids.some(id => 'string' !== typeof id || !id)) {
@@ -205,6 +274,9 @@ class AntigravityAdapter {
 		}
 		return ids;
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#fetchProjects}
+	 */
 	validateProjects(ids, result) {
 		const projects = result.projects || [];
 		if (!Array.isArray(projects) || projects.some(project => !project || 'string' !== typeof project.id || !project.id || (undefined !== project.name && 'string' !== typeof project.name))) {
@@ -223,15 +295,26 @@ class AntigravityAdapter {
 // "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
 // https://github.com/dmitry-ai/antigravity-addons/issues/36
 class ConnectSummaryStream {
+	/**
+	 * @used-by {@link AntigravityAdapter#constructor}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	constructor({headers, lifetime, model, onStatus, onSummaries, request, url}) {
 		Object.assign(this, {headers, lifetime, model, onStatus, onSummaries, request, retryDelay: 1000, stopped: false, url});
 	}
+	/**
+	 * @used-by {@link ConnectSummaryStream#readOnce}
+	 */
 	appendChunk(pending, value) {
 		const buffer = new Uint8Array(pending.length + value.length);
 		buffer.set(pending);
 		buffer.set(value, pending.length);
 		return buffer;
 	}
+	/**
+	 * @used-by {@link ConnectSummaryStream#readOnce}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	decodeFrames(pending, onFrame) {
 		let r = pending;
 		while (5 <= r.length) {
@@ -252,9 +335,15 @@ class ConnectSummaryStream {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#dispose}
+	 */
 	dispose() {
 		this.stopped = true;
 	}
+	/**
+	 * @used-by {@link ConnectSummaryStream#readOnce}
+	 */
 	static encodeFrame(value = {}) {
 		const data = 'string' === typeof value ? new TextEncoder().encode(value) : value instanceof Uint8Array ? value : new TextEncoder().encode(JSON.stringify(value));
 		const frame = new Uint8Array(5 + data.length);
@@ -262,6 +351,9 @@ class ConnectSummaryStream {
 		frame.set(data, 5);
 		return frame;
 	}
+	/**
+	 * @used-by {@link ConnectSummaryStream#watch}
+	 */
 	async readOnce() {
 		const response = await this.request(this.url, {
 			method: 'POST',
@@ -293,6 +385,9 @@ class ConnectSummaryStream {
 			await reader.cancel().catch(() => {});
 		}
 	}
+	/**
+	 * @used-by {@link ConnectSummaryStream#watch}
+	 */
 	waitRetry() {
 		return this.lifetime.signal.aborted ? Promise.resolve() : new Promise(resolve => {
 			const guard = new AbortController();
@@ -300,6 +395,9 @@ class ConnectSummaryStream {
 			this.lifetime.signal.addEventListener('abort', () => (clearTimeout(timer), resolve()), {once: true, signal: guard.signal});
 		});
 	}
+	/**
+	 * @used-by {@link AntigravityAdapter#start}
+	 */
 	async watch() {
 		while (!this.stopped) {
 			try {
@@ -316,6 +414,13 @@ class ConnectSummaryStream {
 		}
 	}
 }
+/**
+ * @used-by {@link import('../Upgrade/test-helpers.js')}
+ * @used-by {@link import('./antigravity-adapter.js')}
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./folders-client.js').FoldersView#constructor}
+ * @used-by {@link import('./folders-client.js')}
+ */
 const createAdapter = options => new AntigravityAdapter(options);
 Object.assign(createAdapter, {AntigravityAdapter, ConnectSummaryStream});
 module.exports = createAdapter;

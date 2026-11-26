@@ -9,6 +9,9 @@ const {FakeCDP, createTempDir, mockProfileEndpoints, withEnv} = require('./test-
 // 2026-11-14
 // "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/37
+/**
+ * @used-by {@link import('./test-cdp-runtime.js')}
+ */
 const fixture = context => createTempDir(context, 'antigravity-cdp-');
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
@@ -339,7 +342,10 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	const {buildInspectExpression} = require('./runtime-health');
 	const upgradeFiles = fs.readdirSync(__dirname).filter(name => name.endsWith('.js') && !name.startsWith('test-'));
 	for (const name of upgradeFiles) {
-		const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
+		// 2026-11-26
+		// "Adopt navigable JSDoc cross-reference annotations across Antigravity Addons":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/71
+		const source = fs.readFileSync(path.join(__dirname, name), 'utf8').replace(/\/\*\*[\s\S]*?\*\//g, '');
 		assert.equal(/\.\.\/Folders\/|__PROJECT_FOLDERS_|__FOLDERS_/.test(source), false, `Unexpected Folders coupling in ${name}`);
 		// 2026-11-14
 		// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":

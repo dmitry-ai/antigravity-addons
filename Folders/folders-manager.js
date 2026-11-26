@@ -18,9 +18,16 @@ const {getDescendantIds, getFolderPath, validateFolders: validateTree} = model;
 // "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FoldersCliManager {
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	constructor({configPath = DEFAULT_CONFIG_PATH, fs: fileSystem = fs, logger = console, projectsDir = DEFAULT_PROJECTS_DIR} = {}) {
 		Object.assign(this, {configPath, fs: fileSystem, logger, projectsDir, revisions: new WeakMap()});
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	addFolder(input, parentQuery = null, color = '#10b981', configPath = this.configPath) {
 		const isObject = 'object' === typeof input && null !== input;
 		const name = String(isObject ? input.name : input).trim();
@@ -48,6 +55,9 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	assignProject(projQuery, folderQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
 			const project = this.requireProject(projQuery);
@@ -64,6 +74,11 @@ class FoldersCliManager {
 	// 2026-10-12
 	// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/4
+	/**
+	 * @used-by {@link FoldersCliManager#addFolder}
+	 * @used-by {@link FoldersCliManager#requireFolder}
+	 * @used-by {@link FoldersCliManager#resolveFolder}
+	 */
 	findFolder(folders = [], query) {
 		let r = null;
 		const qTrim = 'string' === typeof query ? query.trim() : '';
@@ -94,6 +109,10 @@ class FoldersCliManager {
 	// 2026-11-14
 	// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/31
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	listAll(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		const projectMap = new Map();
@@ -134,6 +153,10 @@ class FoldersCliManager {
 	// 2026-10-12
 	// "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under shared folders.json":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/5
+	/**
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	listProjects(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		this.logger.log('\n📋 All Antigravity Projects:\n');
@@ -143,6 +166,11 @@ class FoldersCliManager {
 		}
 		this.logger.log('');
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#listAll}
+	 * @used-by {@link FoldersCliManager#listProjects}
+	 * @used-by {@link FoldersCliManager#resolveProject}
+	 */
 	loadAntigravityProjects() {
 		const r = [];
 		try {
@@ -163,6 +191,9 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	moveFolder(query, newParentQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
 			const folder = this.requireFolder(data.folders, query);
@@ -178,6 +209,14 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#addFolder}
+	 * @used-by {@link FoldersCliManager#assignProject}
+	 * @used-by {@link FoldersCliManager#moveFolder}
+	 * @used-by {@link FoldersCliManager#removeFolder}
+	 * @used-by {@link FoldersCliManager#renameFolder}
+	 * @used-by {@link FoldersCliManager#unassignProject}
+	 */
 	mutateConfig(configPath, step) {
 		const data = this.readConfig(configPath);
 		const outcome = step(data);
@@ -189,6 +228,13 @@ class FoldersCliManager {
 	// 2026-10-28
 	// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/10
+	/**
+	 * @used-by {@link FoldersCliManager#listAll}
+	 * @used-by {@link FoldersCliManager#listProjects}
+	 * @used-by {@link FoldersCliManager#mutateConfig}
+	 * @used-by {@link FoldersCliManager#resolveFolder}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	readConfig(configPath = this.configPath) {
 		let r = {folders: [], projectFolderMap: {}};
 		if (this.fs.existsSync(configPath)) {
@@ -198,6 +244,9 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	removeFolder(query, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
 			const folder = this.requireFolder(data.folders, query);
@@ -212,6 +261,9 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	renameFolder(query, newName, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
 			const target = this.requireFolder(data.folders, query);
@@ -233,6 +285,12 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#assignProject}
+	 * @used-by {@link FoldersCliManager#moveFolder}
+	 * @used-by {@link FoldersCliManager#removeFolder}
+	 * @used-by {@link FoldersCliManager#renameFolder}
+	 */
 	requireFolder(folders, query, message = `❌ Folder "${query}" not found.`) {
 		const r = this.findFolder(folders, query);
 		if (!r) {
@@ -240,6 +298,10 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#assignProject}
+	 * @used-by {@link FoldersCliManager#unassignProject}
+	 */
 	requireProject(query) {
 		const r = this.resolveProject(query);
 		if (!r) {
@@ -247,9 +309,17 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	resolveFolder(query, configPath = this.configPath) {
 		return query ? this.findFolder(this.readConfig(configPath).folders, query) : null;
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#requireProject}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	resolveProject(query) {
 		let r = null;
 		if (query) {
@@ -272,12 +342,18 @@ class FoldersCliManager {
 	// 2026-11-14
 	// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/31
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	setEnabled(enabled, toolPath = path.join(__dirname, 'tool.json')) {
 		const tool = JSON.parse(this.fs.readFileSync(toolPath, 'utf8'));
 		tool.enabled = Boolean(enabled);
 		writeFileAtomic(toolPath, JSON.stringify(tool, null, '\t') + '\n', {sync: true});
 		return tool.enabled;
 	}
+	/**
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	unassignProject(projQuery, configPath = this.configPath) {
 		return this.mutateConfig(configPath, data => {
 			const project = this.requireProject(projQuery);
@@ -296,6 +372,10 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	/**
+	 * @used-by {@link FoldersCliManager#mutateConfig}
+	 * @used-by {@link import('./folders-manager.js')}
+	 */
 	writeConfig(data, configPath = this.configPath, {expectedHash = this.revisions.get(data)} = {}) {
 		this.revisions.set(data, persistConfig(configPath, data, {expectedHash, fs: this.fs}));
 	}
@@ -303,6 +383,12 @@ class FoldersCliManager {
 // 2026-11-14
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
+/**
+ * @used-by {@link FoldersCliManager#writeConfig}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @used-by {@link import('./cdp-runtime.js')} (FoldersStore#dispatch)
+ * @used-by {@link import('./folders-manager.js')}
+ */
 const persistConfig = (configPath, data, {expectedHash, fs: fileSystem = fs, validate = true} = {}) => {
 	if (validate) {
 		model.validateConfig(data);
@@ -320,8 +406,27 @@ const persistConfig = (configPath, data, {expectedHash, fs: fileSystem = fs, val
 	writeFileAtomic(configPath, text, {sync: true});
 	return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 };
+/**
+ * @used-by {@link FoldersCliManager#addFolder}
+ * @used-by {@link import('./folders-manager.js')}
+ */
 const slugify = name => 'folder-' + name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
 const defaultManager = new FoldersCliManager();
+/**
+ * @uses {@link FoldersCliManager#addFolder}
+ * @uses {@link FoldersCliManager#assignProject}
+ * @uses {@link FoldersCliManager#listAll}
+ * @uses {@link FoldersCliManager#listProjects}
+ * @uses {@link FoldersCliManager#moveFolder}
+ * @uses {@link FoldersCliManager#readConfig}
+ * @uses {@link FoldersCliManager#removeFolder}
+ * @uses {@link FoldersCliManager#renameFolder}
+ * @uses {@link FoldersCliManager#resolveFolder}
+ * @uses {@link FoldersCliManager#resolveProject}
+ * @uses {@link FoldersCliManager#setEnabled}
+ * @uses {@link FoldersCliManager#unassignProject}
+ * @uses {@link FoldersCliManager#writeConfig}
+ */
 const bound = Object.fromEntries([
 	'addFolder', 'assignProject', 'listAll', 'listProjects', 'moveFolder', 'readConfig',
 	'removeFolder', 'renameFolder', 'resolveFolder', 'resolveProject', 'setEnabled', 'unassignProject', 'writeConfig'

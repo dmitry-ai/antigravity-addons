@@ -13,6 +13,11 @@ const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/W
 // 2026-10-28
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link launch}
+ */
 const activateExisting = async (profile, options = {}) => {
 	let r = null;
 	const fileSystem = options.fs || fs;
@@ -87,10 +92,21 @@ const activateExisting = async (profile, options = {}) => {
 // 2026-11-14
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link launch}
+ * @uses {@link import('./main-bootstrap.js').bootstrap}
+ */
 const buildBootstrapExpression = settings => `require(${JSON.stringify(mainBootstrapPath)}).bootstrap(require,${JSON.stringify(settings)})`;
 // 2026-10-16
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link spawnOptions}
+ */
 const childEnvironment = (profile, original = process.env) => {
 	const realHome = original.ANTIGRAVITY_ORIGINAL_USERPROFILE || original.USERPROFILE;
 	const r = {...original};
@@ -108,6 +124,11 @@ const childEnvironment = (profile, original = process.env) => {
 // 2026-11-18
 // "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
 // https://github.com/dmitry-ai/antigravity-addons/issues/50
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link launch}
+ */
 const spawnOptions = (executable, profile, original = process.env) => ({
 	cwd: path.dirname(executable),
 	env: childEnvironment(profile, original),
@@ -118,6 +139,11 @@ const spawnOptions = (executable, profile, original = process.env) => ({
 // 2026-10-28
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+/**
+ * @used-by Multi-Account/launch.vbs
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./update-runner.js').UpdateRunner#run}
+ */
 const launch = async (id, extraArgs = [], options = {}) => {
 	result: {
 		// 2026-11-20
@@ -254,6 +280,12 @@ const launch = async (id, extraArgs = [], options = {}) => {
 		}
 	}
 };
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link import('./skills-manifest.test.js')}
+ * @used-by {@link launch}
+ */
 const prepareProfile = profile => {
 	// 2026-11-05
 	// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
@@ -272,6 +304,10 @@ const prepareProfile = profile => {
 	}
 	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
 };
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link launch}
+ */
 const readChromeShortcut = profile => {
 	const script = "$p=Join-Path ([Environment]::GetFolderPath('Desktop')) '" + profile.chromeShortcut + ".lnk'; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($p); @{executable=$s.TargetPath;command=$s.Arguments}|ConvertTo-Json -Compress";
 	const shortcut = JSON.parse(cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true}).replace(/^\uFEFF/, ''));
@@ -300,6 +336,10 @@ const readChromeShortcut = profile => {
 		debugPort
 	};
 };
+/**
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link launch}
+ */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (module === require.main) {
 	launch(process.argv[2] || 'A6', process.argv.slice(3)).catch(error => {

@@ -11,6 +11,10 @@ const manager = require('./folders-manager');
 const createFoldersRuntime = require('./cdp-runtime');
 const {FoldersStore} = createFoldersRuntime;
 const {FoldersView, createReadConfig} = require('./folders-client');
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link scratch}
+ */
 const config = () => ({
 	folders: [
 		{id: 'root', name: 'Work', parentId: null},
@@ -26,10 +30,16 @@ const projects = [
 	{id: 'p1', name: 'Project 2'},
 	{id: 'p3', name: 'Unassigned'}
 ];
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ */
 const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
 // 2026-11-14
 // "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/37
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ */
 const scratch = context => {
 	const directory = createTempDir(context, 'antigravity-folders-');
 	const filename = path.join(directory, 'folders.json');
@@ -166,6 +176,9 @@ test('Invalid external JSON retains the last valid tree and reports an error, th
 	assert.equal(store.error, null);
 	assert.equal(store.data.folders[0].name, 'External');
 });
+/**
+ * @used-by {@link import('./architecture.test.js')}
+ */
 const fakeWindow = () => {
 	const win = {
 		__APP_CONFIG__: {csrfToken: 'fixture-only'},

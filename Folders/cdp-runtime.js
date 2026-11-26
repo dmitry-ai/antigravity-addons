@@ -22,6 +22,10 @@ const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'m
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
 class FoldersStore extends EventEmitter {
+	/**
+	 * @used-by {@link createFoldersRuntime}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	constructor(filename) {
 		super();
 		Object.assign(this, {filename: path.resolve(filename), data: null, revision: '', statSignature: null, error: null});
@@ -40,6 +44,12 @@ class FoldersStore extends EventEmitter {
 	// 2026-11-14
 	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/44
+	/**
+	 * @used-by {@link createFoldersRuntime}
+	 * @used-by {@link import('../Upgrade/test-helpers.js').createMockDocument}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	dispatch(body) {
 		this.reloadIfChanged();
 		if (this.error) {
@@ -55,11 +65,21 @@ class FoldersStore extends EventEmitter {
 		this.emit('change', snap);
 		return {success: true, ...snap};
 	}
+	/**
+	 * @used-by {@link createFoldersRuntime}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	dispose() {
 		clearTimeout(this.timer);
 		this.watcher.close();
 		this.removeAllListeners();
 	}
+	/**
+	 * @used-by {@link FoldersStore#constructor}
+	 * @used-by {@link FoldersStore#reloadIfChanged}
+	 * @used-by {@link import('../Multi-Account/oauth-bridge.js').refreshInitialPage}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	reload() {
 		const previousRevision = this.revision;
 		const previousError = this.error;
@@ -78,13 +98,29 @@ class FoldersStore extends EventEmitter {
 		}
 		return this.snapshot();
 	}
+	/**
+	 * @used-by {@link FoldersStore#dispatch}
+	 * @used-by {@link createFoldersRuntime}
+	 * @used-by {@link import('./architecture.test.js')}
+	 */
 	reloadIfChanged() {
 		const signature = this.statKey();
 		return !this.error && this.data && signature && signature === this.statSignature ? this.snapshot() : this.reload();
 	}
+	/**
+	 * @used-by {@link FoldersStore#constructor}
+	 * @used-by {@link FoldersStore#dispatch}
+	 * @used-by {@link FoldersStore#reloadIfChanged}
+	 * @used-by {@link FoldersStore#reload}
+	 */
 	snapshot() {
 		return {schemaVersion: 2, revision: this.revision, data: this.data, error: this.error};
 	}
+	/**
+	 * @used-by {@link FoldersStore#dispatch}
+	 * @used-by {@link FoldersStore#reloadIfChanged}
+	 * @used-by {@link FoldersStore#reload}
+	 */
 	statKey() {
 		let r = null;
 		try {
@@ -98,6 +134,16 @@ class FoldersStore extends EventEmitter {
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by Folders/tool.json
+ * @used-by {@link import('../Upgrade/cdp-companion.js').Companion#loadModules}
+ * @used-by {@link import('./architecture.test.js')}
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @used-by {@link import('./verify.js')}
+ * @uses {@link import('./folders-client.js').FoldersView#notifyUpdate}
+ * @uses {@link import('./folders-client.js').FoldersView#reportAction}
+ */
 const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folders.json'), invalidate, report, stateRoot = path.join(__dirname, 'state')}) => {
 	const store = new FoldersStore(filename);
 	const viewFile = path.join(stateRoot, 'folders-view.json');
@@ -171,6 +217,17 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 // 2026-11-14
 // "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/31
+/**
+ * @used-by {@link createFoldersRuntime}
+ * @used-by {@link import('./browser-fixture.js').openFixture}
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @used-by {@link import('./verify.js')}
+ * @uses {@link import('./folders-client.js').FoldersView#dispose}
+ * @uses {@link import('./folders-client.js').FoldersView#notifyUpdate}
+ * @uses {@link import('./folders-client.js').FoldersView#reportAction}
+ * @uses {@link import('./folders-client.js').installFoldersView}
+ */
 const rendererSource = (data, {error = null, revision = ''} = {}) => {
 	// 2026-11-14
 	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
@@ -188,10 +245,21 @@ const rendererSource = (data, {error = null, revision = ''} = {}) => {
 	const errorAssignment = `window.__FOLDERS_CONFIG_ERROR__=${JSON.stringify(error)};`;
 	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(error)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${bundle}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
+/**
+ * @used-by {@link createFoldersRuntime}
+ * @used-by {@link import('./cdp-runtime.js')}
+ * @uses {@link import('./folders-client.js').FoldersView#reportAction}
+ */
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
 // 2026-11-14
 // "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 // https://github.com/dmitry-ai/antigravity-addons/issues/43
+/**
+ * @used-by {@link createFoldersRuntime}
+ * @used-by {@link import('./browser-fixture.js').openFixture}
+ * @used-by {@link import('./browser-fixture.js')}
+ * @used-by {@link import('./cdp-runtime.js')}
+ */
 const styleSheet = () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8');
 Object.assign(createFoldersRuntime, {FoldersStore, disposeExpression, filenames, inspectExpression, rendererSource, reportExpression, styleSheet});
 module.exports = createFoldersRuntime;

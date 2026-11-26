@@ -9,6 +9,12 @@ const {readProfiles} = require('./profiles');
 // 2026-11-14
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#activeSiblings)
+ * @used-by {@link import('./update-runner.js').UpdateRunner#run}
+ * @used-by {@link import('./update-runner.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const activeSiblingProfiles = (config, options = {}) => {
 	const fileSystem = options.fs || fs;
 	const alive = options.isPidAlive || isPidAlive;
@@ -45,7 +51,21 @@ const activeSiblingProfiles = (config, options = {}) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#log)
+ * @used-by {@link import('./update-runner.js').UpdateRunner#log}
+ * @used-by {@link import('./update-runner.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const appendGuardLog = (userDataDir, message, fileSystem = fs) => appendLauncherLog(userDataDir, message, {fs: fileSystem, prefix: '[UpdateGuard] '});
+/**
+ * @used-by {@link appendGuardLog}
+ * @used-by {@link import('./launcher.js').launch}
+ * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const appendLauncherLog = (userDataDir, message, {fs: fileSystem = fs, prefix = ''} = {}) => {
 	if (userDataDir) {
 		try {
@@ -58,14 +78,46 @@ const appendLauncherLog = (userDataDir, message, {fs: fileSystem = fs, prefix = 
 		catch {}
 	}
 };
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#clearDeferredUpdate)
+ * @used-by {@link import('./update-runner.js').UpdateRunner#run}
+ * @used-by {@link import('./update-runner.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const clearDeferredManifest = (deferredFile, fileSystem = fs) => {
 	try {
 		fileSystem.rmSync(deferredFile, {force: true});
 	}
 	catch {}
 };
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#spawnManagedUpdate)
+ * @used-by {@link import('./update-state.js')}
+ */
 const defaultNodeExecutable = () => fs.existsSync('C:/tools/nodejs/node.exe') ? 'C:/tools/nodejs/node.exe' : process.execPath;
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#constructor)
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#handleQuit)
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#recordDeferredUpdate)
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#resolveInstaller)
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#status)
+ * @used-by {@link import('./update-runner.js').UpdateRunner#constructor}
+ * @used-by {@link import('./update-runner.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const readDeferredManifest = (deferredFile, fileSystem = fs) => readJsonSafe(deferredFile, fileSystem);
+/**
+ * @used-by {@link import('./main-bootstrap.js').bootstrap}
+ * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('./main-bootstrap.js').ensureInitialWindowVisible}
+ * @used-by {@link import('./main-bootstrap.js').listManagedWindows}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @used-by {@link import('./oauth-bridge.js').refreshInitialPage}
+ * @used-by {@link import('./oauth-bridge.js')}
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#constructor)
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#getUpdater)
+ * @used-by {@link import('./update-state.js')}
+ */
 const resolveModule = (appRequire, id) => {
 	let r = null;
 	if ('function' === typeof appRequire) {
@@ -83,6 +135,12 @@ const resolveModule = (appRequire, id) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('./main-bootstrap.js').bootstrap}
+ * @used-by {@link import('./main-bootstrap.js')}
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#install)
+ * @used-by {@link import('./update-state.js')}
+ */
 const silenceBrokenStdio = (proc = process) => {
 	for (const name of ['stderr', 'stdout']) {
 		const stream = proc?.[name];
@@ -106,6 +164,12 @@ const silenceBrokenStdio = (proc = process) => {
 		}
 	}
 };
+/**
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#recordDeferredUpdate)
+ * @used-by {@link import('./update-runner.js').UpdateRunner#saveDeferred}
+ * @used-by {@link import('./update-runner.js')}
+ * @used-by {@link import('./update-state.js')}
+ */
 const writeDeferredManifest = ({deferredBy, deferredFile, fs: fileSystem = fs, installerPath, version}) => {
 	const r = {
 		version: version || 'pending',

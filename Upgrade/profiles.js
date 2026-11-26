@@ -13,6 +13,10 @@ const ESC_DOLLAR = '\0HARNESS_DOLLAR_LBRACE\0';
 const ESC_PCT = '\0HARNESS_PERCENT\0';
 const VAR_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TOKEN_RE = /\$\$\{|%%|\$\{([^}]*)\}|%([A-Za-z_][A-Za-z0-9_]*)%/g;
+/**
+ * @used-by {@link expandPathTemplate}
+ * @used-by {@link import('./profiles.js')}
+ */
 const lookupEnv = (name, env) => {
 	const upper = name.toUpperCase();
 	const hit = Object.entries(env ?? {}).find(([k, v]) => k.toUpperCase() === upper && String(v ?? '').trim());
@@ -37,6 +41,10 @@ const lookupEnv = (name, env) => {
 	}
 	return null;
 };
+/**
+ * @used-by {@link expandPathTemplate}
+ * @used-by {@link import('./profiles.js')}
+ */
 const normalizeExpandedPath = (raw, preserveTrailingSlash = false) => {
 	if (!raw) {
 		return raw;
@@ -54,6 +62,10 @@ const normalizeExpandedPath = (raw, preserveTrailingSlash = false) => {
 	}
 	return collapsed;
 };
+/**
+ * @used-by {@link import('./profiles.js')}
+ * @used-by {@link readProfiles}
+ */
 const expandPathTemplate = (raw, vars = {}, {env = process.env, _seen = new Set()} = {}) => {
 	if ('string' !== typeof raw || (!raw.includes('$') && !raw.includes('%'))) {
 		return 'string' === typeof raw ? (0 === _seen.size ? normalizeExpandedPath(raw, false) : raw) : raw;
@@ -106,10 +118,19 @@ const expandPathTemplate = (raw, vars = {}, {env = process.env, _seen = new Set(
 	}
 	return normalizeExpandedPath(expanded.replaceAll(ESC_DOLLAR, '${').replaceAll(ESC_PCT, '%'), false);
 };
+/**
+ * @used-by {@link import('./profiles.js')}
+ * @used-by {@link readProfiles}
+ * @used-by {@link resolvePathsVariables}
+ */
 const readJsonFile = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 // 2026-11-20
 // "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/60
+/**
+ * @used-by {@link import('./profiles.js')}
+ * @used-by {@link readProfiles}
+ */
 const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}) => {
 	const baseDir = filename ? path.dirname(path.resolve(filename)) : toolsRoot;
 	const explicit = pathsRegistry || env?.HARNESS_PATHS_FILE;
@@ -161,6 +182,13 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 // 2026-11-14
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+/**
+ * @used-by {@link import('../Multi-Account/profiles.js')}
+ * @used-by {@link import('./profile-endpoints.js').discoverEndpoints}
+ * @used-by {@link import('./profile-endpoints.js')}
+ * @used-by {@link import('./profiles.js')}
+ * @used-by {@link import('./test-cdp-runtime.js')}
+ */
 const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFile(), pathsRegistry, env = process.env} = {}) => {
 	if (!roaming) {
 		throw Error('APPDATA is required');
@@ -206,6 +234,10 @@ const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFi
 // 2026-11-14
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
+/**
+ * @used-by {@link import('../Multi-Account/profiles.js')}
+ * @used-by {@link import('./profiles.js')}
+ */
 const resolveConfigFile = (root = toolsRoot) => {
 	const folder = fs.existsSync(root) ? fs.readdirSync(root, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name)).find(item => item.isDirectory() && fs.existsSync(path.join(root, item.name, 'profiles.json'))) : null;
 	return folder ? path.join(root, folder.name, 'profiles.json') : path.join(root, 'profiles.json');

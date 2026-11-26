@@ -6,6 +6,10 @@ const registry = require('./registry');
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link import('./runtime-health.js')}
+ * @used-by {@link inspectRuntime}
+ */
 const buildInspectExpression = (expected, checks) => {
 	const checkList = `[${checks.map(item => `{id:${JSON.stringify(item.id)},run:()=>(${item.expr})}`).join(',')}]`;
 	return `(()=>{let r;const tools=window.__ANTIGRAVITY_TOOLS_STATUS__,expected=${JSON.stringify(expected)},checks=${checkList};if(!tools||expected.some(id=>!tools.tools.includes(id))){r={state:'missing',reason:'Tools runtime is not attached',tools};}else if(tools.pending.length){r={state:'deferred',reason:tools.pending,tools};}else{r={state:'ready',tools};for(const item of checks){const next=item.run()||{state:'missing',reason:item.id+' runtime is not attached'};r={...next,tools};if('ready'!==next.state){break;}}}return r;})()`;
@@ -13,6 +17,14 @@ const buildInspectExpression = (expected, checks) => {
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link import('./runtime-health.js')}
+ * @used-by {@link import('./upgrade-runtime.js').run}
+ * @used-by {@link import('./upgrade-runtime.js')}
+ * @uses {@link import('../CSS/cdp-runtime.js')}
+ * @uses {@link import('../Folders/cdp-runtime.js')}
+ * @uses {@link import('../Titlebar-Badges/cdp-runtime.js')}
+ */
 const inspectRuntime = async ({expectedTools, toolsRoot} = {}) => {
 	let r;
 	result: {

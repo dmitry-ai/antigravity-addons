@@ -11,6 +11,11 @@ const BRIDGE_GLOBAL = '__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__';
 // 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
 const BRIDGE_VERSION = 3;
 const NON_PAGE_TYPES = new Set(['backgroundPage', 'devtools', 'offscreen', 'webview']);
+/**
+ * @used-by {@link import('./main-debugger-bridge.js')}
+ * @used-by {@link installMainDebuggerBridge}
+ * @used-by {@link resolveInspector}
+ */
 const resolveAppModule = (appRequire, id) => {
 	let r = null;
 	if ('function' === typeof appRequire) {
@@ -40,6 +45,10 @@ const resolveAppModule = (appRequire, id) => {
 // 2026-11-20
 // "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
 // https://github.com/dmitry-ai/antigravity-addons/issues/57
+/**
+ * @used-by {@link deactivateInspector}
+ * @used-by {@link import('./main-debugger-bridge.js')}
+ */
 const resolveInspector = (appRequire, explicitInspector) => {
 	if (explicitInspector) {
 		return explicitInspector;
@@ -56,6 +65,12 @@ const resolveInspector = (appRequire, explicitInspector) => {
 // 2026-11-20
 // "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
 // https://github.com/dmitry-ai/antigravity-addons/issues/57
+/**
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js')}
+ * @used-by {@link import('./main-debugger-bridge.js')}
+ * @used-by {@link installMainDebuggerBridge}
+ */
 const deactivateInspector = (appRequire, explicitInspector) => {
 	const inspector = resolveInspector(appRequire, explicitInspector);
 	if (!inspector || 'function' !== typeof inspector.close) {
@@ -75,6 +90,13 @@ const deactivateInspector = (appRequire, explicitInspector) => {
 // 2026-11-19
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
+/**
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js')}
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js').refreshInitialPage}
+ * @used-by {@link import('../Multi-Account/oauth-bridge.js')}
+ * @used-by {@link import('./main-debugger-bridge.js')}
+ */
 const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, inspector: explicitInspector, utils: explicitUtils} = {}) => {
 	const existing = globalThis[BRIDGE_GLOBAL];
 	// 2026-11-20
@@ -384,6 +406,13 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 // 2026-11-20
 // "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
 // https://github.com/dmitry-ai/antigravity-addons/issues/57
+/**
+ * @used-by {@link import('./cdp-client.js').MainDebuggerClient#open}
+ * @used-by {@link import('./cdp-client.js')}
+ * @used-by {@link import('./main-debugger-bridge.js')}
+ * @used-by {@link import('./profile-endpoints.js').probeProfileEndpoint}
+ * @used-by {@link import('./profile-endpoints.js')}
+ */
 const ensureRemoteBridge = async (inspectorCdp, {bridgePath = __filename} = {}) => {
 	const expr = `(()=>{const k=${JSON.stringify(BRIDGE_GLOBAL)};if(${BRIDGE_VERSION}===globalThis[k]?.version)return true;const loader='function'===typeof require?require:process.getBuiltinModule('node:module').createRequire(${JSON.stringify(bridgePath)});try{const resolved=loader.resolve(${JSON.stringify(bridgePath)});delete loader.cache?.[resolved];}catch{}return ${BRIDGE_VERSION}===loader(${JSON.stringify(bridgePath)}).installMainDebuggerBridge().version;})()`;
 	const ok = await inspectorCdp.evaluate(expr);

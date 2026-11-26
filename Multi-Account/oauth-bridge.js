@@ -1,4 +1,8 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+/**
+ * @used-by {@link OAuthBridge#poll}
+ * @used-by {@link import('./oauth-bridge.js')}
+ */
 const callbackCode = (targets, pending) => {
 	let r = null;
 	result: {
@@ -41,6 +45,10 @@ const {resolveModule} = require('./update-state');
 // "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
 // https://github.com/dmitry-ai/antigravity-addons/issues/52
 const EMPTY_SHELL_EXPRESSION = "document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())";
+/**
+ * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('./oauth-bridge.js')}
+ */
 const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
 		throw Error('Only a managed secondary profile can refresh its initial page');
@@ -93,6 +101,9 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
 class OAuthBridge {
+	/**
+	 * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
+	 */
 	constructor({child, chromePort, open, report = () => {}, request = globalThis.fetch, onAuthenticated = () => {}, expectedEmail}) {
 		this.child = child;
 		this.chromePort = chromePort;
@@ -132,6 +143,9 @@ class OAuthBridge {
 		child.stdout?.on('data', chunk => this.consume(chunk.toString()));
 		child.on('exit', () => this.dispose());
 	}
+	/**
+	 * @used-by {@link OAuthBridge#constructor}
+	 */
 	consume(chunk) {
 		if (!this.stopped) {
 			this.buffer = (this.buffer + chunk).replace(/\x1b\[[0-9;]*m/g, '').slice(-32768);
@@ -165,6 +179,9 @@ class OAuthBridge {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link OAuthBridge#consume}
+	 */
 	async start(url) {
 		const redirect = new URL(url.searchParams.get('redirect_uri'));
 		if ('https://antigravity.google' !== redirect.origin || '/oauth-callback' !== redirect.pathname) {
@@ -178,6 +195,9 @@ class OAuthBridge {
 		this.report('Google sign-in opened in the configured Chrome profile');
 		void this.poll();
 	}
+	/**
+	 * @used-by {@link OAuthBridge#start}
+	 */
 	async poll() {
 		result: {
 			if (!this.pending || this.stopped) {
@@ -237,6 +257,10 @@ class OAuthBridge {
 			this.timer = setTimeout(() => this.poll(), 300);
 		}
 	}
+	/**
+	 * @used-by {@link OAuthBridge#consume}
+	 * @used-by {@link OAuthBridge#poll}
+	 */
 	fail(message) {
 		this.report(message);
 		if (this.pending && !this.child.stdin.destroyed) {
@@ -245,6 +269,9 @@ class OAuthBridge {
 		this.pending = null;
 		clearTimeout(this.timer);
 	}
+	/**
+	 * @used-by {@link OAuthBridge#constructor}
+	 */
 	dispose() {
 		this.stopped = true;
 		this.pending = null;

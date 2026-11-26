@@ -3,9 +3,24 @@
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
 class SidebarDragController {
+	/**
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @used-by {@link import('./folders-client.js').FoldersView#constructor}
+	 */
 	constructor(view) {
 		Object.assign(this, {view, activeDropEl: null, draggedElement: null, abortController: null});
 	}
+	/**
+	 * @used-by {@link import('../Multi-Account/main-bootstrap.js').configureSecondaryProfile}
+	 * @used-by {@link import('../Multi-Account/main-bootstrap.js')} (configureProtocolHandler)
+	 * @used-by {@link import('../Multi-Account/update-guard.js')} (UpdateGuard#patchAutoUpdater)
+	 * @used-by {@link import('../Multi-Account/window-identity.js').patchWindowTitle}
+	 * @used-by {@link import('../Titlebar-Badges/browser.test.js')} (openFixture)
+	 * @used-by {@link import('../Upgrade/test-cdp-runtime.js')}
+	 * @used-by {@link import('./antigravity-adapter.js')}
+	 * @used-by {@link import('./architecture.test.js')}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#bindRoot}
+	 */
 	bind(root) {
 		this.dispose();
 		this.abortController = new AbortController();
@@ -31,6 +46,11 @@ class SidebarDragController {
 		});
 		on('drop', e => this.executeDrop(e));
 	}
+	/**
+	 * @used-by {@link SidebarDragController#executeDrop}
+	 * @used-by {@link SidebarDragController#handleDragOver}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 */
 	canDropOnTarget(e, targetFolderId) {
 		let r = {allowed: false, blocked: false};
 		const isProjectDrag = hasDragType(e?.dataTransfer, 'application/antigravity-project-id') || !!this.view.draggedProjectId;
@@ -59,11 +79,17 @@ class SidebarDragController {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 */
 	dispose() {
 		this.abortController?.abort();
 		this.abortController = null;
 		this.setDropTarget(null);
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 */
 	endDrag() {
 		if (this.draggedElement) {
 			this.draggedElement.style.opacity = '';
@@ -76,6 +102,9 @@ class SidebarDragController {
 			this.view.isDragging = false;
 		}, 100);
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 */
 	async executeDrop(e) {
 		const zone = this.resolveDropZone(e.target);
 		this.setDropTarget(null);
@@ -95,6 +124,9 @@ class SidebarDragController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 */
 	handleDragOver(e) {
 		const zone = this.resolveDropZone(e.target);
 		if (!zone) {
@@ -118,12 +150,24 @@ class SidebarDragController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 * @used-by {@link SidebarDragController#executeDrop}
+	 * @used-by {@link SidebarDragController#handleDragOver}
+	 */
 	resolveDropZone(target) {
 		const el = target && 1 === target.nodeType ? target : target?.parentElement;
 		const toolbar = el?.closest('.fg-toolbar');
 		const row = toolbar ? null : el?.closest('[data-folders-row^="folder:"], [data-folders-row^="empty:"]');
 		return toolbar ? {el: toolbar, folderId: null} : row ? {el: row, folderId: row.dataset.folderId} : null;
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 * @used-by {@link SidebarDragController#dispose}
+	 * @used-by {@link SidebarDragController#endDrag}
+	 * @used-by {@link SidebarDragController#executeDrop}
+	 * @used-by {@link SidebarDragController#handleDragOver}
+	 */
 	setDropTarget(el) {
 		if (el !== this.activeDropEl) {
 			this.activeDropEl?.classList.remove('folder-drop-target');
@@ -131,6 +175,9 @@ class SidebarDragController {
 			this.activeDropEl?.classList.add('folder-drop-target');
 		}
 	}
+	/**
+	 * @used-by {@link SidebarDragController#bind}
+	 */
 	startDrag(e) {
 		if (e.altKey || e.target.closest?.('input')) {
 			e.preventDefault();
@@ -153,6 +200,11 @@ class SidebarDragController {
 		}
 	}
 }
+/**
+ * @used-by {@link SidebarDragController#canDropOnTarget}
+ * @used-by {@link import('./folder-drag.js')}
+ * @used-by {@link import('./folder-picker.test.js')}
+ */
 const hasDragType = (dataTransfer, type) => Array.from(dataTransfer?.types || []).includes(type);
 // 2026-11-14
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":

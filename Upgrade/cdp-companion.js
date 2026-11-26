@@ -12,11 +12,10 @@ const {discoverEndpoints} = require('./profile-endpoints');
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
 /**
- * @used-by {@link Companion#constructor}
+ * @used-by {@link import('./cdp-companion.js')}
  * @used-by {@link import('./runtime-control.js').ensureRunning}
- * @used-by {@link import('./runtime-control.js').readState}
  * @used-by {@link import('./runtime-control.js').stopRuntime}
- * @used-by {@link import('./test-cdp-runtime.js')}
+ * @used-by {@link import('./runtime-control.js')}
  */
 const resolveStateRoot = (env = process.env) => {
 	const explicit = String(env?.ANTIGRAVITY_TOOLS_STATE_DIR || '').trim();
@@ -27,6 +26,13 @@ const binding = '__antigravityToolsCall';
 // 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
+/**
+ * @used-by {@link Companion#constructor}
+ * @used-by {@link import('./cdp-companion.js')}
+ * @used-by {@link import('./runtime-control.js').ensureRunning}
+ * @used-by {@link import('./runtime-control.js')}
+ * @used-by {@link import('./test-cdp-runtime.js')}
+ */
 const runtimeVersion = () => {
 	// 2026-11-13
 	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
@@ -66,6 +72,10 @@ window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__=1;
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
 class Companion {
 	// 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
+	/**
+	 * @used-by {@link import('./cdp-companion.js')}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	constructor({root = resolveStateRoot()} = {}) {
 		this.root = root;
 		this.connections = new Map();
@@ -87,6 +97,11 @@ class Companion {
 	// 2026-10-28
 	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/12
+	/**
+	 * @used-by {@link Companion#tick}
+	 * @used-by {@link import('./main-debugger-bridge.js').installMainDebuggerBridge}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	async attach(target) {
 		const key = target.key || target.id;
 		// 2026-11-19
@@ -173,6 +188,11 @@ class Companion {
 	// 2026-11-13
 	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/25
+	/**
+	 * @used-by {@link Companion#attach}
+	 * @used-by {@link Companion#tick}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	async bootstrap(connection) {
 		if (!connection.booting && !connection.cdp.closed) {
 			connection.booting = true;
@@ -222,9 +242,17 @@ class Companion {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link Companion#loadModules}
+	 */
 	async broadcast(source) {
 		await Promise.allSettled([...this.connections.values()].filter(item => item.shell).map(item => item.cdp.evaluate(source)));
 	}
+	/**
+	 * @used-by {@link Companion#tick}
+	 * @used-by {@link import('./cdp-companion.js')}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	async dispose() {
 		if (!this.stopped) {
 			this.stopped = true;
@@ -254,6 +282,10 @@ class Companion {
 			fs.rmSync(path.join(this.root, 'instance.lock'), {force: true});
 		}
 	}
+	/**
+	 * @used-by {@link Companion#attach}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	async handleRequest(connection, event) {
 		if (event.name === binding && event.executionContextId === connection.contextId && connection.shell) {
 			const request = JSON.parse(event.payload);
@@ -277,12 +309,22 @@ class Companion {
 	// 2026-11-13
 	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/25
+	/**
+	 * @used-by {@link Companion#loadModules}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	invalidate() {
 		this.generation++;
 	}
 	// 2026-11-13
 	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/25
+	/**
+	 * @used-by {@link Companion#start}
+	 * @uses {@link import('../CSS/cdp-runtime.js')} (createCssRuntime)
+	 * @uses {@link import('../Folders/cdp-runtime.js')} (createFoldersRuntime)
+	 * @uses {@link import('../Titlebar-Badges/cdp-runtime.js')} (createTitlebarBadgesRuntime)
+	 */
 	loadModules() {
 		for (const tool of registry.discover()) {
 			if (!tool.cdp) {
@@ -309,6 +351,11 @@ class Companion {
 			this.modules.set(tool.id, runtime);
 		}
 	}
+	/**
+	 * @used-by Upgrade/run-companion.ps1
+	 * @used-by {@link import('./cdp-companion.js')}
+	 * @used-by {@link import('./runtime-control.js').ensureRunning}
+	 */
 	async start() {
 		let r = false;
 		result: {
@@ -358,6 +405,10 @@ class Companion {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link Companion#start}
+	 * @used-by {@link import('./test-cdp-runtime.js')}
+	 */
 	async tick() {
 		result: {
 			const controlFile = path.join(this.root, 'control.json');
@@ -437,6 +488,11 @@ class Companion {
 	// 2026-11-14
 	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/38
+	/**
+	 * @used-by {@link Companion#dispose}
+	 * @used-by {@link Companion#start}
+	 * @used-by {@link Companion#tick}
+	 */
 	writeState(state, extra = {}, {throttleMs = 0} = {}) {
 		const signature = JSON.stringify({
 			state,

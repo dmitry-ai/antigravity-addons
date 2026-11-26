@@ -19,6 +19,9 @@ const folders = [
 // 2026-11-13
 // "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
 // https://github.com/dmitry-ai/antigravity-addons/issues/24
+/**
+ * @used-by {@link import('./folder-picker.test.js')}
+ */
 const modelFor = (selectedId, excludedIds) => folderPickerModel(folders, selectedId, excludedIds);
 // 2026-10-18
 // "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":

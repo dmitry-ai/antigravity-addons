@@ -18,7 +18,20 @@ const UPDATER_LABELS = {
 	ready: 'Restart to Update',
 	updating: 'Installing Update'
 };
+/**
+ * @used-by {@link TitlebarBadgesController#findAppMenuWrap}
+ * @used-by {@link collectAnnouncementLinks}
+ * @used-by {@link collectAnnouncementSegments}
+ * @used-by {@link collectElementText}
+ * @used-by {@link extractAnnouncement}
+ * @used-by {@link extractBadgeLabel}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const cleanText = value => String(value || '').replace(/\s+/g, ' ').replace(/\s*→\s*$/, '').trim();
+/**
+ * @used-by {@link extractAnnouncement}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const collectAnnouncementLinks = el => {
 	const r = [];
 	for (const anchor of el.querySelectorAll('a[href]')) {
@@ -30,6 +43,10 @@ const collectAnnouncementLinks = el => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link extractAnnouncement}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const collectAnnouncementSegments = (node, dismissButton, out) => {
 	if (!node || node === dismissButton || 'STYLE' === node.tagName || 'SVG' === node.tagName) {
 		return;
@@ -67,6 +84,10 @@ const collectAnnouncementSegments = (node, dismissButton, out) => {
 		}
 	}
 };
+/**
+ * @used-by {@link extractBadgeLabel}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const collectElementText = el => {
 	const parts = [];
 	const visit = node => {
@@ -99,6 +120,10 @@ const collectElementText = el => {
 	visit(el);
 	return cleanText(parts.join(' '));
 };
+/**
+ * @used-by {@link extractTitlebarBadges}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const extractAnnouncement = el => {
 	const dismissButton = el.querySelector('button[aria-label*="Dismiss"], button[aria-label*="dismiss"], button');
 	const segments = [];
@@ -118,6 +143,10 @@ const extractAnnouncement = el => {
 		version: ''
 	};
 };
+/**
+ * @used-by {@link extractTitlebarBadges}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const extractBadgeLabel = (el, {testId, updaterState}) => {
 	let r = collectElementText(el);
 	if (!r) {
@@ -131,6 +160,12 @@ const extractBadgeLabel = (el, {testId, updaterState}) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link TitlebarBadgesController#inspect}
+ * @used-by {@link TitlebarBadgesController#sync}
+ * @used-by {@link import('./badges-client.js')}
+ * @used-by {@link import('./badges.test.js')}
+ */
 const extractTitlebarBadges = (doc, {updaterState = null} = {}) => {
 	const actionItems = [];
 	const announcements = [];
@@ -190,6 +225,11 @@ const extractTitlebarBadges = (doc, {updaterState = null} = {}) => {
 	}
 	return [...actionItems, ...announcements];
 };
+/**
+ * @used-by {@link extractBadgeLabel}
+ * @used-by {@link extractTitlebarBadges}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const isLoadingBadge = (el, {label = '', testId = '', updaterState = null} = {}) => {
 	const cls = String(el.className || '');
 	const hasSpinner = Boolean(el.querySelector?.('.update-spinner, .border-secondary-foreground, .border-primary-foreground'));
@@ -197,6 +237,10 @@ const isLoadingBadge = (el, {label = '', testId = '', updaterState = null} = {})
 	const updaterLoading = APP_UPDATE_TEST_ID === testId && !explicitActionLabel && ['downloading', 'updating'].includes(updaterState?.type);
 	return cls.includes('cursor-default') || cls.includes('pointer-events-none') || hasSpinner || updaterLoading || /^(downloading|installing|updating)/i.test(label);
 };
+/**
+ * @used-by {@link extractTitlebarBadges}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const isNormalToolbarButton = el => {
 	let r = false;
 	if ('BUTTON' === el.tagName) {
@@ -205,7 +249,16 @@ const isNormalToolbarButton = el => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link extractBadgeLabel}
+ * @used-by {@link import('./badges-client.js')}
+ * @used-by {@link import('./badges.test.js')}
+ */
 const labelForUpdaterState = stateType => UPDATER_LABELS[stateType] || null;
+/**
+ * @used-by {@link TitlebarBadgesController#sync}
+ * @used-by {@link import('./badges-client.js')}
+ */
 const signatureFor = badges => JSON.stringify(badges.map(item => ({
 	clickable: item.clickable,
 	dismissable: Boolean(item.dismissButton),
@@ -220,6 +273,10 @@ const signatureFor = badges => JSON.stringify(badges.map(item => ({
 // "Relocate titlebar update and announcement badges into the Antigravity app menu":
 // https://github.com/dmitry-ai/antigravity-addons/issues/67
 class TitlebarBadgesController {
+	/**
+	 * @used-by {@link import('./badges.test.js')}
+	 * @used-by {@link installTitlebarBadges}
+	 */
 	constructor(win, {document: explicitDoc = null} = {}) {
 		Object.assign(this, {
 			bootObserver: null,
@@ -237,6 +294,9 @@ class TitlebarBadgesController {
 			win
 		});
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#sync}
+	 */
 	bindObservers() {
 		if (!this.disposed && 'function' === typeof this.win?.MutationObserver) {
 			const menuBar = this.doc.querySelector(MENU_BAR_SELECTOR);
@@ -278,6 +338,9 @@ class TitlebarBadgesController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#sync}
+	 */
 	buildAnnouncementRow(badge) {
 		const row = this.doc.createElement('div');
 		row.className = 'antigravity-relocated-announcement';
@@ -321,6 +384,9 @@ class TitlebarBadgesController {
 		}
 		return row;
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#sync}
+	 */
 	buildBadgeRow(badge, trigger) {
 		const wrap = this.doc.createElement('div');
 		const button = this.doc.createElement('button');
@@ -352,6 +418,10 @@ class TitlebarBadgesController {
 		wrap.appendChild(button);
 		return wrap;
 	}
+	/**
+	 * @used-by {@link import('./badges.test.js')}
+	 * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+	 */
 	dispose() {
 		if (!this.disposed) {
 			this.disposed = true;
@@ -379,6 +449,10 @@ class TitlebarBadgesController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#inspect}
+	 * @used-by {@link TitlebarBadgesController#sync}
+	 */
 	findAppMenuWrap() {
 		const menuBar = this.doc.querySelector(MENU_BAR_SELECTOR);
 		let wrap = null;
@@ -392,11 +466,17 @@ class TitlebarBadgesController {
 		}
 		return {dropdown, menuBar, trigger, wrap};
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#constructor}
+	 */
 	handleDocumentClick(event) {
 		if (!this.disposed && event?.target?.closest?.(MENU_BAR_SELECTOR)) {
 			this.schedule();
 		}
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#bindObservers}
+	 */
 	handleMutations(records) {
 		const ownOnly = records.length && records.every(record => {
 			const target = 1 === record.target?.nodeType ? record.target : record.target?.parentElement;
@@ -406,6 +486,9 @@ class TitlebarBadgesController {
 			this.schedule();
 		}
 	}
+	/**
+	 * @used-by {@link import('./badges.test.js')}
+	 */
 	inspect() {
 		let r;
 		if (this.isOnboardingRoute()) {
@@ -430,10 +513,20 @@ class TitlebarBadgesController {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#inspect}
+	 */
 	isOnboardingRoute() {
 		const pathname = String(this.win?.location?.pathname || '');
 		return '/onboarding' === pathname || pathname.startsWith('/onboarding/');
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#buildAnnouncementRow}
+	 * @used-by {@link TitlebarBadgesController#constructor}
+	 * @used-by {@link TitlebarBadgesController#handleDocumentClick}
+	 * @used-by {@link TitlebarBadgesController#handleMutations}
+	 * @used-by {@link TitlebarBadgesController#start}
+	 */
 	schedule() {
 		if (!this.disposed && !this.scheduled) {
 			this.scheduled = true;
@@ -451,6 +544,10 @@ class TitlebarBadgesController {
 			}
 		}
 	}
+	/**
+	 * @used-by {@link import('./badges.test.js')}
+	 * @used-by {@link installTitlebarBadges}
+	 */
 	start() {
 		this.doc.addEventListener?.('click', this.onDocumentClick, true);
 		this.win.addEventListener?.('popstate', this.onPopState);
@@ -474,6 +571,11 @@ class TitlebarBadgesController {
 		this.sync();
 		return this;
 	}
+	/**
+	 * @used-by {@link TitlebarBadgesController#schedule}
+	 * @used-by {@link TitlebarBadgesController#start}
+	 * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+	 */
 	sync() {
 		if (!this.disposed) {
 			this.bindObservers();
@@ -513,6 +615,10 @@ class TitlebarBadgesController {
 		}
 	}
 }
+/**
+ * @used-by {@link import('./badges-client.js')}
+ * @used-by {@link import('./cdp-runtime.js')} (rendererSource)
+ */
 const installTitlebarBadges = (win = globalThis) => {
 	win.__ANTIGRAVITY_TITLEBAR_BADGES__?.dispose?.();
 	const r = new TitlebarBadgesController(win).start();

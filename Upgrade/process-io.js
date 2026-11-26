@@ -5,6 +5,19 @@ const path = require('node:path');
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+/**
+ * @used-by {@link import('../Multi-Account/update-runner.js').UpdateRunner#constructor}
+ * @used-by {@link import('../Multi-Account/update-runner.js').UpdateRunner#run}
+ * @used-by {@link import('../Multi-Account/update-runner.js')}
+ * @used-by {@link import('../Multi-Account/update-state.js').activeSiblingProfiles}
+ * @used-by {@link import('../Multi-Account/update-state.js')}
+ * @used-by {@link import('./cdp-companion.js').Companion#start}
+ * @used-by {@link import('./cdp-companion.js')}
+ * @used-by {@link import('./process-io.js')}
+ * @used-by {@link import('./profile-endpoints.js')}
+ * @used-by {@link import('./runtime-control.js').alive}
+ * @used-by {@link import('./runtime-control.js')}
+ */
 const isPidAlive = pid => {
 	let r = false;
 	if (Number.isInteger(pid) && 0 < pid) {
@@ -18,6 +31,26 @@ const isPidAlive = pid => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('../Folders/cdp-runtime.js')}
+ * @used-by {@link import('../Folders/cdp-runtime.js')} (createFoldersRuntime)
+ * @used-by {@link import('../Multi-Account/launcher.js').activateExisting}
+ * @used-by {@link import('../Multi-Account/launcher.js').readChromeShortcut}
+ * @used-by {@link import('../Multi-Account/launcher.js')}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js')}
+ * @used-by {@link import('../Multi-Account/update-guard.js')}
+ * @used-by {@link import('../Multi-Account/update-guard.js')} (UpdateGuard#resolveInstaller)
+ * @used-by {@link import('../Multi-Account/update-state.js').activeSiblingProfiles}
+ * @used-by {@link import('../Multi-Account/update-state.js').readDeferredManifest}
+ * @used-by {@link import('../Multi-Account/update-state.js')}
+ * @used-by {@link import('./process-io.js')}
+ * @used-by {@link import('./profile-endpoints.js').probeProfileEndpoint}
+ * @used-by {@link import('./profile-endpoints.js')}
+ * @used-by {@link import('./runtime-control.js').readState}
+ * @used-by {@link import('./runtime-control.js')}
+ */
 const readJsonSafe = (filename, fileSystem = fs) => {
 	let r = null;
 	try {
@@ -28,6 +61,25 @@ const readJsonSafe = (filename, fileSystem = fs) => {
 	}
 	return r;
 };
+/**
+ * @used-by {@link import('../Folders/cdp-runtime.js')}
+ * @used-by {@link import('../Folders/cdp-runtime.js')} (createFoldersRuntime)
+ * @used-by {@link import('../Folders/folders-manager.js').FoldersCliManager#setEnabled}
+ * @used-by {@link import('../Folders/folders-manager.js').persistConfig}
+ * @used-by {@link import('../Folders/folders-manager.js')}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('../Multi-Account/main-bootstrap.js')}
+ * @used-by {@link import('../Multi-Account/skills-manifest.js').ensureSharedSkills}
+ * @used-by {@link import('../Multi-Account/skills-manifest.js')}
+ * @used-by {@link import('../Multi-Account/update-state.js').writeDeferredManifest}
+ * @used-by {@link import('../Multi-Account/update-state.js')}
+ * @used-by {@link import('./cdp-companion.js').Companion#writeState}
+ * @used-by {@link import('./cdp-companion.js')}
+ * @used-by {@link import('./process-io.js')}
+ * @used-by {@link import('./runtime-control.js').stopRuntime}
+ * @used-by {@link import('./runtime-control.js')}
+ */
 const writeFileAtomic = (filename, content, {beforeRename, fs: fileSystem = fs, sync = false} = {}) => {
 	const dir = path.dirname(filename);
 	fileSystem.mkdirSync(dir, {recursive: true});
@@ -56,6 +108,12 @@ const writeFileAtomic = (filename, content, {beforeRename, fs: fileSystem = fs, 
 // 2026-11-19
 // "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
 // https://github.com/dmitry-ai/antigravity-addons/issues/53
+/**
+ * @used-by {@link import('../Multi-Account/update-state.js').activeSiblingProfiles}
+ * @used-by {@link import('../Multi-Account/update-state.js')}
+ * @used-by {@link import('./process-io.js')}
+ * @used-by {@link import('./profile-endpoints.js')}
+ */
 const isLockfileHeld = (userDataDir, fileSystem = fs) => {
 	let r = false;
 	if (userDataDir) {

@@ -7,12 +7,27 @@ const {folderPickerModel} = require('./folder-menu');
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
 class FolderDialogController {
+	/**
+	 * @used-by {@link import('./folders-client.js').FoldersView#constructor}
+	 */
 	constructor(view) {
 		Object.assign(this, {view, activeModal: null, closeActiveModal: null});
 	}
+	/**
+	 * @used-by {@link import('./folders-client.js').FoldersView#bindGlobalListeners}
+	 * @used-by {@link import('./folders-client.js').FoldersView#dispose}
+	 */
 	close() {
 		this.closeActiveModal?.();
 	}
+	/**
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openFolderMenu}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openProjectMenu}
+	 * @used-by {@link import('./folder-menu.js').openProjectContextMenu}
+	 * @used-by {@link import('./folder-picker.test.js')}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#buildToolbar}
+	 * @used-by {@link import('./folders-client.js').FoldersView#bindGlobalListeners}
+	 */
 	openCreateFolder(projectId = null, explicitParentId = undefined) {
 		const targetParentId = undefined !== explicitParentId ? explicitParentId : projectId ? this.view.getProjectFolderId(projectId) || null : this.view.detectCurrentFolderId();
 		const parentFolder = targetParentId ? this.view.getFolder(targetParentId) : null;
@@ -75,6 +90,10 @@ class FolderDialogController {
 			}
 		});
 	}
+	/**
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openFolderMenu}
+	 * @used-by {@link import('./folders-client.js').FolderTreeRenderer#buildToolbar}
+	 */
 	openCreateProject(folderId) {
 		let createdId;
 		let directory;
@@ -118,6 +137,11 @@ class FolderDialogController {
 			}
 		});
 	}
+	/**
+	 * @used-by {@link FolderDialogController#openCreateFolder}
+	 * @used-by {@link FolderDialogController#openCreateProject}
+	 * @used-by {@link FolderDialogController#openText}
+	 */
 	openModal({ariaLabel, buildBody, onClose, onSubmit, submitLabel = 'Save', title}) {
 		this.view.menus?.close();
 		let r = null;
@@ -170,6 +194,10 @@ class FolderDialogController {
 		}
 		return r;
 	}
+	/**
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openFolderMenu}
+	 * @used-by {@link import('./folders-client.js').FoldersView#bindGlobalListeners}
+	 */
 	openRenameFolder(folderId) {
 		const folder = this.view.getFolder(folderId);
 		if (folder) {
@@ -183,6 +211,9 @@ class FolderDialogController {
 			});
 		}
 	}
+	/**
+	 * @used-by {@link import('./folder-menu.js').openProjectContextMenu}
+	 */
 	openRenameProject(id) {
 		const project = this.view.state.projects.find(item => id === item.id);
 		if (project) {
@@ -195,6 +226,11 @@ class FolderDialogController {
 			});
 		}
 	}
+	/**
+	 * @used-by {@link FolderDialogController#openRenameFolder}
+	 * @used-by {@link FolderDialogController#openRenameProject}
+	 * @used-by {@link import('./folder-menu.js').FolderMenuController#openConversationMenu}
+	 */
 	openText(title, initialValue, submitAction) {
 		let input;
 		const modal = this.openModal({
@@ -208,6 +244,9 @@ class FolderDialogController {
 			input.select?.();
 		}
 	}
+	/**
+	 * @used-by {@link FolderDialogController#openCreateFolder}
+	 */
 	populateFolderSelect(select, selectedParentId = null) {
 		const {byId, children} = folderPickerModel(this.view.data?.folders, selectedParentId, new Set(), this.view.model);
 		select.replaceChildren(this.view.element('option', '', '📁 Root (no parent)', {props: {value: '', selected: !selectedParentId || !byId.has(selectedParentId)}}));

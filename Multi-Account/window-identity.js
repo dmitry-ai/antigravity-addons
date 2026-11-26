@@ -1,4 +1,11 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+/**
+ * @used-by {@link import('./main-bootstrap.js').listManagedWindows}
+ * @used-by {@link import('./update-guard.js')}
+ * @used-by {@link import('./update-guard.js')} (UpdateGuard#showDeferredDialog)
+ * @used-by {@link import('./window-identity.js')}
+ * @used-by {@link installWindowIdentity}
+ */
 const allWindows = ({BaseWindow, BrowserWindow, include = []} = {}) => {
 	const seen = new Set();
 	const r = [];
@@ -13,6 +20,10 @@ const allWindows = ({BaseWindow, BrowserWindow, include = []} = {}) => {
 // 2026-10-28
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
+/**
+ * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
+ * @used-by {@link import('./window-identity.js')}
+ */
 const installWindowIdentity = (require, config) => {
 	if ('A0' === config.id || !/^A\d+$/.test(config.id || '')) {
 		throw Error('Window identity is only for secondary accounts');
@@ -104,6 +115,10 @@ const installWindowIdentity = (require, config) => {
 // 2026-11-14
 // "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 // https://github.com/dmitry-ai/antigravity-addons/issues/26
+/**
+ * @used-by {@link import('./window-identity.js')}
+ * @used-by {@link installWindowIdentity}
+ */
 const patchWindowTitle = (win, prefix) => {
 	if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
 		if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
