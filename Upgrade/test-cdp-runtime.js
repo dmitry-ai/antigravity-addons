@@ -443,10 +443,12 @@ test('Main-process WebContents debugger bridge discovers and attaches shells wit
 			attached = true;
 			attachCount++;
 		},
+		// 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
 		detach: () => {
 			if (attached) {
 				attached = false;
 				detachCount++;
+				dbg.emit('detach', {}, 'replaced');
 			}
 		},
 		sendCommand: async (method, params = {}) => {
@@ -713,4 +715,62 @@ test('Real --inspect-brk processes exit cleanly on target destruction and on app
 	assert.equal(await ensureRemoteBridge(fakeInspector, {bridgePath}), true);
 	assert.equal(disposedV1, 1);
 	assert.equal(globalThis[BRIDGE_GLOBAL]?.version, BRIDGE_VERSION);
+});
+// 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
+test('Main debugger bridge recovers from ungraceful companion crash with detach-emitting mock and hot-upgrades v2 to v3', async context => {
+	const {EventEmitter} = require('node:events');
+	const {BRIDGE_GLOBAL, BRIDGE_VERSION, ensureRemoteBridge, installMainDebuggerBridge} = require('./main-debugger-bridge');
+	const bridgePath = path.join(__dirname, 'main-debugger-bridge.js');
+	assert.equal(BRIDGE_VERSION, 3);
+	const dbg = new EventEmitter();
+	let attached = false;
+	let detachCount = 0;
+	let sendCount = 0;
+	Object.assign(dbg, {
+		isAttached: () => attached,
+		attach: () => {
+			attached = true;
+		},
+		detach: () => {
+			if (attached) {
+				attached = false;
+				detachCount++;
+				dbg.emit('detach', {}, 'replaced');
+			}
+		},
+		sendCommand: async method => {
+			if (!attached) {
+				throw Error('Not attached');
+			}
+			sendCount++;
+			return {method, ok: true};
+		}
+	});
+	const wc = new EventEmitter();
+	Object.assign(wc, {id: 2, getType: () => 'window', getURL: () => 'https://127.0.0.1:3733/', getTitle: () => 'Antigravity', isDestroyed: () => false, debugger: dbg});
+	const bridge = installMainDebuggerBridge({
+		electron: {app: {getPath: () => __dirname, getVersion: () => '2.35.2'}, BaseWindow: {getAllWindows: () => [{isDestroyed: () => false, webContents: wc}]}, BrowserWindow: {getAllWindows: () => []}, webContents: {getAllWebContents: () => [wc]}},
+		utils: {getHubWindows: () => [{isDestroyed: () => false, webContents: wc}], getHubWebContents: w => w.webContents}
+	});
+	context.after(() => bridge.dispose());
+	bridge.attach('client-1', '2', '__b1', {ownerKey: 'companion:A0:2'});
+	assert.deepEqual(await bridge.send('client-1', '2', 'Page.getFrameTree'), {method: 'Page.getFrameTree', ok: true});
+	bridge.attach('client-2', '2', '__b2', {ownerKey: 'companion:A0:2'});
+	assert.equal(attached, true);
+	assert.equal(1 <= detachCount, true);
+	assert.deepEqual(await bridge.send('client-2', '2', 'Page.getFrameTree'), {method: 'Page.getFrameTree', ok: true});
+	bridge.detach('client-2', '2');
+	assert.equal(attached, false);
+	attached = true;
+	bridge.attach('client-3', '2', '__b3', {ownerKey: 'companion:A0:2'});
+	assert.equal(attached, true);
+	assert.deepEqual(await bridge.send('client-3', '2', 'Runtime.enable'), {method: 'Runtime.enable', ok: true});
+	assert.equal(sendCount, 3);
+	bridge.dispose();
+	let disposedV2 = 0;
+	globalThis[BRIDGE_GLOBAL] = {version: 2, dispose: () => { disposedV2++; }};
+	context.after(() => globalThis[BRIDGE_GLOBAL]?.dispose?.());
+	assert.equal(await ensureRemoteBridge({evaluate: async expr => eval(expr)}, {bridgePath}), true);
+	assert.equal(disposedV2, 1);
+	assert.equal(globalThis[BRIDGE_GLOBAL]?.version, 3);
 });

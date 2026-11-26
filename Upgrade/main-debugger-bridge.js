@@ -8,7 +8,8 @@ const BRIDGE_GLOBAL = '__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__';
 // 2026-11-20
 // "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
 // https://github.com/dmitry-ai/antigravity-addons/issues/57
-const BRIDGE_VERSION = 2;
+// 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
+const BRIDGE_VERSION = 3;
 const NON_PAGE_TYPES = new Set(['backgroundPage', 'devtools', 'offscreen', 'webview']);
 const resolveAppModule = (appRequire, id) => {
 	let r = null;
@@ -187,9 +188,10 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 		}
 		catch {}
 	};
-	const cleanupAttachment = (targetId, notice) => {
+	// 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
+	const cleanupAttachment = (targetId, notice, expected = null) => {
 		const attachment = attachments.get(targetId);
-		if (attachment) {
+		if (attachment && (!expected || attachment === expected)) {
 			attachments.delete(targetId);
 			removeListeners(attachment);
 			if (notice) {
@@ -216,6 +218,7 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 		}
 		return wc.executeJavaScript(expression, false);
 	};
+	// 2026-11-26 "Eliminate debugger bridge self-detach loop and emit detach in mock": https://github.com/dmitry-ai/antigravity-addons/issues/73
 	const attach = (clientId, targetId, bindingName, {ownerKey = null} = {}) => {
 		const key = String(targetId || '');
 		const wc = findWebContents(key);
@@ -233,8 +236,26 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 					attachment.subscribers.delete(subId);
 				}
 			}
+			if (!attachment.subscribers.size) {
+				cleanupAttachment(key);
+				attachment = null;
+			}
 		}
-		if (!attachment) {
+		if (attachment) {
+			if (!wc.debugger.isAttached?.()) {
+				wc.debugger.attach('1.3');
+			}
+		}
+		else {
+			if (wc.debugger.isAttached?.()) {
+				try {
+					wc.debugger.detach();
+				}
+				catch {}
+			}
+			if (!wc.debugger.isAttached?.()) {
+				wc.debugger.attach('1.3');
+			}
 			attachment = {
 				targetId: key,
 				wc,
@@ -244,22 +265,13 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 						dispatch(attachment, {type: 'event', method, params});
 					}
 				},
-				onDetach: (_event, reason) => cleanupAttachment(key, {type: 'close', reason: reason || 'detached'}),
-				onDestroyed: () => cleanupAttachment(key, {type: 'close', reason: 'destroyed'})
+				onDetach: (_event, reason) => cleanupAttachment(key, {type: 'close', reason: reason || 'detached'}, attachment),
+				onDestroyed: () => cleanupAttachment(key, {type: 'close', reason: 'destroyed'}, attachment)
 			};
 			wc.debugger.on?.('message', attachment.onMessage);
 			wc.debugger.once?.('detach', attachment.onDetach);
 			wc.once?.('destroyed', attachment.onDestroyed);
 			attachments.set(key, attachment);
-		}
-		if (!attachment.subscribers.size && wc.debugger.isAttached?.()) {
-			try {
-				wc.debugger.detach();
-			}
-			catch {}
-		}
-		if (!wc.debugger.isAttached?.()) {
-			wc.debugger.attach('1.3');
 		}
 		attachment.subscribers.set(clientId, {clientId, bindingName, ownerKey});
 		return {attached: true, targetId: key, subscribers: attachment.subscribers.size};
