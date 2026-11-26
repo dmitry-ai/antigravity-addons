@@ -1,21 +1,4 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
-// https://github.com/dmitry-ai/antigravity-addons/issues/38
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -24,20 +7,38 @@ const {isPidAlive, writeFileAtomic} = require('./process-io');
 const registry = require('./registry');
 const {shellProbe, isShell} = require('./antigravity-shell');
 const {discoverEndpoints} = require('./profile-endpoints');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const stateRoot = path.join(process.env.APPDATA || path.join(__dirname, 'state'), 'AntigravityTools');
 const binding = '__antigravityToolsCall';
-// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
-// https://github.com/dmitry-ai/antigravity-addons/issues/20
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
-// https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const runtimeVersion = () => {
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
+	// 2026-11-14
+	// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/40
+	// 2026-11-19
+	// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/52
 	const core = ['antigravity-shell.js', 'cdp-client.js', 'cdp-companion.js', 'main-debugger-bridge.js', 'process-io.js', 'profile-endpoints.js', 'profiles.js', 'registry.js', 'runtime-health.js'].map(filename => path.join(__dirname, filename));
+	// 2026-11-14
+	// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/43
 	const modules = registry.discover().flatMap(tool => [tool.manifest, tool.cdp, ...(tool.runtimeFiles || [])].filter(Boolean));
 	return crypto.createHash('sha256').update([...new Set([...core, ...modules])].map(filename => filename + '\n' + fs.readFileSync(filename, 'utf8')).join('\n')).digest('hex');
 };
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-10-31
 // "Add Project settings action to project context menu in Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/17
 const bridgeSource = `(() => {
@@ -48,21 +49,36 @@ window.__ANTIGRAVITY_TOOLS_RETRY__=()=>{for(const [id,item] of pending)if(item.t
 window.__ANTIGRAVITY_TOOLS_DELIVER__=reply=>{const request=pending.get(reply.id);if(!request)return;pending.delete(reply.id);clearTimeout(request.timer);reply.error?request.reject(Error(reply.error)):request.resolve(reply.result);};
 window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__=1;
 })()`;
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 class Companion {
 	constructor({root = stateRoot} = {}) {
 		this.root = root;
 		this.connections = new Map();
 		this.modules = new Map();
 		this.errors = {};
+		// 2026-11-13
+		// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/25
 		this.generation = 1;
 		this.instance = crypto.randomUUID();
+		// 2026-11-14
+		// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/38
 		this.lastStateSignature = '';
 		this.lastStateWriteTime = 0;
 		this.version = runtimeVersion();
 		this.stopped = false;
 	}
+	// 2026-10-28
+	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/12
 	async attach(target) {
 		const key = target.key || target.id;
+		// 2026-11-19
+		// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/52
 		const cdp = await openTargetSession(target, {ownerKey: 'companion:' + key});
 		const r = {
 			cdp,
@@ -72,6 +88,9 @@ class Companion {
 			email: target.email,
 			sources: new Map(),
 			sheets: new Map(),
+			// 2026-11-13
+			// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/25
 			pending: [],
 			bootstrappedGeneration: 0,
 			shell: false,
@@ -135,6 +154,12 @@ class Companion {
 		}
 		return r;
 	}
+	// 2026-10-28
+	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/12
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	async bootstrap(connection) {
 		if (!connection.booting && !connection.cdp.closed) {
 			connection.booting = true;
@@ -192,6 +217,12 @@ class Companion {
 			this.stopped = true;
 			clearTimeout(this.timer);
 			await Promise.allSettled([...this.connections.values()].filter(connection => connection.shell).map(async connection => {
+				// 2026-10-31
+				// "Add Project settings action to project context menu in Folders":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/17
+				// 2026-11-13
+				// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/25
 				await connection.cdp.evaluate('for(const fn of Object.values(window.__ANTIGRAVITY_TOOLS_UNLOAD__||{}))fn();delete window.__ANTIGRAVITY_TOOLS_UNLOAD__;delete window.__ANTIGRAVITY_TOOLS_BRIDGE_VERSION__;delete window.__ANTIGRAVITY_TOOLS_REQUEST__;delete window.__ANTIGRAVITY_TOOLS_RETRY__;delete window.__ANTIGRAVITY_TOOLS_DELIVER__;delete window.__ANTIGRAVITY_TOOLS_STATUS__;');
 				const sheet = connection.sheets.get(':styles');
 				if (sheet) {
@@ -230,9 +261,15 @@ class Companion {
 			await connection.cdp.evaluate(`window.__ANTIGRAVITY_TOOLS_DELIVER__?.(${JSON.stringify(reply)})`);
 		}
 	}
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	invalidate() {
 		this.generation++;
 	}
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	loadModules() {
 		for (const tool of registry.discover()) {
 			if (!tool.cdp) {
@@ -266,6 +303,9 @@ class Companion {
 			const lockfile = path.join(this.root, 'instance.lock');
 			if (fs.existsSync(lockfile)) {
 				const previous = JSON.parse(fs.readFileSync(lockfile, 'utf8'));
+				// 2026-11-13
+				// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/25
 				if (isPidAlive(previous.pid)) {
 					break result;
 				}
@@ -316,6 +356,9 @@ class Companion {
 					break result;
 				}
 			}
+			// 2026-10-28
+			// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/12
 			const profiles = await discoverEndpoints();
 			const pages = profiles.flatMap(profile => profile.pages.map(page => ({
 				...page,
@@ -348,6 +391,9 @@ class Companion {
 					if (!connection || connection.cdp.closed) {
 						await this.attach(page);
 					}
+					// 2026-11-13
+					// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+					// https://github.com/dmitry-ai/antigravity-addons/issues/25
 					else if (!connection.shell || connection.pending?.length || connection.bootstrappedGeneration !== this.generation) {
 						await this.bootstrap(connection);
 					}
@@ -363,9 +409,21 @@ class Companion {
 				error,
 				windows: [...this.connections.values()].filter(connection => connection.profileId === id && connection.shell).length
 			}));
+			// 2026-11-14
+			// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/38
 			this.writeState(Object.keys(this.errors).length ? 'error' : [...this.connections.values()].some(item => item.shell) ? 'connected' : pages.length ? 'waiting-for-shell' : 'waiting-for-antigravity', {}, {throttleMs: 10000});
 		}
 	}
+	// 2026-10-28
+	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/12
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	writeState(state, extra = {}, {throttleMs = 0} = {}) {
 		const signature = JSON.stringify({
 			state,

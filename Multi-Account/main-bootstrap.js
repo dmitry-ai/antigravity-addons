@@ -1,33 +1,4 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
-// https://github.com/dmitry-ai/antigravity-addons/issues/57
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-// https://github.com/dmitry-ai/antigravity-addons/issues/12
-// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
-// https://github.com/dmitry-ai/antigravity-addons/issues/20
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
-// https://github.com/dmitry-ai/antigravity-addons/issues/21
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
-// https://github.com/dmitry-ai/antigravity-addons/issues/22
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
-// https://github.com/dmitry-ai/antigravity-addons/issues/23
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/26
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
-// 2026-11-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
-// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const defaultProcesses = require('node:child_process');
 const fs = require('node:fs');
 const defaultOs = require('node:os');
@@ -38,12 +9,18 @@ const defaultOAuthBridge = require('./oauth-bridge');
 const {installUpdateGuard} = require('./update-guard');
 const {appendLauncherLog, resolveModule, silenceBrokenStdio} = require('./update-state');
 const defaultWindowIdentity = require('./window-identity');
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 const bootstrap = (appRequire, config) => {
 	const codeRoot = config.codeRoot || __dirname;
 	const {app, shell, BrowserWindow, BaseWindow} = appRequire('electron');
 	const os = resolveModule(appRequire, 'node:os') || defaultOs;
 	const processes = resolveModule(appRequire, 'node:child_process') || defaultProcesses;
 	const windowIdentity = resolveModule(appRequire, path.join(codeRoot, 'window-identity.js')) || defaultWindowIdentity;
+	// 2026-11-10
+	// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/21
 	silenceBrokenStdio(process);
 	const isPrimary = 'A0' === config.id;
 	if (!isPrimary && path.resolve(os.homedir()).toLowerCase() !== path.resolve(config.homeDir).toLowerCase()) {
@@ -57,6 +34,9 @@ const bootstrap = (appRequire, config) => {
 	if (!isPrimary) {
 		configureSecondaryProfile({app, appRequire, codeRoot, config, processes, shell, windowIdentity});
 	}
+	// 2026-11-05
+	// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/20
 	installUpdateGuard(appRequire, config);
 	ensureInitialWindowVisible({app, appRequire, BaseWindow});
 	globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__ = {
@@ -87,6 +67,9 @@ const bootstrap = (appRequire, config) => {
 		if (windows.length) {
 			app.focus?.({steal: true});
 		}
+		// 2026-11-19
+		// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/52
 		const links = Array.isArray(extraArgs) ? extraArgs.filter(arg => 'string' === typeof arg && arg.length) : [];
 		if (links.length && 'function' === typeof app?.emit) {
 			app.emit('second-instance', {preventDefault() {}}, ['Antigravity.exe', ...links], process.cwd());
@@ -98,6 +81,9 @@ const bootstrap = (appRequire, config) => {
 		}
 		return {id: config.id, pid: process.pid, windows: windows.length};
 	};
+	// 2026-11-20
+	// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/57
 	globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__?.dispose?.();
 	if (config.inspector) {
 		const runtimeFile = path.join(config.userDataDir, 'main-runtime.json');
@@ -132,6 +118,9 @@ const bootstrap = (appRequire, config) => {
 	}
 	return globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
 };
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const configureProtocolHandler = ({app, codeRoot, config, isPrimary}) => {
 	if ('function' !== typeof app?.setAsDefaultProtocolClient) {
 		return;
@@ -151,6 +140,9 @@ const configureProtocolHandler = ({app, codeRoot, config, isPrimary}) => {
 			: rawRegister(scheme, ...args);
 	};
 };
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes, shell, windowIdentity}) => {
 	app.setAppUserModelId('Google.Antigravity.' + config.id);
 	windowIdentity.installWindowIdentity(appRequire, config);
@@ -209,12 +201,18 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 		}
 		return r;
 	};
+	// 2026-11-14
+	// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/26
 	const storage = path.join(config.userDataDir, 'app_storage.json');
 	const existing = readJsonSafe(storage, fs);
 	const items = existing && 'object' === typeof existing && !Array.isArray(existing) ? existing : {};
 	items.autoCheckForUpdates = 'false';
 	writeFileAtomic(storage, JSON.stringify(items), {fs});
 };
+// 2026-11-18
+// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
+// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const ensureInitialWindowVisible = ({app, appRequire, BaseWindow}) => {
 	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose?.();
 	if ('headless' === process.env.ELECTRON_OZONE_PLATFORM_HINT) {
@@ -266,6 +264,9 @@ const ensureInitialWindowVisible = ({app, appRequire, BaseWindow}) => {
 	globalThis.__ANTIGRAVITY_INITIAL_WINDOW__ = handle;
 	return handle;
 };
+// 2026-11-10
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 const listManagedWindows = ({appRequire, BaseWindow, BrowserWindow, windowIdentity}) => {
 	const utils = resolveModule(appRequire, './utils');
 	const hubWindows = utils?.getHubWindows?.() || [];

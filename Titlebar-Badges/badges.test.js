@@ -1,6 +1,4 @@
 // 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Relocate titlebar update and announcement badges into the Antigravity app menu":
-// https://github.com/dmitry-ai/antigravity-addons/issues/67
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -211,6 +209,9 @@ const createDoc = children => {
 		querySelectorAll: selector => root.querySelectorAll(selector)
 	};
 };
+// 2026-11-25
+// "Relocate titlebar update and announcement badges into the Antigravity app menu":
+// https://github.com/dmitry-ai/antigravity-addons/issues/67
 test('Registry discovers Titlebar-Badges between CSS and Folders and validates runtime assets', async context => {
 	const toolsRoot = path.resolve(__dirname, '..');
 	const tools = discover(toolsRoot);

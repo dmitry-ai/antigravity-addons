@@ -1,16 +1,14 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
-// https://github.com/dmitry-ai/antigravity-addons/issues/61
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
-// https://github.com/dmitry-ai/antigravity-addons/issues/53
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
+// 2026-11-19
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
 const {isLockfileHeld, isPidAlive, readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const {readProfiles} = require('./profiles');
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const activeSiblingProfiles = (config, options = {}) => {
 	const fileSystem = options.fs || fs;
 	const alive = options.isPidAlive || isPidAlive;
@@ -51,6 +49,9 @@ const appendGuardLog = (userDataDir, message, fileSystem = fs) => appendLauncher
 const appendLauncherLog = (userDataDir, message, {fs: fileSystem = fs, prefix = ''} = {}) => {
 	if (userDataDir) {
 		try {
+			// 2026-11-20
+			// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/61
 			fileSystem.mkdirSync(userDataDir, {recursive: true});
 			fileSystem.appendFileSync(path.join(userDataDir, 'launcher.log'), new Date().toISOString() + ' ' + prefix + message + '\n');
 		}

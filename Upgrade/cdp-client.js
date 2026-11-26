@@ -1,17 +1,15 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
-// https://github.com/dmitry-ai/antigravity-addons/issues/56
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const crypto = require('node:crypto');
 const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 class CDP {
 	constructor(socket) {
 		this.socket = socket;
+		// 2026-11-20
+		// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/56
 		this.closed = false;
 		this.sequence = 0;
 		this.pending = new Map();
@@ -85,6 +83,9 @@ class CDP {
 		}
 		return response.result?.value;
 	}
+	// 2026-11-20
+	// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/56
 	close() {
 		this.closed = true;
 		try {
@@ -93,6 +94,9 @@ class CDP {
 		catch {}
 	}
 }
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 class MainDebuggerClient {
 	constructor({bindingName = null, clientId = '', inspector, readOnly = false, target}) {
 		this.inspector = inspector;
@@ -162,6 +166,9 @@ class MainDebuggerClient {
 	handleDisconnect() {
 		if (!this.closed) {
 			this.closed = true;
+			// 2026-11-20
+			// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/56
 			try {
 				this.inspector?.close?.();
 			}
@@ -201,6 +208,9 @@ class MainDebuggerClient {
 		if (!this.closed) {
 			this.closed = true;
 			this.emitEvent('close');
+			// 2026-11-20
+			// "Close underlying V8 inspector WebSocket on MainDebuggerClient disconnect":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/56
 			if (this.readOnly || this.inspector?.closed) {
 				try {
 					this.inspector?.close?.();
@@ -219,6 +229,9 @@ class MainDebuggerClient {
 		}
 	}
 }
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const openTargetSession = (target, options = {}) => target?.mainInspectorUrl
 	? MainDebuggerClient.open(target, {cdpFactory: url => CDP.open(url), ...options})
 	: CDP.open(target.webSocketDebuggerUrl);

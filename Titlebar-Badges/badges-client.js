@@ -1,6 +1,4 @@
 // 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Relocate titlebar update and announcement badges into the Antigravity app menu":
-// https://github.com/dmitry-ai/antigravity-addons/issues/67
 const ANNOUNCEMENT_TEST_ID = 'jetbox-service-announcement-banner';
 const APP_UPDATE_TEST_ID = 'app-update-button';
 const BADGE_SELECTOR_HEADER = `[data-testid="${APP_UPDATE_TEST_ID}"], [data-testid="manual-update-button"], [data-testid="${ANNOUNCEMENT_TEST_ID}"]`;
@@ -218,6 +216,9 @@ const signatureFor = badges => JSON.stringify(badges.map(item => ({
 	loading: item.loading,
 	version: item.version
 })));
+// 2026-11-25
+// "Relocate titlebar update and announcement badges into the Antigravity app menu":
+// https://github.com/dmitry-ai/antigravity-addons/issues/67
 class TitlebarBadgesController {
 	constructor(win, {document: explicitDoc = null} = {}) {
 		Object.assign(this, {

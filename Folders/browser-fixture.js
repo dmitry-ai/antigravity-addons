@@ -1,27 +1,19 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
-// https://github.com/dmitry-ai/antigravity-addons/issues/18
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
-// https://github.com/dmitry-ai/antigravity-addons/issues/30
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const fs = require('node:fs');
 const path = require('node:path');
+// 2026-10-30
+// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/15
 const {chromium} = require('../Upgrade/node_modules/playwright-core');
 const {styleSheet: cssStyleSheet} = require('../CSS/cdp-runtime');
+// 2026-11-14
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const {rendererSource, styleSheet: foldersStyleSheet} = require('./cdp-runtime');
 const {applyAction} = require('./folders-model');
+// 2026-10-31
+// "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
+// https://github.com/dmitry-ai/antigravity-addons/issues/18
 const BROWSER_ARGS = [
 	'--disable-background-networking',
 	'--disable-renderer-backgrounding',
@@ -84,6 +76,9 @@ const closeSharedBrowser = async () => {
 		await current.close().catch(() => {});
 	}
 };
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const openFixture = async ({
 	data,
 	projects,
@@ -119,6 +114,9 @@ const openFixture = async ({
 		const page = await browserContext.newPage();
 		const errors = [];
 		page.on('pageerror', error => errors.push(error.message));
+		// 2026-10-30
+		// "Coordinate Folders sidebar mounting with asynchronous shell auth initialization and loading skeleton in A6":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/14
 		const body = bootingShell
 			? '<div id="root"><div class="w-full h-full flex items-center justify-center">Loading auth...</div></div><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea>'
 			: `<nav role="navigation" style="position:relative;width:340px;height:680px"><div data-testid="${missingAnchor || delayedAnchor ? 'changed-sidebar-contract' : 'conversation-list-sidebar'}" style="height:100%"><article class="new-future-vendor-class">Native project list</article></div></nav><textarea id="untouched-draft" style="position:absolute;left:400px;top:50px">Unsaved draft</textarea>`;
@@ -126,6 +124,9 @@ const openFixture = async ({
 			contentType: 'text/html',
 			body: `<!doctype html><html><head></head><body style="margin:0">${body}</body></html>`
 		}));
+		// 2026-11-14
+		// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/44
 		await page.exposeFunction('__foldersFixtureApply', applyAction);
 		await page.addInitScript(({data, projects, summaries, badProjects}) => {
 			window.__APP_CONFIG__ = {csrfToken: 'isolated-fixture', appVersion: 'future-fixture'};
@@ -245,6 +246,9 @@ const openFixture = async ({
 					r = fixture.viewState;
 				}
 				else {
+					// 2026-11-13
+					// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+					// https://github.com/dmitry-ai/antigravity-addons/issues/30
 					const body = message.body || {};
 					fixture.calls.push({method: 'project-folders', body});
 					if ('POST' !== message.method) {
@@ -265,6 +269,9 @@ const openFixture = async ({
 			};
 		}, {data, projects, summaries, badProjects});
 		await page.goto('https://folders-fixture.invalid/');
+		// 2026-11-14
+		// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/43
 		await page.addStyleTag({content: `${cssStyleSheet()}\n${foldersStyleSheet()}`});
 		await page.addScriptTag({content: rendererSource(data) + '\n//# sourceURL=folders-runtime-fixture.js'});
 		if (delayedAnchor) {

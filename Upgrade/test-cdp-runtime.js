@@ -1,27 +1,4 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add real-process inspector disconnect and clean-exit regression tests":
-// https://github.com/dmitry-ai/antigravity-addons/issues/58
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
-// https://github.com/dmitry-ai/antigravity-addons/issues/53
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
-// https://github.com/dmitry-ai/antigravity-addons/issues/38
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
-// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -29,7 +6,13 @@ const path = require('node:path');
 const {Companion, bridgeSource, runtimeVersion} = require('./cdp-companion');
 const {CDP} = require('./cdp-client');
 const {FakeCDP, createTempDir, mockProfileEndpoints, withEnv} = require('./test-helpers');
+// 2026-11-14
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const fixture = context => createTempDir(context, 'antigravity-cdp-');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('Adding a module or changing its declared Node files changes the supervisor version; editing data does not', context => {
 	const root = fixture(context);
 	const manifest = path.join(root, 'tool.json');
@@ -50,14 +33,20 @@ test('Adding a module or changing its declared Node files changes the supervisor
 	assert.equal(runtimeVersion(), added);
 	fs.writeFileSync(helper, 'module.exports=2');
 	assert.notEqual(runtimeVersion(), added);
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	const readSpy = context.mock.method(fs, 'readFileSync');
 	runtimeVersion();
 	assert.equal(readSpy.mock.calls.some(call => String(call.arguments[0]).endsWith('profiles.json')), false);
 	readSpy.mock.restore();
 });
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-12
 // "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under primary account A0":
 // https://github.com/dmitry-ai/antigravity-addons/issues/5
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('CDP modules attach to eight independent shells and reinject after a native document replacement', async context => {
 	const root = fixture(context);
 	const runtime = new Companion({root});
@@ -88,6 +77,9 @@ test('CDP modules attach to eight independent shells and reinject after a native
 	await runtime.dispose();
 	assert.ok(sockets.every(socket => socket.closed));
 });
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('Only the verified main execution context can call a module storage channel', async context => {
 	const runtime = new Companion({root: fixture(context)});
 	const cdp = new FakeCDP();
@@ -108,6 +100,12 @@ test('Only the verified main execution context can call a module storage channel
 	assert.match(cdp.expressions[1], /Unknown Tools storage channel/);
 	assert.ok(bridgeSource.includes('15000'));
 });
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 test('The runtime rereads the dynamic CDP port and reports a foreign application without attaching', async context => {
 	const root = fixture(context);
 	const roaming = mockProfileEndpoints(context, root, {Antigravity: null});
@@ -129,6 +127,9 @@ test('The runtime rereads the dynamic CDP port and reports a foreign application
 	assert.match(runtime.errors.A0, /not Antigravity/);
 	assert.equal(runtime.connections.size, 0);
 });
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('A deferred source is retried after a user dialog closes and failed attachments release their sockets', async context => {
 	const runtime = new Companion({root: fixture(context)});
 	const cdp = new FakeCDP();
@@ -152,6 +153,12 @@ test('A deferred source is retried after a user dialog closes and failed attachm
 	assert.equal(broken.closed, true);
 	assert.equal(runtime.connections.has('closed-window'), false);
 });
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 test('Opening a native conversation route keeps the same CDP binding and storage connection', async context => {
 	const runtime = new Companion({root: fixture(context)});
 	const cdp = new FakeCDP();
@@ -170,6 +177,9 @@ test('Opening a native conversation route keeps the same CDP binding and storage
 	assert.equal(cdp.calls.filter(call => 'Runtime.addBinding' === call.method).length, 1);
 	await runtime.dispose();
 });
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 test('Profiles with identical target IDs remain independent when one endpoint disappears or restarts', async context => {
 	const root = fixture(context);
 	mockProfileEndpoints(context, root, {Antigravity: '10001', 'Antigravity-A6': '10006'});
@@ -204,7 +214,7 @@ test('Profiles with identical target IDs remain independent when one endpoint di
 	assert.equal(runtime.connections.size, 2);
 	await runtime.dispose();
 });
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-31
 // "Add Project settings action to project context menu in Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/17
 test('ensureRunning stops an outdated companion, launches via explorer.exe startup shortcut outside caller Job Object, and falls back when shell is absent', async context => {
@@ -262,6 +272,9 @@ test('ensureRunning stops an outdated companion, launches via explorer.exe start
 	assert.equal(spawns[1].command, process.execPath);
 	assert.deepEqual(spawns[1].args, [expectedPath]);
 });
+// 2026-10-31
+// "Add Project settings action to project context menu in Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/17
 test('Executing bridgeSource across a companion restart re-dispatches in-flight storage requests without a 15s timeout', async context => {
 	const vm = require('node:vm');
 	const root = fixture(context);
@@ -317,6 +330,9 @@ test('Executing bridgeSource across a companion restart re-dispatches in-flight 
 	assert.equal(result.method, 'GET');
 	await runtime.dispose();
 });
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 test('Upgrade host files contain zero Folders imports or globals, skip idle tick re-evaluations until invalidated, and validate endpoint socket ports', async context => {
 	const vm = require('node:vm');
 	const {probeProfileEndpoint} = require('./profile-endpoints');
@@ -325,6 +341,9 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	for (const name of upgradeFiles) {
 		const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
 		assert.equal(/\.\.\/Folders\/|__PROJECT_FOLDERS_|__FOLDERS_/.test(source), false, `Unexpected Folders coupling in ${name}`);
+		// 2026-11-14
+		// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/40
 		assert.equal(/\.\.\/Multi-Account\//.test(source), false, `Unexpected Multi-Account coupling in ${name}`);
 	}
 	assert.equal(require('./profiles').readProfiles, require('../Multi-Account/profiles').readProfiles);
@@ -352,6 +371,9 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	await runtime.tick();
 	assert.equal(styleReads, 1);
 	assert.equal(sourceReads, 1);
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	const firstStateRaw = fs.readFileSync(path.join(root, 'runtime.json'), 'utf8');
 	const evaluationsAfterAttach = cdp.expressions.length;
 	await new Promise(resolve => setTimeout(resolve, 15));
@@ -383,6 +405,9 @@ test('Upgrade host files contain zero Folders imports or globals, skip idle tick
 	assert.equal(inspected.state, 'ready');
 	assert.equal(inspected.projects, 3);
 });
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 test('Main-process WebContents debugger bridge discovers and attaches shells without DevToolsActivePort while readOnly health skips detach', async context => {
 	const {EventEmitter} = require('node:events');
 	const vm = require('node:vm');
@@ -533,6 +558,9 @@ test('Main-process WebContents debugger bridge discovers and attaches shells wit
 	assert.equal(attached, false);
 	assert.equal(detachCount, 1);
 });
+// 2026-11-19
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
 test('Idle closed profiles report unavailable while active profiles without a reachable endpoint fail closed as error', async context => {
 	const {probeProfileEndpoint} = require('./profile-endpoints');
 	const {inspectRuntime} = require('./runtime-health');
@@ -564,6 +592,9 @@ test('Idle closed profiles report unavailable while active profiles without a re
 	await companion.dispose();
 	await assert.rejects(inspectRuntime({expectedTools: ['folders']}), /A6: Inspector connection refused/);
 });
+// 2026-11-20
+// "Add real-process inspector disconnect and clean-exit regression tests":
+// https://github.com/dmitry-ai/antigravity-addons/issues/58
 test('Real --inspect-brk processes exit cleanly on target destruction and on app quit even with leaked inspector sockets, and v1 bridges hot-upgrade to v2', async context => {
 	const cp = require('node:child_process');
 	const {MainDebuggerClient} = require('./cdp-client');

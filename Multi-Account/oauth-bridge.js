@@ -1,18 +1,4 @@
-// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
-// https://github.com/dmitry-ai/antigravity-addons/issues/65
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-// https://github.com/dmitry-ai/antigravity-addons/issues/12
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const callbackCode = (targets, pending) => {
 	let r = null;
 	result: {
@@ -44,10 +30,16 @@ const callbackCode = (targets, pending) => {
 	return r;
 };
 const {isCandidateTarget} = require('../Upgrade/antigravity-shell');
+// 2026-10-30
+// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+// https://github.com/dmitry-ai/antigravity-addons/issues/15
 const {CDP, openTargetSession} = require('../Upgrade/cdp-client');
 const {installMainDebuggerBridge} = require('../Upgrade/main-debugger-bridge');
 const {isLocalEndpointSocket, probeProfileEndpoint} = require('../Upgrade/profile-endpoints');
 const {resolveModule} = require('./update-state');
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const EMPTY_SHELL_EXPRESSION = "document.readyState==='complete'&&!window.__APP_CONFIG__&&!document.body.innerText.trim()&&![...document.querySelectorAll('[contenteditable=true],textarea,input')].some(x=>(x.innerText||x.value||'').trim())";
 const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir}) => {
 	if ('A0' === id || !/^A\d+$/.test(id || '')) {
@@ -64,6 +56,9 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 		}
 		for (const target of targets) {
 			if (await target.wc.executeJavaScript(EMPTY_SHELL_EXPRESSION, false)) {
+				// 2026-11-21
+				// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/65
 				const win = utils?.resolveHubWindowFromWebContents?.(target.wc);
 				if (win && 'function' === typeof utils?.loadHubWindowUrl) {
 					await utils.loadHubWindowUrl(win, target.url);
@@ -75,6 +70,9 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 		}
 		return;
 	}
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	const endpoint = await probeProfileEndpoint({id, userDataDir});
 	if ('available' !== endpoint.state) {
 		throw Error(endpoint.error || `Invalid ${id} browser endpoint`);
@@ -91,6 +89,9 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 		}
 	}
 };
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 class OAuthBridge {
 	constructor({child, chromePort, open, report = () => {}, request = globalThis.fetch, onAuthenticated = () => {}, expectedEmail}) {
 		this.child = child;
@@ -102,6 +103,9 @@ class OAuthBridge {
 		this.expectedEmail = expectedEmail;
 		this.seen = new Set();
 		this.buffer = '';
+		// 2026-11-21
+		// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/65
 		child.stdin.end = (chunk, encoding, callback) => {
 			if (undefined !== chunk && null !== chunk && 'function' !== typeof chunk) {
 				const args = [chunk];
@@ -199,6 +203,9 @@ class OAuthBridge {
 						catch {
 							continue;
 						}
+						// 2026-11-14
+						// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+						// https://github.com/dmitry-ai/antigravity-addons/issues/26
 						if ('page' !== target.type || url.origin !== this.pending.redirect.origin || url.pathname !== this.pending.redirect.pathname || !isLocalEndpointSocket(target.webSocketDebuggerUrl, this.chromePort)) {
 							continue;
 						}

@@ -1,9 +1,4 @@
 // 2026-11-02 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Preserve inherited shared skills during A6 profile preparation":
-// https://github.com/dmitry-ai/antigravity-addons/issues/19
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const fs = require('node:fs');
 const path = require('node:path');
 const {writeFileAtomic} = require('../Upgrade/process-io');
@@ -52,6 +47,9 @@ const read = filename => {
 	validate(manifest, filename);
 	return {data, manifest};
 };
+// 2026-11-02
+// "Preserve inherited shared skills during A6 profile preparation":
+// https://github.com/dmitry-ai/antigravity-addons/issues/19
 const ensureSharedSkills = (filename, skillsRoot) => {
 	filename = path.resolve(filename);
 	const original = fs.existsSync(filename) ? read(filename) : {data: null, manifest: {entries: []}};
@@ -104,6 +102,9 @@ const ensureSharedSkills = (filename, skillsRoot) => {
 			}
 		}
 		const manifest = {...original.manifest, entries: [...(original.manifest.entries || []), {path: skillsRoot}]};
+		// 2026-11-14
+		// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/26
 		writeFileAtomic(filename, JSON.stringify(manifest, null, 2), {
 			beforeRename: () => {
 				const current = fs.existsSync(filename) ? fs.readFileSync(filename) : null;

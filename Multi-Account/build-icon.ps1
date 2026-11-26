@@ -1,12 +1,4 @@
 # 2026-10-11 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Prototype multi-account Antigravity instances A1 and A2 with Windows user isolation, composite profile badge icons, and Chrome OAuth routing":
-# https://github.com/dmitry-ai/antigravity-addons/issues/1
-# 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-# https://github.com/dmitry-ai/antigravity-addons/issues/12
-# 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-# https://github.com/dmitry-ai/antigravity-addons/issues/26
 param([string]$ProfileId = '')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -14,11 +6,17 @@ $desktopPath = [Environment]::GetFolderPath('Desktop')
 if (-not $desktopPath) {
 	$desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop
 }
+# 2026-11-14
+# "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+# https://github.com/dmitry-ai/antigravity-addons/issues/26
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $profiles = @($config.profiles | Where-Object { 'A0' -ne $_.id -and (-not $ProfileId -or $ProfileId -eq $_.id) })
 if (0 -eq $profiles.Count) {
 	throw 'No matching secondary profiles in profiles.json'
 }
+# 2026-10-28
+# "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+# https://github.com/dmitry-ai/antigravity-addons/issues/12
 $archivePath = Join-Path $env:LOCALAPPDATA 'Programs/antigravity/resources/app.asar'
 $archive = [IO.File]::ReadAllBytes($archivePath)
 $headerSize = [BitConverter]::ToUInt32($archive, 4)
@@ -63,6 +61,9 @@ try {
 			$graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
 			$graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
 			$graphics.DrawImage($appImage, [Drawing.Rectangle]::new(0, 0, 256, 256))
+			# 2026-10-11
+			# "Prototype multi-account Antigravity instances A1 and A2 with Windows user isolation, composite profile badge icons, and Chrome OAuth routing":
+			# https://github.com/dmitry-ai/antigravity-addons/issues/1
 			$badge = [Drawing.Bitmap]::new(128, 128, [Drawing.Imaging.PixelFormat]::Format32bppArgb)
 			$badgeGraphics = [Drawing.Graphics]::FromImage($badge)
 			$badgeGraphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic

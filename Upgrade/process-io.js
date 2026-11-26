@@ -1,12 +1,10 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
-// https://github.com/dmitry-ai/antigravity-addons/issues/53
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const isPidAlive = pid => {
 	let r = false;
 	if (Number.isInteger(pid) && 0 < pid) {
@@ -55,6 +53,9 @@ const writeFileAtomic = (filename, content, {beforeRename, fs: fileSystem = fs, 
 		fileSystem.rmSync(temporary, {force: true});
 	}
 };
+// 2026-11-19
+// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+// https://github.com/dmitry-ai/antigravity-addons/issues/53
 const isLockfileHeld = (userDataDir, fileSystem = fs) => {
 	let r = false;
 	if (userDataDir) {

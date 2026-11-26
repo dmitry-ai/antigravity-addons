@@ -1,15 +1,10 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const registry = require('./registry');
 const control = require('./runtime-control');
 const {inspectRuntime} = require('./runtime-health');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const run = async (options = {}) => {
 	let r;
 	result: {
@@ -28,6 +23,9 @@ const run = async (options = {}) => {
 			throw Error(`Unknown mode: ${mode}`);
 		}
 		const tools = registry.discover(options.toolsRoot);
+		// 2026-11-14
+		// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/43
 		for (const tool of tools) {
 			if (!tool.cdp) {
 				throw Error(`Module ${tool.id} does not declare a CDP adapter`);
@@ -62,6 +60,9 @@ const run = async (options = {}) => {
 		let runtime;
 		for (;;) {
 			try {
+				// 2026-11-13
+				// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/25
 				runtime = await inspectRuntime({expectedTools: tools.map(tool => tool.id), toolsRoot: options.toolsRoot});
 				break;
 			}
@@ -72,6 +73,9 @@ const run = async (options = {}) => {
 				await new Promise(resolve => setTimeout(resolve, 300));
 			}
 		}
+		// 2026-10-28
+		// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/12
 		if ('ready' !== runtime.state) {
 			log('waiting-for-sign-in' === runtime.state ? `Tools is waiting for sign-in to complete: ${runtime.windows.filter(window => 'ready' !== window.state).map(window => window.profile).join(', ')}. CSS is connected; Folders is waiting for the main interface.` : 'Tools is waiting for Antigravity to open. Modules will attach via CDP on launch; app.asar is not modified.');
 			r = {status: 'waiting', tools: tools.map(tool => tool.id), runtime};

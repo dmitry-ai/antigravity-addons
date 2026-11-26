@@ -1,16 +1,14 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/63
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/60
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const toolsRoot = path.resolve(__dirname, '..');
+// 2026-11-20
+// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/60
 const ESC_DOLLAR = '\0HARNESS_DOLLAR_LBRACE\0';
 const ESC_PCT = '\0HARNESS_PERCENT\0';
 const VAR_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -109,6 +107,9 @@ const expandPathTemplate = (raw, vars = {}, {env = process.env, _seen = new Set(
 	return normalizeExpandedPath(expanded.replaceAll(ESC_DOLLAR, '${').replaceAll(ESC_PCT, '%'), false);
 };
 const readJsonFile = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+// 2026-11-20
+// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/60
 const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}) => {
 	const baseDir = filename ? path.dirname(path.resolve(filename)) : toolsRoot;
 	const explicit = pathsRegistry || env?.HARNESS_PATHS_FILE;
@@ -120,6 +121,9 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 			for (let cur = anchor; ; cur = path.dirname(cur)) {
 				const harnessRoot = path.join(cur, 'harness');
 				candidates.push(
+					// 2026-11-20
+					// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
+					// https://github.com/dmitry-ai/antigravity-addons/issues/63
 					path.join(harnessRoot, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'paths.json'),
 					path.join(harnessRoot, 'Artifacts', '\u227b', 'Deliverables', '\u26ef', 'paths.json'),
 					path.join(harnessRoot, 'code', 'paths.json')
@@ -136,6 +140,9 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 	}
 	const registry = readJsonFile(regFile);
 	const r = {...(registry?.variables ?? {})};
+	// 2026-11-20
+	// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/63
 	const resolvedReg = path.resolve(regFile);
 	overlayLoop: for (let cur = path.resolve(baseDir, '..'), depth = 0; 6 > depth; cur = path.dirname(cur), depth++) {
 		for (const rel of ['_/\ua616/paths.json', '\ua616/paths.json', '.agents/paths.json']) {
@@ -151,6 +158,9 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 	}
 	return r;
 };
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFile(), pathsRegistry, env = process.env} = {}) => {
 	if (!roaming) {
 		throw Error('APPDATA is required');
@@ -159,6 +169,9 @@ const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFi
 	if (1 !== config.schemaVersion || !Array.isArray(config.profiles) || 'string' !== typeof config.skillsRoot || !config.skillsRoot.trim()) {
 		throw Error('Invalid Multi-Account configuration');
 	}
+	// 2026-11-20
+	// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/60
 	const needsTemplate = config.skillsRoot.includes('$') || config.skillsRoot.includes('%');
 	const vars = needsTemplate ? resolvePathsVariables({filename, pathsRegistry: pathsRegistry || config.pathsRegistry, env}) : {};
 	const skillsRoot = needsTemplate ? expandPathTemplate(config.skillsRoot, vars, {env}) : config.skillsRoot;
@@ -190,6 +203,9 @@ const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFi
 	}
 	return r;
 };
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const resolveConfigFile = (root = toolsRoot) => {
 	const folder = fs.existsSync(root) ? fs.readdirSync(root, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name)).find(item => item.isDirectory() && fs.existsSync(path.join(root, item.name, 'profiles.json'))) : null;
 	return folder ? path.join(root, folder.name, 'profiles.json') : path.join(root, 'profiles.json');

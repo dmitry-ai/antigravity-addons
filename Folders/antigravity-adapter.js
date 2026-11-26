@@ -1,16 +1,11 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
-// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+const defaultModel = require('./folders-model');
+// 2026-10-28
 // "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
 // https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-11-14
 // "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
 // https://github.com/dmitry-ai/antigravity-addons/issues/36
-const defaultModel = require('./folders-model');
 class AntigravityAdapter {
 	constructor({window: win, fetch: request = win.fetch.bind(win), model = defaultModel, onProjects = () => {}, onSummaries = () => {}, onStatus = () => {}}) {
 		this.contract = 'antigravity-local-rpc-v2';
@@ -104,13 +99,16 @@ class AntigravityAdapter {
 			url.pathname = conversationId ? '/c/' + encodeURIComponent(conversationId) : '/';
 			url.searchParams.delete('cascadeId');
 			url.searchParams.delete('section');
+			// 2026-11-19
+			// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/54
 			url.searchParams.delete('project');
 			if (projectId) {
 				url.searchParams.set('project', projectId);
 			}
 		});
 	}
-	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// 2026-10-31
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
 	openProjectSettings(projectId, screen) {
@@ -124,6 +122,9 @@ class AntigravityAdapter {
 			url.searchParams.delete('settingsSection');
 		});
 	}
+	// 2026-11-14
+	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/44
 	pushUrl(mutate) {
 		const url = new URL(this.win.location.href);
 		mutate(url);
@@ -165,6 +166,9 @@ class AntigravityAdapter {
 	selection() {
 		const url = new URL(this.win.location.href);
 		const match = /^\/c\/([^/]+)\/?$/.exec(url.pathname);
+		// 2026-11-19
+		// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/54
 		return {projectId: url.searchParams.get('project') || url.searchParams.get('section'), conversationId: match ? decodeURIComponent(match[1]) : null};
 	}
 	async start() {
@@ -215,6 +219,9 @@ class AntigravityAdapter {
 		return projects;
 	}
 }
+// 2026-11-14
+// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
+// https://github.com/dmitry-ai/antigravity-addons/issues/36
 class ConnectSummaryStream {
 	constructor({headers, lifetime, model, onStatus, onSummaries, request, url}) {
 		Object.assign(this, {headers, lifetime, model, onStatus, onSummaries, request, retryDelay: 1000, stopped: false, url});

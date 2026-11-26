@@ -1,6 +1,4 @@
 // 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Relocate titlebar update and announcement badges into the Antigravity app menu":
-// https://github.com/dmitry-ai/antigravity-addons/issues/67
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -281,6 +279,9 @@ const openFixture = async (context, {badges = ['app-update'], updaterState = {ty
 	await page.addScriptTag({content: `${rendererSource()}\n//# sourceURL=titlebar-badges-fixture.js`});
 	return {page, errors};
 };
+// 2026-11-25
+// "Relocate titlebar update and announcement badges into the Antigravity app menu":
+// https://github.com/dmitry-ai/antigravity-addons/issues/67
 test('CSS hides all distracting titlebar badges while keeping normal toolbar buttons visible', async context => {
 	const {page, errors} = await openFixture(context, {badges: ['app-update', 'manual-update', 'generic-pill', 'announcement']});
 	const metrics = await page.evaluate(() => {

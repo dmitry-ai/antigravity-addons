@@ -1,13 +1,11 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+const {folderPickerModel} = require('./folder-menu');
+// 2026-11-14
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-11-14
 // "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
 // https://github.com/dmitry-ai/antigravity-addons/issues/44
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
-// https://github.com/dmitry-ai/antigravity-addons/issues/36
-const {folderPickerModel} = require('./folder-menu');
 class FolderDialogController {
 	constructor(view) {
 		Object.assign(this, {view, activeModal: null, closeActiveModal: null});
@@ -190,6 +188,9 @@ class FolderDialogController {
 		if (project) {
 			this.openText('Project name', project.name, async name => {
 				await this.view.adapter.rpc('UpdateProject', {project: {...project, name}});
+				// 2026-11-14
+				// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/36
 				await this.view.adapter.readProjects({force: true});
 			});
 		}

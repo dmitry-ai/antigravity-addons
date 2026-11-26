@@ -1,6 +1,4 @@
 // 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Relocate titlebar update and announcement badges into the Antigravity app menu":
-// https://github.com/dmitry-ai/antigravity-addons/issues/67
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -8,6 +6,9 @@ const disposeExpression = 'window.__ANTIGRAVITY_TITLEBAR_BADGES__?.dispose();del
 const filenames = ['badges-client.js'];
 const inspectExpression = "window.__ANTIGRAVITY_TITLEBAR_BADGES__?.inspect()||{state:'missing',reason:'Titlebar-Badges runtime is not attached'}";
 const watchedNames = new Set([...filenames, 'badges-view.css']);
+// 2026-11-25
+// "Relocate titlebar update and announcement badges into the Antigravity app menu":
+// https://github.com/dmitry-ai/antigravity-addons/issues/67
 const createTitlebarBadgesRuntime = ({invalidate, report} = {}) => {
 	let timer;
 	const watcher = fs.watch(__dirname, (_event, name) => {

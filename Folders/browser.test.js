@@ -1,24 +1,10 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
-// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
-// https://github.com/dmitry-ai/antigravity-addons/issues/18
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
-// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {openFixture, closeSharedBrowser} = require('./browser-fixture');
+// 2026-10-31
+// "Replace msedge fallback with chrome-headless-shell/chrome, share browser instance across subtests, and enforce teardown on test timeout":
+// https://github.com/dmitry-ai/antigravity-addons/issues/18
 test.after(() => closeSharedBrowser());
 const data = {
 	folders: [
@@ -32,6 +18,9 @@ const projects = [
 	{id: 'p1', name: 'Project One'},
 	{id: 'p2', name: 'Project Two'}
 ];
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('A real browser mounts the independent tree on unrelated vendor markup and keeps the event loop responsive', {timeout: 30000}, async context => {
 	const fixture = await openFixture({data, projects, context});
 	await fixture.page.waitForTimeout(300);
@@ -47,7 +36,13 @@ test('A real browser mounts the independent tree on unrelated vendor markup and 
 	assert.equal(report.runaway, undefined);
 	assert.equal(report.status.state, 'ready');
 	assert.equal(report.draft, 'Unsaved draft');
+	// 2026-11-14
+	// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/43
 	assert.ok(40 < report.parsedCssRules);
+	// 2026-11-14
+	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/44
 	assert.deepEqual(report.antigravityGlobals, []);
 	assert.deepEqual(fixture.errors, []);
 	const geometry = await fixture.page.locator('.fg-row').evaluateAll(rows => rows.slice(0, 5).map(el => {
@@ -89,7 +84,7 @@ test('A sidebar created after asynchronous native startup recovers automatically
 	assert.equal(await fixture.page.evaluate(() => window.__foldersFixture.observerRunaway), undefined);
 	assert.deepEqual(fixture.errors, []);
 });
-// 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-30
 // "Coordinate Folders sidebar mounting with asynchronous shell auth initialization and loading skeleton in A6":
 // https://github.com/dmitry-ai/antigravity-addons/issues/14
 test('Early CDP attachment during native shell and skeleton boot never flashes a mount fault before the sidebar renders', {timeout: 30000}, async context => {
@@ -187,6 +182,9 @@ test('Thousands of projects remain virtualized and live conversation updates kee
 		}
 	}));
 	await fixture.page.getByRole('button', {name: /Updated conversation/}).waitFor();
+	// 2026-11-19
+	// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/54
 	assert.match(fixture.page.url(), /\/c\/c1\?project=p0/);
 	assert.equal(await fixture.page.locator('[data-folders-row="conversation:c1"]').getAttribute('aria-selected'), 'true');
 	assert.equal(await fixture.page.locator('#untouched-draft').inputValue(), 'Unsaved draft');
@@ -209,8 +207,11 @@ test('The conversation rename UI keeps its ID, native route, project name, live 
 	await fixture.page.getByRole('textbox', {name: 'Conversation title'}).fill('52');
 	await fixture.page.getByRole('button', {name: 'Save', exact: true}).click();
 	await fixture.page.getByRole('button', {name: /52/}).click();
+	// 2026-11-19
+	// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/54
 	assert.match(fixture.page.url(), /\/c\/c1\?project=p1/);
-	// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	// 2026-10-31
 	// "Add Project settings action to project context menu in Folders":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/17
 	await fixture.page.locator('[data-folders-row="project:p1"] .fg-label').click({button: 'right'});

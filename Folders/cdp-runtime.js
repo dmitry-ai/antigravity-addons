@@ -1,30 +1,4 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
-// https://github.com/dmitry-ai/antigravity-addons/issues/34
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
-// https://github.com/dmitry-ai/antigravity-addons/issues/38
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/39
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
-// https://github.com/dmitry-ai/antigravity-addons/issues/46
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const crypto = require('node:crypto');
 const {EventEmitter} = require('node:events');
 const fs = require('node:fs');
@@ -32,9 +6,21 @@ const path = require('node:path');
 const {readJsonSafe, writeFileAtomic} = require('../Upgrade/process-io');
 const {persistConfig} = require('./folders-manager');
 const {applyAction, validateConfig} = require('./folders-model');
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const disposeExpression = 'window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;';
+// 2026-11-14
+// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/39
+// 2026-11-14
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 const filenames = ['folders-model.js', 'antigravity-adapter.js', 'folder-menu.js', 'folder-dialogs.js', 'folder-drag.js', 'folders-client.js'];
 const inspectExpression = "window.__PROJECT_FOLDERS_VIEW__?.inspect()||{state:'missing',reason:'Folders runtime is not attached'}";
+// 2026-11-14
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 class FoldersStore extends EventEmitter {
 	constructor(filename) {
 		super();
@@ -51,6 +37,9 @@ class FoldersStore extends EventEmitter {
 			this.emit('change', this.snapshot());
 		});
 	}
+	// 2026-11-14
+	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/44
 	dispatch(body) {
 		this.reloadIfChanged();
 		if (this.error) {
@@ -106,9 +95,15 @@ class FoldersStore extends EventEmitter {
 		return r;
 	}
 }
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folders.json'), invalidate, report, stateRoot = path.join(__dirname, 'state')}) => {
 	const store = new FoldersStore(filename);
 	const viewFile = path.join(stateRoot, 'folders-view.json');
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	const watchedNames = new Set([...filenames, 'folders-view.css']);
 	let watchTimer;
 	const assetWatcher = fs.watch(__dirname, (_event, name) => {
@@ -118,6 +113,9 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 		}
 	});
 	assetWatcher.on('error', error => report?.(error.message));
+	// 2026-11-14
+	// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/34
 	store.on('change', snapshot => {
 		invalidate?.();
 		broadcast(`window.__FOLDERS_REVISION__=${JSON.stringify(snapshot.revision)};window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(snapshot.data || {folders: [], projectFolderMap: {}})},${JSON.stringify(snapshot.revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(snapshot.error)});`);
@@ -131,6 +129,9 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 		disposeExpression,
 		inspectExpression,
 		reportExpression,
+		// 2026-11-14
+		// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/38
 		request(message) {
 			let r;
 			if ('GET_VIEW_STATE' === message.method) {
@@ -167,15 +168,30 @@ const createFoldersRuntime = ({broadcast, filename = path.join(__dirname, 'folde
 		styleSheet
 	};
 };
+// 2026-11-14
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const rendererSource = (data, {error = null, revision = ''} = {}) => {
+	// 2026-11-14
+	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/44
 	const entries = filenames.map(name => `${JSON.stringify('./' + path.basename(name, '.js'))}:(module,exports,require)=>{\n${fs.readFileSync(path.join(__dirname, name), 'utf8')}\n}`).join(',');
 	const bundle = `(()=>{const mods={${entries}},cache={},req=id=>{let m=cache[id];if(!m){m=cache[id]={exports:{}};mods[id](m,m.exports,req);}return m.exports;};req('./folders-client').installFoldersView();})()`;
 	const version = crypto.createHash('sha256').update(bundle).digest('hex');
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	const revisionAssignment = revision ? `window.__FOLDERS_REVISION__=${JSON.stringify(revision)};` : '';
+	// 2026-11-14
+	// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/46
 	const errorAssignment = `window.__FOLDERS_CONFIG_ERROR__=${JSON.stringify(error)};`;
 	return `(() => {let r;if('/onboarding'===location.pathname||location.pathname.startsWith('/onboarding/')){window.__PROJECT_FOLDERS_VIEW__?.dispose();delete window.__FOLDERS_RUNTIME_VERSION__;r={attached:false,reason:'onboarding'};}else if(${JSON.stringify(version)}===window.__FOLDERS_RUNTIME_VERSION__){${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_VIEW__?.notifyUpdate(${JSON.stringify(data)},${JSON.stringify(revision)});window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(error)});r={attached:true};}else if(window.__PROJECT_FOLDERS_VIEW__?.activeModal||window.__PROJECT_FOLDERS_VIEW__?.activeMenu){r={attached:false,reason:'user-dialog'};}else{window.__PROJECT_FOLDERS_VIEW__?.dispose();${revisionAssignment}${errorAssignment}window.__PROJECT_FOLDERS_DATA__=${JSON.stringify(data)};\n${bundle}\n;window.__FOLDERS_RUNTIME_VERSION__=${JSON.stringify(version)};r={attached:true};}return r;})()`;
 };
 const reportExpression = message => `window.__PROJECT_FOLDERS_VIEW__?.reportAction(${JSON.stringify(message)});`;
+// 2026-11-14
+// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const styleSheet = () => fs.readFileSync(path.join(__dirname, 'folders-view.css'), 'utf8');
 Object.assign(createFoldersRuntime, {FoldersStore, disposeExpression, filenames, inspectExpression, rendererSource, reportExpression, styleSheet});
 module.exports = createFoldersRuntime;

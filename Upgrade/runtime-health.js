@@ -1,17 +1,18 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const {openTargetSession} = require('./cdp-client');
 const {shellProbe, isShell} = require('./antigravity-shell');
 const {discoverEndpoints} = require('./profile-endpoints');
 const registry = require('./registry');
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const buildInspectExpression = (expected, checks) => {
 	const checkList = `[${checks.map(item => `{id:${JSON.stringify(item.id)},run:()=>(${item.expr})}`).join(',')}]`;
 	return `(()=>{let r;const tools=window.__ANTIGRAVITY_TOOLS_STATUS__,expected=${JSON.stringify(expected)},checks=${checkList};if(!tools||expected.some(id=>!tools.tools.includes(id))){r={state:'missing',reason:'Tools runtime is not attached',tools};}else if(tools.pending.length){r={state:'deferred',reason:tools.pending,tools};}else{r={state:'ready',tools};for(const item of checks){const next=item.run()||{state:'missing',reason:item.id+' runtime is not attached'};r={...next,tools};if('ready'!==next.state){break;}}}return r;})()`;
 };
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const inspectRuntime = async ({expectedTools, toolsRoot} = {}) => {
 	let r;
 	result: {
@@ -32,6 +33,9 @@ const inspectRuntime = async ({expectedTools, toolsRoot} = {}) => {
 			profiles
 				.flatMap(profile => profile.pages.map(page => ({...page, profileId: profile.id})))
 				.map(async page => {
+					// 2026-11-19
+					// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+					// https://github.com/dmitry-ai/antigravity-addons/issues/52
 					const cdp = await openTargetSession(page, {readOnly: true});
 					try {
 						if (isShell(await cdp.evaluate(shellProbe))) {

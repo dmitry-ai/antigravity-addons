@@ -1,9 +1,7 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-11-14
 // "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
 // https://github.com/dmitry-ai/antigravity-addons/issues/46
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
 class SidebarDragController {
 	constructor(view) {
 		Object.assign(this, {view, activeDropEl: null, draggedElement: null, abortController: null});
@@ -156,4 +154,7 @@ class SidebarDragController {
 	}
 }
 const hasDragType = (dataTransfer, type) => Array.from(dataTransfer?.types || []).includes(type);
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 module.exports = {SidebarDragController, hasDragType};

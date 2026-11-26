@@ -1,15 +1,4 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-// https://github.com/dmitry-ai/antigravity-addons/issues/12
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
-// https://github.com/dmitry-ai/antigravity-addons/issues/22
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
-// https://github.com/dmitry-ai/antigravity-addons/issues/23
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const allWindows = ({BaseWindow, BrowserWindow, include = []} = {}) => {
 	const seen = new Set();
 	const r = [];
@@ -21,6 +10,9 @@ const allWindows = ({BaseWindow, BrowserWindow, include = []} = {}) => {
 	}
 	return r;
 };
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 const installWindowIdentity = (require, config) => {
 	if ('A0' === config.id || !/^A\d+$/.test(config.id || '')) {
 		throw Error('Window identity is only for secondary accounts');
@@ -39,6 +31,9 @@ const installWindowIdentity = (require, config) => {
 	}
 	const appId = 'Google.Antigravity.' + config.id;
 	const prefix = '[' + config.id + '] ';
+	// 2026-11-14
+	// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/26
 	const launcher = path.join(config.codeRoot, 'launch.vbs');
 	const relaunchCommand = '"' + path.join(process.env.SystemRoot || 'C:/Windows', 'System32/wscript.exe') + '" "' + launcher + '" ' + config.id;
 	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__?.dispose();
@@ -48,6 +43,9 @@ const installWindowIdentity = (require, config) => {
 			win.setIcon?.(icon);
 			win.setAppDetails?.({appId, appIconPath: iconPath, appIconIndex: 0, relaunchCommand, relaunchDisplayName: 'Antigravity ' + config.id});
 			patchWindowTitle(win, prefix);
+			// 2026-11-10
+			// "Fix main-process TypeError 'Object has been destroyed' on window close":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/23
 			const winId = win.id;
 			applied.set(winId, {id: winId, iconPath, appId});
 			if (!win.__antigravityIdentityClosedHook && 'function' === typeof win.once) {
@@ -60,6 +58,9 @@ const installWindowIdentity = (require, config) => {
 		apply(win);
 		win?.once?.('ready-to-show', () => apply(win));
 	};
+	// 2026-11-10
+	// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/22
 	const onWebContentsCreated = (_event, contents) => {
 		setImmediate(syncWindows);
 		contents?.once?.('did-finish-load', syncWindows);
@@ -97,6 +98,12 @@ const installWindowIdentity = (require, config) => {
 	globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__ = r;
 	return r;
 };
+// 2026-11-10
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
+// 2026-11-14
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 const patchWindowTitle = (win, prefix) => {
 	if (win && !win.isDestroyed?.() && !win.__isWebviewPopupWindow) {
 		if ('function' === typeof win.setTitle && !win.__antigravityTitlePatched) {
@@ -105,6 +112,9 @@ const patchWindowTitle = (win, prefix) => {
 			win.__antigravityTitlePatched = true;
 			win.setTitle = title => {
 				let r;
+				// 2026-11-10
+				// "Fix main-process TypeError 'Object has been destroyed' on window close":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/23
 				if (!win.isDestroyed?.()) {
 					const text = String(title || '');
 					r = originalSetTitle(text.startsWith(prefix) ? text : prefix + text);

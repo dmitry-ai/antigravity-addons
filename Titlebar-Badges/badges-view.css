@@ -1,4 +1,5 @@
-/* 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+/* 2026-11-25 Dmitrii Fediuk https://github.com/dmitrii-fediuk */
+/* 2026-11-25
 	"Relocate titlebar update and announcement badges into the Antigravity app menu":
 	https://github.com/dmitry-ai/antigravity-addons/issues/67 */
 [data-main-content-header='true'] :is(

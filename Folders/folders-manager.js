@@ -1,30 +1,4 @@
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement left-sidebar project folders (Folders), CLI manager, installer scripts, and remove right-panel sidecar prototype":
-// https://github.com/dmitry-ai/antigravity-addons/issues/3
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/4
-// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md/P.Bash.md, and link source files to GitHub Issues":
-// https://github.com/dmitry-ai/antigravity-addons/issues/16
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
-// https://github.com/dmitry-ai/antigravity-addons/issues/24
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/42
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
+// 2026-10-11 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -33,7 +7,16 @@ const {writeFileAtomic} = require('../Upgrade/process-io');
 const model = require('./folders-model');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'folders.json').replace(/\\/g, '/');
 const DEFAULT_PROJECTS_DIR = path.join(process.env.USERPROFILE || os.homedir(), '.gemini/config/projects').replace(/\\/g, '/');
+// 2026-11-13
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 const {getDescendantIds, getFolderPath, validateFolders: validateTree} = model;
+// 2026-10-11
+// "Implement left-sidebar project folders (Folders), CLI manager, installer scripts, and remove right-panel sidecar prototype":
+// https://github.com/dmitry-ai/antigravity-addons/issues/3
+// 2026-11-14
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FoldersCliManager {
 	constructor({configPath = DEFAULT_CONFIG_PATH, fs: fileSystem = fs, logger = console, projectsDir = DEFAULT_PROJECTS_DIR} = {}) {
 		Object.assign(this, {configPath, fs: fileSystem, logger, projectsDir, revisions: new WeakMap()});
@@ -78,6 +61,9 @@ class FoldersCliManager {
 			return r;
 		});
 	}
+	// 2026-10-12
+	// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/4
 	findFolder(folders = [], query) {
 		let r = null;
 		const qTrim = 'string' === typeof query ? query.trim() : '';
@@ -105,6 +91,9 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	// 2026-11-14
+	// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/31
 	listAll(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		const projectMap = new Map();
@@ -142,6 +131,9 @@ class FoldersCliManager {
 		}
 		this.logger.log('');
 	}
+	// 2026-10-12
+	// "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under shared folders.json":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/5
 	listProjects(configPath = this.configPath) {
 		const data = this.readConfig(configPath);
 		this.logger.log('\n📋 All Antigravity Projects:\n');
@@ -194,6 +186,9 @@ class FoldersCliManager {
 		}
 		return outcome?.result;
 	}
+	// 2026-10-28
+	// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/10
 	readConfig(configPath = this.configPath) {
 		let r = {folders: [], projectFolderMap: {}};
 		if (this.fs.existsSync(configPath)) {
@@ -274,6 +269,9 @@ class FoldersCliManager {
 		}
 		return r;
 	}
+	// 2026-11-14
+	// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/31
 	setEnabled(enabled, toolPath = path.join(__dirname, 'tool.json')) {
 		const tool = JSON.parse(this.fs.readFileSync(toolPath, 'utf8'));
 		tool.enabled = Boolean(enabled);
@@ -302,6 +300,9 @@ class FoldersCliManager {
 		this.revisions.set(data, persistConfig(configPath, data, {expectedHash, fs: this.fs}));
 	}
 }
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const persistConfig = (configPath, data, {expectedHash, fs: fileSystem = fs, validate = true} = {}) => {
 	if (validate) {
 		model.validateConfig(data);
@@ -313,6 +314,9 @@ const persistConfig = (configPath, data, {expectedHash, fs: fileSystem = fs, val
 	const prev = raw ? raw.toString('utf8') : '';
 	const eol = prev.includes('\r\n') ? '\r\n' : '\n';
 	const text = (prev.startsWith('\uFEFF') ? '\uFEFF' : '') + JSON.stringify(data, null, '\t').replace(/\n/g, eol) + (prev.endsWith('\n') ? eol : '');
+	// 2026-11-13
+	// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/25
 	writeFileAtomic(configPath, text, {sync: true});
 	return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 };
@@ -322,6 +326,9 @@ const bound = Object.fromEntries([
 	'addFolder', 'assignProject', 'listAll', 'listProjects', 'moveFolder', 'readConfig',
 	'removeFolder', 'renameFolder', 'resolveFolder', 'resolveProject', 'setEnabled', 'unassignProject', 'writeConfig'
 ].map(k => [k, (...args) => defaultManager[k](...args)]));
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const CLI_COMMANDS = {
 	'add-folder': {min: 1, usage: 'add-folder <folder_name> [parent] [color] [configPath]', run: args => bound.addFolder(args[0], args[1], args[2], args[3])},
 	assign: {min: 2, usage: 'assign <project_name> <folder_name>', run: args => bound.assignProject(args[0], args[1])},

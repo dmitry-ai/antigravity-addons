@@ -1,12 +1,13 @@
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
-// https://github.com/dmitry-ai/antigravity-addons/issues/57
 // 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const fs = require('node:fs');
 const path = require('node:path');
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const BRIDGE_GLOBAL = '__ANTIGRAVITY_MAIN_DEBUGGER_BRIDGE__';
+// 2026-11-20
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 const BRIDGE_VERSION = 2;
 const NON_PAGE_TYPES = new Set(['backgroundPage', 'devtools', 'offscreen', 'webview']);
 const resolveAppModule = (appRequire, id) => {
@@ -35,6 +36,9 @@ const resolveAppModule = (appRequire, id) => {
 	}
 	return r;
 };
+// 2026-11-20
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 const resolveInspector = (appRequire, explicitInspector) => {
 	if (explicitInspector) {
 		return explicitInspector;
@@ -48,6 +52,9 @@ const resolveInspector = (appRequire, explicitInspector) => {
 	catch {}
 	return resolveAppModule(appRequire, 'node:inspector');
 };
+// 2026-11-20
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 const deactivateInspector = (appRequire, explicitInspector) => {
 	const inspector = resolveInspector(appRequire, explicitInspector);
 	if (!inspector || 'function' !== typeof inspector.close) {
@@ -64,8 +71,14 @@ const deactivateInspector = (appRequire, explicitInspector) => {
 		return false;
 	}
 };
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, inspector: explicitInspector, utils: explicitUtils} = {}) => {
 	const existing = globalThis[BRIDGE_GLOBAL];
+	// 2026-11-20
+	// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/57
 	if (BRIDGE_VERSION === existing?.version && !explicitElectron && !explicitInspector && !explicitUtils) {
 		if (appRequire) {
 			existing.setAppRequire?.(appRequire);
@@ -277,6 +290,9 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 		}
 		return true;
 	};
+	// 2026-11-20
+	// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/57
 	const detachAll = (reason = null) => {
 		for (const [key, attachment] of [...attachments.entries()]) {
 			attachments.delete(key);
@@ -350,6 +366,12 @@ const installMainDebuggerBridge = ({appRequire, electron: explicitElectron, insp
 	globalThis[BRIDGE_GLOBAL] = bridge;
 	return bridge;
 };
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
+// 2026-11-20
+// "Deactivate V8 inspector and dispose debugger bridge on Electron shutdown":
+// https://github.com/dmitry-ai/antigravity-addons/issues/57
 const ensureRemoteBridge = async (inspectorCdp, {bridgePath = __filename} = {}) => {
 	const expr = `(()=>{const k=${JSON.stringify(BRIDGE_GLOBAL)};if(${BRIDGE_VERSION}===globalThis[k]?.version)return true;const loader='function'===typeof require?require:process.getBuiltinModule('node:module').createRequire(${JSON.stringify(bridgePath)});try{const resolved=loader.resolve(${JSON.stringify(bridgePath)});delete loader.cache?.[resolved];}catch{}return ${BRIDGE_VERSION}===loader(${JSON.stringify(bridgePath)}).installMainDebuggerBridge().version;})()`;
 	const ok = await inspectorCdp.evaluate(expr);

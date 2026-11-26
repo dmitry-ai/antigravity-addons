@@ -1,20 +1,24 @@
 // 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
-// https://github.com/dmitry-ai/antigravity-addons/issues/6
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-// 2026-10-30 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-13
+// "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+// https://github.com/dmitry-ai/antigravity-addons/issues/6
+// 2026-10-30
 // "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
 // https://github.com/dmitry-ai/antigravity-addons/issues/15
 const toolsRoot = path.resolve(__dirname, '..');
+// 2026-10-13
+// "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+// https://github.com/dmitry-ai/antigravity-addons/issues/6
 const discover = (root = toolsRoot) => {
 	const r = [];
 	const ids = new Set();
 	for (const folder of fs.readdirSync(root, {withFileTypes: true}).filter(item => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+		// 2026-10-30
+		// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/15
 		const code = path.join(root, folder.name);
 		const manifest = path.join(code, 'tool.json');
 		if (!fs.existsSync(manifest)) {
@@ -32,10 +36,19 @@ const discover = (root = toolsRoot) => {
 				throw new Error(`Invalid enabled, order, or dependsOn: ${manifest}`);
 			}
 			if (false !== tool.enabled) {
+				// 2026-10-28
+				// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/10
 				if (undefined !== tool.runtimeFiles && (!Array.isArray(tool.runtimeFiles) || tool.runtimeFiles.some(file => 'string' !== typeof file))) {
 					throw Error(`Invalid runtimeFiles: ${manifest}`);
 				}
 				tool.runtimeFiles = (tool.runtimeFiles || []).map(file => resolveFile(code, file));
+				// 2026-10-28
+				// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/10
+				// 2026-11-14
+				// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+				// https://github.com/dmitry-ai/antigravity-addons/issues/43
 				for (const field of ['validate', 'cdp']) {
 					if (tool[field]) {
 						tool[field] = resolveFile(code, tool[field]);
@@ -59,6 +72,9 @@ const discover = (root = toolsRoot) => {
 	}
 	return r;
 };
+// 2026-10-13
+// "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+// https://github.com/dmitry-ai/antigravity-addons/issues/6
 const resolveFile = (code, relative) => {
 	const r = path.resolve(code, relative);
 	if (!r.startsWith(`${path.resolve(code)}${path.sep}`) || !fs.statSync(r).isFile()) {

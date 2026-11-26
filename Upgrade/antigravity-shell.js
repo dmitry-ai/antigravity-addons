@@ -14,7 +14,7 @@ const isCandidateTarget = target => {
 	}
 	return r;
 };
-// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-28
 // "Diagnose language_server.exe PreToolHook blocks on broad localStorage scans, codify authenticated browser access (EXEC-3/EXEC-6), and isolate security-policy journal entries":
 // https://github.com/dmitry-ai/antigravity-addons/issues/11
 const shellProbe = '({product:window.__APP_CONFIG__?.productName,csrf:typeof window.__APP_CONFIG__?.csrfToken,ready:document.readyState,origin:location.origin,appRoot:!!document.querySelector("#root"),nativeStorage:typeof window.nativeStorage?.getItems})';

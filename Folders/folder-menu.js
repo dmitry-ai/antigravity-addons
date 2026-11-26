@@ -1,13 +1,8 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+const defaultModel = require('./folders-model');
+// 2026-11-14
 // "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/39
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
-// https://github.com/dmitry-ai/antigravity-addons/issues/46
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
-const defaultModel = require('./folders-model');
 class FolderMenuController {
 	constructor(view) {
 		this.view = view;
@@ -190,6 +185,9 @@ class FolderMenuController {
 		}
 	}
 }
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const folderPickerModel = (foldersSource, selectedId, excludedIds = new Set(), model = defaultModel) => {
 	const raw = Array.isArray(foldersSource) ? foldersSource : foldersSource?.data?.folders || foldersSource?.folders || [];
 	const {byId, children} = (model?.indexTree || defaultModel.indexTree)(raw, {compare: model?.compare, excludedIds, sort: true});
@@ -209,7 +207,13 @@ const openProjectContextMenu = (e, projectId, {showContextMenu, showCreateFolder
 		items.push(
 			{label: 'Open project', onClick: () => activeView.adapter.navigate({projectId})},
 			{label: 'New conversation', onClick: () => activeView.adapter.navigate({projectId})},
+			// 2026-10-31
+			// "Add Project settings action to project context menu in Folders":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/17
 			{label: 'Project settings…', onClick: () => activeView.adapter.openProjectSettings(projectId)},
+			// 2026-11-14
+			// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/46
 			{label: 'Rename project…', onClick: () => activeView.dialogs.openRenameProject(projectId)},
 			{separator: true}
 		);

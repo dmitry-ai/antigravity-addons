@@ -1,21 +1,4 @@
 // 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
-// https://github.com/dmitry-ai/antigravity-addons/issues/20
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
-// https://github.com/dmitry-ai/antigravity-addons/issues/21
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
-// https://github.com/dmitry-ai/antigravity-addons/issues/22
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/29
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const cp = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -24,6 +7,12 @@ const {readJsonSafe} = require('../Upgrade/process-io');
 const state = require('./update-state');
 const {allWindows} = require('./window-identity');
 const defaultRunnerScript = path.join(__dirname, 'update-runner.js');
+// 2026-11-05
+// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+// https://github.com/dmitry-ai/antigravity-addons/issues/20
+// 2026-11-14
+// "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/29
 class UpdateGuard {
 	constructor(appRequire, config, options = {}) {
 		Object.assign(this, {
@@ -202,6 +191,9 @@ class UpdateGuard {
 	markQuitting() {
 		this.quitting = true;
 	}
+	// 2026-11-10
+	// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/21
 	patchAutoUpdater() {
 		this.configuredAutoInstall = Boolean(this.autoUpdater?.autoInstallOnAppQuit ?? true);
 		this.originalDescriptor = this.autoUpdater ? Object.getOwnPropertyDescriptor(this.autoUpdater, 'autoInstallOnAppQuit') : undefined;
@@ -271,6 +263,9 @@ class UpdateGuard {
 			});
 		}
 	}
+	// 2026-11-10
+	// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/22
 	showDeferredDialog(siblings) {
 		const {dialog, BaseWindow, BrowserWindow} = this.electron;
 		if (dialog?.showMessageBox) {
@@ -345,6 +340,9 @@ if (module === require.main) {
 		});
 	}
 }
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const exportsObject = {...state, UpdateGuard, installUpdateGuard};
 for (const key of ['UpdateRunner', 'applyUpdate', 'parseCliOptions', 'repairShortcuts']) {
 	Object.defineProperty(exportsObject, key, {enumerable: true, get: () => require('./update-runner')[key]});

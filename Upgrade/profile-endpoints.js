@@ -1,29 +1,27 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
-// https://github.com/dmitry-ai/antigravity-addons/issues/53
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
-// 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under primary account A0":
-// https://github.com/dmitry-ai/antigravity-addons/issues/5
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-// https://github.com/dmitry-ai/antigravity-addons/issues/12
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const fs = require('node:fs');
 const path = require('node:path');
 const {CDP} = require('./cdp-client');
 const {isCandidateTarget} = require('./antigravity-shell');
 const {BRIDGE_GLOBAL, ensureRemoteBridge} = require('./main-debugger-bridge');
 const {isLockfileHeld, isPidAlive, readJsonSafe} = require('./process-io');
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const {readProfiles} = require('./profiles');
+// 2026-10-12
+// "Verify native multi-window architecture (Ctrl+Shift+N) for concurrent project workflows under primary account A0":
+// https://github.com/dmitry-ai/antigravity-addons/issues/5
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const isLocalEndpointSocket = (value, port) => {
 	let r = false;
 	try {
@@ -35,6 +33,12 @@ const isLocalEndpointSocket = (value, port) => {
 	}
 	return r;
 };
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarget, fetch: request = globalThis.fetch, fs: fileSystem = fs, isLockfileHeld: checkLockfile = isLockfileHeld, isPidAlive: checkPid = isPidAlive, openInspector = url => CDP.open(url)} = {}) => {
 	const portFile = profile.portFile || path.join(profile.userDataDir, 'DevToolsActivePort');
 	const mainRuntimeFile = path.join(profile.userDataDir, 'main-runtime.json');
@@ -53,6 +57,9 @@ const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarge
 			&& /^ws:\/\/(127\.0\.0\.1|localhost):\d+\/[\da-f-]+$/i.test(mainRecord.inspector || '')
 		);
 		if (validMainRecord) {
+			// 2026-11-19
+			// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/52
 			let inspector;
 			try {
 				inspector = await openInspector(mainRecord.inspector);
@@ -127,6 +134,9 @@ const probeProfileEndpoint = async (profile, {candidateFilter = isCandidateTarge
 			r = {...r, state: 'error', error: error.message};
 		}
 	}
+	// 2026-11-19
+	// "Fail closed when active Antigravity profiles lack a reachable inspector endpoint":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/53
 	if ('unavailable' === r.state && (runtimePidAlive || checkLockfile(profile.userDataDir, fileSystem))) {
 		r = {
 			...r,

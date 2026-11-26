@@ -1,7 +1,11 @@
 // 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+const {run} = require('./upgrade-runtime');
+// 2026-10-13
 // "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 // https://github.com/dmitry-ai/antigravity-addons/issues/6
-const {run} = require('./upgrade-runtime');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const parseArguments = args => {
 	const r = {mode: 'apply'};
 	let selected = false;
@@ -20,6 +24,12 @@ const parseArguments = args => {
 	}
 	return r;
 };
+// 2026-10-13
+// "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+// https://github.com/dmitry-ai/antigravity-addons/issues/6
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 if (module === require.main) {
 	Promise.resolve().then(() => {
 		const options = parseArguments(process.argv.slice(2));

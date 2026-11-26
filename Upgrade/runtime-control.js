@@ -1,16 +1,20 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
-// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const {stateRoot, runtimeVersion} = require('./cdp-companion');
 const {isPidAlive, readJsonSafe, writeFileAtomic} = require('./process-io');
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const readState = (root = stateRoot) => readJsonSafe(path.join(root, 'runtime.json'));
+// 2026-11-13
+// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+// https://github.com/dmitry-ai/antigravity-addons/issues/25
 const alive = state => Boolean(state?.pid && isPidAlive(state.pid) && 'stopped' !== state.state && 30000 > Date.now() - Date.parse(state.updated));
 const ensureRunning = async ({root = stateRoot, delay = 200} = {}) => {
 	let r;
@@ -26,7 +30,7 @@ const ensureRunning = async ({root = stateRoot, delay = 200} = {}) => {
 			await stopRuntime({root, delay});
 		}
 		fs.mkdirSync(root, {recursive: true});
-		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+		// 2026-10-31
 		// "Add Project settings action to project context menu in Folders":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/17
 		const shortcut = 'win32' === process.platform ? path.join(process.env.APPDATA || '', 'Microsoft/Windows/Start Menu/Programs/Startup/Antigravity Tools (CDP).lnk') : '';
@@ -64,7 +68,7 @@ const installStartup = () => {
 	const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
 	return cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'install-startup.ps1'), '-NodePath', process.execPath], {encoding: 'utf8', windowsHide: true, timeout: 10000}).trim();
 };
-// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-28
 // "Diagnose Tools companion stop timeout, verify automatic Tools recovery via A6 launcher, and consolidate 14 legacy journals into Unified Journal":
 // https://github.com/dmitry-ai/antigravity-addons/issues/13
 const stopRuntime = async ({root = stateRoot, delay = 200} = {}) => {
@@ -73,6 +77,9 @@ const stopRuntime = async ({root = stateRoot, delay = 200} = {}) => {
 		if (!alive(state)) {
 			break result;
 		}
+		// 2026-11-13
+		// "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/25
 		writeFileAtomic(path.join(root, 'control.json'), JSON.stringify({instance: state.instance, action: 'stop'}));
 		for (let attempt = 0; 40 > attempt; attempt++) {
 			await pause(delay);

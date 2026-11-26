@@ -1,11 +1,12 @@
-/* 2026-10-11 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+/* 2026-10-11 Dmitrii Fediuk https://github.com/dmitrii-fediuk */
+/* 2026-10-11
 	"Create CSS customization tool (CSS/style.css) to compact Antigravity 2.0 sidebar project rows and chat layout":
 	https://github.com/dmitry-ai/antigravity-addons/issues/2 */
-/* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [role='navigation'][aria-label='Sidebar'] {
 	padding-bottom: 2px !important;
+	/* 2026-10-18
+		"Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+		https://github.com/dmitry-ai/antigravity-addons/issues/8 */
 	> div:first-child {
 		height: 26px !important;
 		margin-bottom: 0 !important;
@@ -46,6 +47,9 @@
 		padding-top: 2px !important;
 	}
 }
+/* 2026-10-18
+	"Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+	https://github.com/dmitry-ai/antigravity-addons/issues/8 */
 div:has(> [data-testid='title-menu-bar']) {
 	height: 24px !important;
 	min-height: 24px !important;
@@ -70,6 +74,12 @@ div:has(> [data-testid='title-menu-bar']) {
 	-webkit-mask-image: none !important;
 	mask-image: none !important;
 }
+/* 2026-10-15
+	"Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+	https://github.com/dmitry-ai/antigravity-addons/issues/6 */
+/* 2026-11-14
+	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [data-testid='conversation-list-sidebar'] [data-index] {
 	padding-block: 0 !important;
 }
@@ -112,6 +122,9 @@ button[data-project-card] svg {
 	height: 16px !important;
 	width: 16px !important;
 }
+/* 2026-10-15
+	"Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+	https://github.com/dmitry-ai/antigravity-addons/issues/6 */
 [data-testid='conversation-list-sidebar'] button[data-project-card] {
 	padding-right: 6px !important;
 	> div,
@@ -129,6 +142,12 @@ button[data-project-card] svg {
 [data-testid='conversation-list-sidebar'] .group\/header:has(button[data-project-card]):is(:hover, :focus-within) button[data-project-card] {
 	padding-right: 64px !important;
 }
+/* 2026-10-15
+	"Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
+	https://github.com/dmitry-ai/antigravity-addons/issues/6 */
+/* 2026-11-14
+	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [data-testid='conversation-list-sidebar'] .group\/header:has(button[data-project-card]) button:not([data-project-card]) {
 	height: var(--antigravity-tree-row-height, 16px) !important;
 	min-height: var(--antigravity-tree-row-height, 16px) !important;
@@ -158,6 +177,12 @@ button[data-project-card] svg {
 	line-height: var(--antigravity-tree-line-height, 14px) !important;
 	padding-block: 0 !important;
 }
+/* 2026-10-28
+	"Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+	https://github.com/dmitry-ai/antigravity-addons/issues/10 */
+/* 2026-11-14
+	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
 [role='menu'] [role='menuitem'],
 [role='menu'] [role='menuitemcheckbox'],
 [role='menu'] [role='menuitemradio'] {

@@ -1,9 +1,6 @@
 # 2026-10-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 # "Build unified Upgrade tool (Upg), module registry (tool.json), Less stylesheet build pipeline, and verification runner after Antigravity 2.23.0 update":
 # https://github.com/dmitry-ai/antigravity-addons/issues/6
-# 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-# https://github.com/dmitry-ai/antigravity-addons/issues/43
 param([switch]$Check, [switch]$Restore, [switch]$NoPause)
 $ErrorActionPreference = 'Stop'
 $exitStatus = 1
@@ -20,6 +17,9 @@ try {
 	if ($Restore) {
 		$argumentsList += '--restore'
 	}
+	# 2026-11-14
+	# "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
+	# https://github.com/dmitry-ai/antigravity-addons/issues/43
 	& $nodeCommand.Source @argumentsList
 	$exitStatus = $LASTEXITCODE
 }

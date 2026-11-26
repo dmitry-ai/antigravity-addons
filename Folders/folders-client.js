@@ -1,54 +1,19 @@
 // 2026-10-12 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/4
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
-// https://github.com/dmitry-ai/antigravity-addons/issues/24
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/27
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
-// https://github.com/dmitry-ai/antigravity-addons/issues/30
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
-// https://github.com/dmitry-ai/antigravity-addons/issues/34
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
-// https://github.com/dmitry-ai/antigravity-addons/issues/38
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/39
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
-// https://github.com/dmitry-ai/antigravity-addons/issues/43
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
-// https://github.com/dmitry-ai/antigravity-addons/issues/46
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const createAdapter = require('./antigravity-adapter');
 const {FolderDialogController} = require('./folder-dialogs');
 const {SidebarDragController} = require('./folder-drag');
-// 2026-10-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
-// https://github.com/dmitry-ai/antigravity-addons/issues/8
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add Project settings action to project context menu in Folders":
-// https://github.com/dmitry-ai/antigravity-addons/issues/17
 const {FolderMenuController} = require('./folder-menu');
 const defaultModel = require('./folders-model');
-// 2026-10-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Restore Folders compatibility with Antigravity 2.25.0 and analyze architectural resilience against renderer bundle changes":
-// https://github.com/dmitry-ai/antigravity-addons/issues/9
+// 2026-11-14
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 class FolderStorageClient {
 	constructor({model = defaultModel, onActionError = () => {}, onSchedule = () => {}, onStatus = () => {}, onUpdate = () => {}, state, window: win}) {
 		Object.assign(this, {win, model, state, onActionError, onSchedule, onStatus, onUpdate, configPromise: null, ready: false});
 	}
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	applyPayload(payload) {
 		if (payload.error) {
 			throw Error(payload.error);
@@ -62,6 +27,9 @@ class FolderStorageClient {
 		}
 		else {
 			const data = 2 === payload.schemaVersion ? payload.data : payload;
+			// 2026-11-14
+			// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+			// https://github.com/dmitry-ai/antigravity-addons/issues/31
 			this.model.validateConfig(data);
 			this.state.haveConfig = true;
 			if (payload.revision) {
@@ -75,6 +43,9 @@ class FolderStorageClient {
 		}
 		this.onStatus('folders', null);
 	}
+	// 2026-11-14
+	// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/38
 	applyUpdate(view, newData, revision = '') {
 		const alreadyApplied = Boolean(revision && revision === this.state.revision);
 		view.data = newData;
@@ -129,6 +100,9 @@ class FolderStorageClient {
 			this.win.__ANTIGRAVITY_TOOLS_REQUEST__('folders', {method: 'SET_VIEW_STATE', body: {collapsed: [...this.state.collapsed]}}).catch(error => this.onStatus('view-state', error.message));
 		}
 	}
+	// 2026-10-28
+	// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/10
 	async postAction(action, payload = {}) {
 		let r;
 		try {
@@ -166,10 +140,16 @@ class FolderStorageClient {
 		return this.configPromise;
 	}
 }
+// 2026-11-14
+// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+// https://github.com/dmitry-ai/antigravity-addons/issues/46
 class FolderTreeRenderer {
 	constructor(view) {
 		this.view = view;
 	}
+	// 2026-11-13
+	// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/24
 	bindRoot(root) {
 		const v = this.view;
 		v.rootAbort?.abort();
@@ -244,6 +224,9 @@ class FolderTreeRenderer {
 			props: {type: 'button', title: 'Create new folder (defaults to active folder)', onclick: event => (event.stopPropagation(), v.dialogs.openCreateFolder())}
 		});
 		const nativeButton = v.element('button', 'fg-native', '⋯', {props: {title: 'List view', onclick: () => this.toggleNativeMode(nativeButton)}});
+		// 2026-10-18
+		// "Add folder-scoped project creation, 80%-height tree folder picker, multi-window UI injection (4th+ windows), and context-only action menus":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/8
 		const projectButton = v.element('button', '', '+', {attrs: {'aria-label': 'Create project'}, props: {title: 'Create project', onclick: () => v.dialogs.openCreateProject(v.detectCurrentFolderId())}});
 		return v.element('div', 'fg-toolbar', undefined, {children: [v.element('strong', '', 'Projects'), v.element('div', 'fg-actions', undefined, {children: [folderButton, nativeButton, projectButton]})]});
 	}
@@ -251,6 +234,9 @@ class FolderTreeRenderer {
 		const {rowHeight, scroll} = this.view;
 		return {start: Math.max(0, Math.floor(scroll.scrollTop / rowHeight) - 8), end: Math.min(totalRows, Math.ceil((scroll.scrollTop + scroll.clientHeight) / rowHeight) + 8)};
 	}
+	// 2026-11-13
+	// "Decompose enhanceSidebarElements and convert client controller into ES6 classes and methods in Folders/folders-client.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/27
 	detectCurrentFolderId() {
 		const v = this.view;
 		const valid = id => id && v.getFolder(id) ? id : null;
@@ -445,6 +431,12 @@ class FolderTreeRenderer {
 		}
 	}
 }
+// 2026-10-12
+// "Add interactive GUI folder management (folders-client.js), nested parentId hierarchy, drag-and-drop, Windows Explorer sorting, and adaptive Light/Dark menus":
+// https://github.com/dmitry-ai/antigravity-addons/issues/4
+// 2026-11-14
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 class FoldersView {
 	constructor(win = 'undefined' !== typeof window ? window : undefined, options = {}) {
 		this.win = win;
@@ -473,6 +465,9 @@ class FoldersView {
 		this.sizing = 'function' === typeof ResizeObserverCtor ? new ResizeObserverCtor(() => this.schedule()) : null;
 		this.adapter = options.adapter || ('function' === typeof win?.fetch ? createAdapter({window: win, model: this.model, onProjects: projects => this.handleProjects(projects), onSummaries: summaries => this.handleSummaries(summaries), onStatus: (channel, error) => this.updateStatus(channel, error)}) : win?.__PROJECT_FOLDERS_VIEW__?.adapter || null);
 	}
+	// 2026-11-14
+	// "Extract FolderMenuController and FolderDialogController ES6 classes from FoldersView in Folders/folders-client.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/39
 	get activeMenu() {
 		return this.menus.activeMenu;
 	}
@@ -497,8 +492,8 @@ class FoldersView {
 				this.menus.close();
 				this.dialogs.close();
 			}
-			// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-			// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md, and link source files to GitHub Issues":
+			// 2026-10-31
+			// "Integrate with universal dmitry-ai/harness, format codebase per P.md/P.ES6.md/P.Bash.md, and link source files to GitHub Issues":
 			// https://github.com/dmitry-ai/antigravity-addons/issues/16
 			else if (('Insert' === e.key || (e.altKey && ('KeyN' === e.code || 'n' === e.key || 'N' === e.key))) && !this.activeModal) {
 				if (!(e.target && ('INPUT' === e.target.tagName || 'TEXTAREA' === e.target.tagName || e.target.isContentEditable))) {
@@ -538,6 +533,12 @@ class FoldersView {
 			delete this.win.__PROJECT_FOLDERS_VIEW__;
 		}
 	}
+	// 2026-11-13
+	// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/30
+	// 2026-11-14
+	// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/44
 	element(tag, className, text, {attrs, children, dataset, html, on, props, style} = {}) {
 		const el = this.doc.createElement(tag);
 		if (className) {
@@ -666,6 +667,9 @@ class FoldersView {
 	reportAction(error) {
 		this.updateStatus('action', error);
 	}
+	// 2026-11-14
+	// "Decompose Folders/folders-client.js into FolderStorageClient, FolderTreeRenderer, and folder-drag.js, narrow MutationObserver, and stop idle polling":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/46
 	retargetObserver() {
 		if (this.observer && this.doc?.documentElement) {
 			this.observer.disconnect();
@@ -751,6 +755,9 @@ const createReadConfig = ({model = defaultModel, onUpdate, state, status, view, 
 	const client = new FolderStorageClient({model, onStatus: status, onUpdate: onUpdate || ((data, revision) => view?.notifyUpdate?.(data, revision)), state, window: win});
 	return () => client.readConfig();
 };
+// 2026-11-14
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 const installFoldersView = () => {
 	let r;
 	if ('undefined' !== typeof window && !window.__PROJECT_FOLDERS_VIEW__) {
@@ -762,4 +769,7 @@ const installFoldersView = () => {
 	}
 	return r;
 };
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 module.exports = {FolderStorageClient, FolderTreeRenderer, FoldersView, createReadConfig, installFoldersView};

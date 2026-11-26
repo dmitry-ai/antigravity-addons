@@ -1,39 +1,4 @@
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
-// https://github.com/dmitry-ai/antigravity-addons/issues/54
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
-// https://github.com/dmitry-ai/antigravity-addons/issues/24
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
-// https://github.com/dmitry-ai/antigravity-addons/issues/30
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Decompose installFoldersView into ES6 class FoldersView in Folders/folders-view.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/28
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
-// https://github.com/dmitry-ai/antigravity-addons/issues/34
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
-// https://github.com/dmitry-ai/antigravity-addons/issues/38
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/42
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
-// https://github.com/dmitry-ai/antigravity-addons/issues/36
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
-// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -62,12 +27,18 @@ const projects = [
 	{id: 'p3', name: 'Unassigned'}
 ];
 const summary = (projectId, title = 'Conversation') => ({annotations: {title}, trajectoryMetadata: {projectId}, status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: '2026-10-28T10:00:00Z'});
+// 2026-11-14
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const scratch = context => {
 	const directory = createTempDir(context, 'antigravity-folders-');
 	const filename = path.join(directory, 'folders.json');
 	fs.writeFileSync(filename, JSON.stringify(config()));
 	return {directory, filename};
 };
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 test('The independent model sorts nested folders and projects and preserves conversation identities', () => {
 	const data = config();
 	const before = JSON.stringify(data);
@@ -94,7 +65,7 @@ test('Collapsed parents never leak assigned projects, subfolders, or conversatio
 	assert.equal(rows.some(row => ['two', 'ten', 'p1', 'p2', 'c1'].includes(row.id)), false);
 	assert.equal(rows.some(row => 'p3' === row.id), true);
 });
-// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-28
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
 test('Hiding Outside of Project changes only visible rows and preserves conversations and exact project identities', () => {
@@ -232,6 +203,9 @@ test('Native API adapter tolerates added DTO fields and uses the declared projec
 		assert.equal(calls[0].options.headers['x-codeium-csrf-token'], 'fixture-only');
 		await adapter.createProject({id: 'exact-new-id', name: 'New', resources: []});
 		assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/CreateProject')).options.body).project.id, 'exact-new-id');
+		// 2026-11-19
+		// "Support Hub 2.33.0 project query parameter in Folders navigation adapter":
+		// https://github.com/dmitry-ai/antigravity-addons/issues/54
 		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
 		assert.equal(win.lastUrl, '/c/c1?project=p1');
 		assert.equal(win.lastEvent.type, 'popstate');
@@ -240,7 +214,7 @@ test('Native API adapter tolerates added DTO fields and uses the declared projec
 		assert.deepEqual(adapter.selection(), {projectId: 'legacy-p1', conversationId: 'c1'});
 		adapter.navigate({projectId: 'p1', conversationId: 'c1'});
 		assert.equal(win.lastUrl, '/c/c1?project=p1');
-		// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+		// 2026-10-31
 		// "Add Project settings action to project context menu in Folders":
 		// https://github.com/dmitry-ai/antigravity-addons/issues/17
 		adapter.openProjectSettings('p2');
@@ -399,9 +373,12 @@ test('Subagent snapshots do not appear as duplicate root conversations in the pr
 	});
 	assert.deepEqual(rows.filter(row => 'conversation' === row.kind).map(row => row.id), ['root']);
 });
-// 2026-10-31 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-31
 // "Add Project settings action to project context menu in Folders":
 // https://github.com/dmitry-ai/antigravity-addons/issues/17
+// 2026-11-13
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 test('folders-view readConfig coalesces concurrent polls so a restarting companion never queues duplicate 15s requests', async () => {
 	let getCalls = 0;
 	let releaseGet;
@@ -436,9 +413,15 @@ test('folders-view readConfig coalesces concurrent polls so a restarting compani
 	assert.equal(getCalls, 2, 'Subsequent poll after completion issues a fresh GET');
 	releaseGet();
 	await p4;
+	// 2026-11-13
+	// "Consolidate Folders UI layer (folders-client.js and folders-view.js) with unified modal builder, direct selection lookup, and removal of non-CDP fallbacks":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/30
 	const disconnected = createReadConfig({window: {}, model, state, view: {notifyUpdate() {}}, status() {}});
 	await assert.rejects(disconnected(), /Folder storage bridge is unavailable/);
 });
+// 2026-11-13
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 test('folders-manager CRUD operations delegate to folders-model and preserve metadata and tree invariants', context => {
 	const {filename, directory} = scratch(context);
 	const added = manager.addFolder({name: 'Child', parentId: 'two'}, filename);
@@ -456,6 +439,9 @@ test('folders-manager CRUD operations delegate to folders-model and preserve met
 	assert.equal(after.folders.find(f => added.id === f.id).parentId, 'root');
 	assert.equal(manager.unassignProject('p9', filename), true);
 	assert.deepEqual(manager.readConfig(filename).futureMetadata, {preserve: true});
+	// 2026-11-14
+	// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/31
 	const broken = manager.readConfig(filename);
 	broken.projectFolderMap.orphan = 'non-existent-folder';
 	assert.throws(() => manager.writeConfig(broken, filename), /Invalid folder assignment/);
@@ -479,6 +465,12 @@ test('folders-manager CRUD operations delegate to folders-model and preserve met
 	assert.equal(store.reloadIfChanged().data.folders.some(f => 'extra' === f.id), true);
 	assert.equal(reloads, 1);
 });
+// 2026-11-14
+// "Convert installFoldersView closure into ES6 class FoldersView with typed row renderers and shared modal builder in Folders/folders-view.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/28
+// 2026-11-14
+// "Merge Folders browser UI layer (folders-client.js + folders-view.js) and purge dead v1 Less selectors":
+// https://github.com/dmitry-ai/antigravity-addons/issues/34
 test('FoldersView class methods manage collapsed state, routes, status, reveal, and teardown in Node without Chromium', () => {
 	const persisted = [];
 	const data = config();
@@ -532,6 +524,9 @@ test('FoldersView class methods manage collapsed state, routes, status, reveal, 
 	assert.equal(win.__FOLDERS_RESTORE_SCROLL__, 64);
 	assert.equal(win.__PROJECT_FOLDERS_VIEW__, undefined);
 });
+// 2026-11-14
+// "Fix GET_VIEW_STATE persistence, synchronize Folders revisions, throttle runtime.json writes, and exclude data from runtimeVersion()":
+// https://github.com/dmitry-ai/antigravity-addons/issues/38
 test('Folders runtime persists GET_VIEW_STATE, short-circuits unchanged knownRevision GET polls, and deduplicates revision updates', async context => {
 	const {directory, filename} = scratch(context);
 	const broadcasts = [];
@@ -578,6 +573,9 @@ test('Folders runtime persists GET_VIEW_STATE, short-circuits unchanged knownRev
 	assert.ok(broadcasts.some(expr => expr.includes(mutated.revision)));
 	view.dispose();
 });
+// 2026-11-14
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 test('FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager isolate row predicates, mutations, project directory fixtures, and logger output', context => {
 	const {directory, filename} = scratch(context);
 	const projectsDir = path.join(directory, 'projects');
@@ -637,6 +635,9 @@ test('FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager isolate ro
 	assert.ok(logs.some(line => line.includes('Alpha Secondary') && line.includes('Work / CLI Subfolder')));
 	assert.equal(logs.some(line => line.includes('project-folders/folders')), false);
 });
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 test('Single-read CAS persistConfig preserves BOM/CRLF, FoldersStore.dispatch reads disk once, and declarative element helper binds props/events', context => {
 	const {filename} = scratch(context);
 	const expectedExports = [
@@ -680,6 +681,9 @@ test('Single-read CAS persistConfig preserves BOM/CRLF, FoldersStore.dispatch re
 	assert.deepEqual(el.children, [child]);
 	view.dispose();
 });
+// 2026-11-14
+// "Convert createAdapter in Folders/antigravity-adapter.js into ConnectSummaryStream and AntigravityAdapter ES6 classes":
+// https://github.com/dmitry-ai/antigravity-addons/issues/36
 test('AntigravityAdapter and ConnectSummaryStream coalesce concurrent readProjects calls, cache unchanged projectIds across polls, and validate frames', async () => {
 	let listCalls = 0;
 	let readCalls = 0;
@@ -744,6 +748,9 @@ test('AntigravityAdapter and ConnectSummaryStream coalesce concurrent readProjec
 		adapter.dispose();
 	}
 });
+// 2026-11-14
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 test('A project committed before a lost response is recovered by exact UUID and retry creates no duplicate', async () => {
 	const committed = [];
 	const created = [];
@@ -772,6 +779,9 @@ test('A project committed before a lost response is recovered by exact UUID and 
 		adapter.dispose();
 	}
 });
+// 2026-11-14
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 test('Creation errors cannot be mistaken for an unrelated project with the same display name', async () => {
 	const other = {id: 'unrelated-id', name: 'Same name'};
 	const adapter = createAdapter({

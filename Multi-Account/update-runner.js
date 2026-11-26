@@ -1,6 +1,4 @@
 // 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
 const cp = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -8,6 +6,9 @@ const path = require('node:path');
 const {isPidAlive} = require('../Upgrade/process-io');
 const {activeSiblingProfiles, appendGuardLog, clearDeferredManifest, readDeferredManifest, writeDeferredManifest} = require('./update-state');
 const powershell = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 class UpdateRunner {
 	constructor(options = {}) {
 		this.options = options;

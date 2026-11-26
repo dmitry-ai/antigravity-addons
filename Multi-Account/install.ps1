@@ -1,22 +1,17 @@
-# 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+# 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+$ErrorActionPreference = 'Stop'
+# 2026-11-20
 # "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
 # https://github.com/dmitry-ai/antigravity-addons/issues/64
-# 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-# https://github.com/dmitry-ai/antigravity-addons/issues/52
-# 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+. (Join-Path $PSScriptRoot '..\Upgrade\shortcut.ps1')
+# 2026-10-28
 # "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 # https://github.com/dmitry-ai/antigravity-addons/issues/12
-# 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
-# https://github.com/dmitry-ai/antigravity-addons/issues/20
-# 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-# "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-# https://github.com/dmitry-ai/antigravity-addons/issues/26
-$ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '..\Upgrade\shortcut.ps1')
 & (Join-Path $PSScriptRoot 'build-icon.ps1') | Out-Null
 $desktopPath = [Environment]::GetFolderPath('Desktop')
+# 2026-10-30
+# "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+# https://github.com/dmitry-ai/antigravity-addons/issues/15
 if (-not $desktopPath) {
 	$desktopPath = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders').Desktop
 }
@@ -28,6 +23,9 @@ $wscriptPath = Join-Path $env:SystemRoot 'System32/wscript.exe'
 $launchScript = Join-Path $PSScriptRoot 'launch.vbs'
 $exeIcon = (Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe') + ',0'
 $dash = [char]0x2014
+# 2026-11-14
+# "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+# https://github.com/dmitry-ai/antigravity-addons/issues/26
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 foreach ($profile in $config.profiles) {
 	if ('A0' -ne $profile.id) {
@@ -42,6 +40,9 @@ foreach ($profile in $config.profiles) {
 		Write-Output $shortcutPath
 	}
 	else {
+		# 2026-11-05
+		# "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+		# https://github.com/dmitry-ai/antigravity-addons/issues/20
 		$targets = @((Join-Path $desktopPath 'A0.lnk'))
 		if ($programsPath) {
 			$startShortcut = Join-Path $programsPath 'Antigravity.lnk'
@@ -61,6 +62,9 @@ foreach ($profile in $config.profiles) {
 		}
 	}
 }
+# 2026-11-19
+# "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+# https://github.com/dmitry-ai/antigravity-addons/issues/52
 $protocolKey = 'HKCU:\Software\Classes\antigravity'
 $commandKey = Join-Path $protocolKey 'shell\open\command'
 New-Item -Path $commandKey -Force | Out-Null

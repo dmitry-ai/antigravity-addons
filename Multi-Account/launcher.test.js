@@ -1,57 +1,4 @@
-// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Launch Antigravity profiles even when the addons CDP runtime fails to start":
-// https://github.com/dmitry-ai/antigravity-addons/issues/66
-// 2026-11-21 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
-// https://github.com/dmitry-ai/antigravity-addons/issues/65
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/64
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/63
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
-// https://github.com/dmitry-ai/antigravity-addons/issues/61
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/60
-// 2026-11-20 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Add real-process inspector disconnect and clean-exit regression tests":
-// https://github.com/dmitry-ai/antigravity-addons/issues/58
-// 2026-11-19 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
-// https://github.com/dmitry-ai/antigravity-addons/issues/52
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-// https://github.com/dmitry-ai/antigravity-addons/issues/12
-// 2026-11-05 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
-// https://github.com/dmitry-ai/antigravity-addons/issues/20
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
-// https://github.com/dmitry-ai/antigravity-addons/issues/21
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
-// https://github.com/dmitry-ai/antigravity-addons/issues/22
-// 2026-11-10 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix main-process TypeError 'Object has been destroyed' on window close by capturing window id before closed event":
-// https://github.com/dmitry-ai/antigravity-addons/issues/23
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
-// https://github.com/dmitry-ai/antigravity-addons/issues/26
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/29
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/40
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
-// https://github.com/dmitry-ai/antigravity-addons/issues/37
-// 2026-11-18 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
-// https://github.com/dmitry-ai/antigravity-addons/issues/50
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cp = require('node:child_process');
@@ -64,10 +11,16 @@ const {activateExisting, buildBootstrapExpression, childEnvironment, prepareProf
 const {readProfiles} = require('./profiles');
 const {bootstrap} = require('./main-bootstrap');
 const {UpdateGuard, UpdateRunner, installUpdateGuard, activeSiblingProfiles, isLockfileHeld, silenceBrokenStdio, applyUpdate, parseCliOptions} = require('./update-guard');
+// 2026-11-14
+// "Unify temporary directory fixtures and CDP/Electron/Connect-RPC test mocks across Upgrade, Multi-Account, and Folders":
+// https://github.com/dmitry-ai/antigravity-addons/issues/37
 const fixture = context => createTempDir(context, 'antigravity-accounts-');
-// 2026-10-16 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+// 2026-10-16
 // "Distinguish background agy-node.cmd sidecar (ELECTRON_RUN_AS_NODE=1) from GUI processes in Upg during Antigravity 2.24.0 upgrade":
 // https://github.com/dmitry-ai/antigravity-addons/issues/7
+// 2026-10-28
+// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+// https://github.com/dmitry-ai/antigravity-addons/issues/12
 test('Account environment isolates secondary Electron/Go home while keeping real USERPROFILE for A0', () => {
 	const original = {USERPROFILE: 'real', APPDATA: 'roaming', LOCALAPPDATA: 'local', Path: 'tools', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '--require unwanted'};
 	const result = childEnvironment({homeDir: 'isolated', id: 'A6'}, original);
@@ -79,6 +32,9 @@ test('Account environment isolates secondary Electron/Go home while keeping real
 	assert.equal(result.Path, 'tools');
 	assert.equal(result.ELECTRON_RUN_AS_NODE, undefined);
 	assert.equal(result.NODE_OPTIONS, undefined);
+	// 2026-11-05
+	// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/20
 	const primary = childEnvironment({homeDir: 'unused-a0-home', id: 'A0'}, original);
 	assert.equal(primary.USERPROFILE, 'real');
 	assert.equal(primary.ANTIGRAVITY_ORIGINAL_USERPROFILE, 'real');
@@ -120,6 +76,9 @@ test('Unsafe and overlapping profile directories are rejected before launching',
 	fs.writeFileSync(filename, JSON.stringify(base));
 	assert.throws(() => readProfiles({roaming: root, filename}), /profile/);
 });
+// 2026-11-10
+// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+// https://github.com/dmitry-ai/antigravity-addons/issues/21
 test('Broken launcher stderr/stdout pipes are silenced so console.error in electron-log never throws EPIPE', () => {
 	const makeBrokenStream = () => {
 		const stream = new EventEmitter();
@@ -179,6 +138,12 @@ test('Browser routing preserves the OAuth state and callback while selecting the
 	delete globalThis.__ANTIGRAVITY_OAUTH_BRIDGES__;
 	delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
 });
+// 2026-11-05
+// "Implement cross-profile auto-update guard (M-2) and unified main-process bootstrap for A0 and A6":
+// https://github.com/dmitry-ai/antigravity-addons/issues/20
+// 2026-11-10
+// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+// https://github.com/dmitry-ai/antigravity-addons/issues/21
 test('Cross-profile update guard disables .blockmap requests, blocks installation across async before-quit while sibling profile is active, and runs post-update runner with shortcut repair and profile relaunch', async context => {
 	const root = fixture(context);
 	const a0Dir = path.join(root, 'Antigravity');
@@ -304,6 +269,9 @@ test('Cross-profile update guard disables .blockmap requests, blocks installatio
 	assert.equal(parsedQuitCli.relaunchProfile, undefined);
 	assert.equal(fs.existsSync(path.join(pendingDir, 'deferred-update.json')), false);
 });
+// 2026-11-10
+// "Fix main-process EPIPE crash on closed launcher stderr pipe, disable differential .blockmap requests, and preserve managed shortcuts and profile bootstrap across updates":
+// https://github.com/dmitry-ai/antigravity-addons/issues/21
 test('activateExisting activates a running A0 window via DevToolsActivePort when main-runtime.json is absent, and rejects main-runtime activation when 0 windows are restored', async context => {
 	const root = fixture(context);
 	fs.writeFileSync(path.join(root, 'DevToolsActivePort'), '63972\n/devtools/browser/1234');
@@ -324,6 +292,9 @@ test('activateExisting activates a running A0 window via DevToolsActivePort when
 	});
 	assert.deepEqual(result, {id: 'A0', port: 63972, windows: 1});
 	assert.deepEqual(broughtToFront, [{wsUrl: 'ws://127.0.0.1:63972/devtools/page/w1', method: 'Page.bringToFront'}]);
+	// 2026-11-10
+	// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/22
 	const a6Dir = path.join(root, 'a6');
 	fs.mkdirSync(a6Dir, {recursive: true});
 	fs.writeFileSync(path.join(a6Dir, 'main-runtime.json'), JSON.stringify({id: 'A6', pid: 5472, inspector: 'ws://127.0.0.1:2884/73b4eb3c-066a-4c05-83c4-a249fe7ad5ef', userDataDir: a6Dir}));
@@ -348,6 +319,9 @@ test('activateExisting activates a running A0 window via DevToolsActivePort when
 	});
 	assert.deepEqual(fourResult, {id: 'A6', pid: 5472, windows: 4});
 });
+// 2026-11-10
+// "Support Electron BaseWindow + WebContentsView in Antigravity 2.30.0 for existing-window activation, taskbar badge identity, [A6] window title prefix, and update-guard focus lookup":
+// https://github.com/dmitry-ai/antigravity-addons/issues/22
 test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge icon, taskbar AppUserModelId, [A6] title prefix, and foreground activation', async context => {
 	const root = fixture(context);
 	const desktop = path.join(root, 'Desktop');
@@ -401,6 +375,9 @@ test('Antigravity 2.30.0 BaseWindow + WebContentsView windows receive A6 badge i
 	assert.equal(baseWindows[0].appDetails?.appId, 'Google.Antigravity.A6');
 	assert.equal(baseWindows[0].getTitle(), '[A6] Antigravity');
 	assert.equal(globalThis.__ANTIGRAVITY_WINDOW_IDENTITY__.status().windows.length, 2);
+	// 2026-11-10
+	// "Fix main-process TypeError 'Object has been destroyed' on window close":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/23
 	// Closing a BaseWindow cleans up applied registry without throwing 'Object has been destroyed' from win.id access
 	const closingWindow = baseWindows[0];
 	closingWindow.destroy();
@@ -445,6 +422,9 @@ test('The native terminal OAuth bridge accepts only the matching state at the of
 });
 test('The official callback can clear its address bar; the original navigation still must match A6 OAuth state', async context => {
 	const {OAuthBridge} = require('./oauth-bridge');
+	// 2026-10-30
+	// "Extract Antigravity Addons into standalone code and meta (_) repositories, flatten tool directories, and prevent A6 working-directory locks":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/15
 	const {CDP} = require('../Upgrade/cdp-client');
 	const child = new EventEmitter();
 	const written = [];
@@ -497,6 +477,9 @@ test('Post-login recovery refuses A0 and never reloads an app or a draft', async
 	await refreshInitialPage({id: 'A6', userDataDir: root});
 	assert.deepEqual(calls, [{id: 'blank', method: 'Page.reload'}]);
 });
+// 2026-11-14
+// "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/26
 test('Parameterized launch.vbs and installer scripts read profiles.json without per-account wrapper duplication', () => {
 	assert.equal(fs.existsSync(path.join(__dirname, 'launch.vbs')), true);
 	for (const legacy of ['launch_A0.vbs', 'launch_A6.vbs', 'launch.ps1']) {
@@ -511,6 +494,9 @@ test('Parameterized launch.vbs and installer scripts read profiles.json without 
 		assert.doesNotMatch(source, /launch_A0\.vbs|launch_A6\.vbs/);
 	}
 });
+// 2026-11-14
+// "Extract UpdateGuard and DeferredUpdateStore ES6 classes from installUpdateGuard and applyUpdate in Multi-Account/update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/29
 test('UpdateGuard and UpdateRunner classes isolate installer resolution, idempotent re-installation, and PID wait timeout', async context => {
 	const root = fixture(context);
 	const pendingDir = path.join(root, 'pending');
@@ -542,6 +528,9 @@ test('UpdateGuard and UpdateRunner classes isolate installer resolution, idempot
 	assert.deepEqual(timedOut, {status: 'timeout', waitPid: 99999});
 	assert.equal(JSON.parse(fs.readFileSync(path.join(pendingDir, 'deferred-update.json'), 'utf8')).deferredBy, 'A0');
 });
+// 2026-11-14
+// "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/40
 test('launcher.js avoids bootstrap.toString and update-guard loading, executes buildBootstrapExpression in vm, and filters showDeferredDialog windows via allWindows', context => {
 	const root = fixture(context);
 	const launcherCode = fs.readFileSync(path.join(__dirname, 'launcher.js'), 'utf8').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n');
@@ -585,6 +574,9 @@ test('launcher.js avoids bootstrap.toString and update-guard loading, executes b
 	assert.equal(dialogCalls[0].first, healthyWin);
 	assert.match(dialogCalls[0].second.message, /A6/);
 });
+// 2026-11-18
+// "Fix Desktop launcher starting Antigravity hidden in system tray without opening Hub window":
+// https://github.com/dmitry-ai/antigravity-addons/issues/50
 test('spawnOptions disables windowsHide and cold bootstrap reveals and focuses a hidden initial Hub window once', async context => {
 	const root = fixture(context);
 	const desktop = path.join(root, 'Desktop');
@@ -638,6 +630,9 @@ test('spawnOptions disables windowsHide and cold bootstrap reveals and focuses a
 	globalThis.__ANTIGRAVITY_UPDATE_GUARD__.dispose();
 	assert.equal(app.listenerCount('web-contents-created'), 0);
 });
+// 2026-11-19
+// "Bridge Upgrade and OAuth renderer attach through main-process WebContents debugger":
+// https://github.com/dmitry-ai/antigravity-addons/issues/52
 test('Protocol handler keeps A0 launch.vbs command, activateExisting forwards antigravity:// URLs, and in-process refreshInitialPage reloads empty targets', async context => {
 	const root = fixture(context);
 	const protocolCalls = [];
@@ -700,6 +695,9 @@ test('Protocol handler keeps A0 launch.vbs command, activateExisting forwards an
 	const installPs1 = fs.readFileSync(path.join(__dirname, 'install.ps1'), 'utf8');
 	assert.match(installPs1, /Software\\Classes\\antigravity/);
 });
+// 2026-11-20
+// "Add real-process inspector disconnect and clean-exit regression tests":
+// https://github.com/dmitry-ai/antigravity-addons/issues/58
 test('main-bootstrap respects prevented will-quit, cleans main-runtime.json, disposes bridge, and closes active inspector on quit', context => {
 	const root = fixture(context);
 	const {app, fakeRequire} = createElectronHarness({codeRoot: __dirname, homedir: root, realModules: true});
@@ -741,6 +739,9 @@ test('main-bootstrap respects prevented will-quit, cleans main-runtime.json, dis
 	assert.equal(globalThis.__ANTIGRAVITY_RUNTIME_SHUTDOWN__, undefined);
 	assert.ok(1 <= inspectorClosed);
 });
+// 2026-11-20
+// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
+// https://github.com/dmitry-ai/antigravity-addons/issues/60
 test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and rejects cyclic or unknown templates', context => {
 	const {expandPathTemplate} = require('../Upgrade/profiles');
 	const root = fixture(context);
@@ -770,6 +771,9 @@ test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and re
 	assert.equal(path.resolve(loaded[1].skillsRoot), path.resolve(skillsDir));
 	prepareProfile(loaded[1]);
 	assert.equal(fs.existsSync(path.join(loaded[1].homeDir, '.gemini/config/skills.json')), true);
+	// 2026-11-20
+	// "Discover Ⰿ/≻/♕/⛯ Harness registry and ancestor project overlays in Upgrade/profiles.js":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/63
 	const tree = path.join(root, 'sim-ai');
 	const simHarnessReg = path.join(tree, 'harness', '\u2c0f', '\u227b', '\u2655', '\u26ef', 'paths.json');
 	const simAddonsRoot = path.join(tree, 'products', 'Google', 'Antigravity', 'Addons');
@@ -793,6 +797,9 @@ test('readProfiles resolves ${HARNESS_SKILLS_DIR} from Harness paths.json and re
 	assert.throws(() => expandPathTemplate('${MISSING_VAR}', {}), /unresolved variable/);
 	assert.throws(() => expandPathTemplate('C:/work/${UNCLOSED', {}), /unclosed variable/);
 });
+// 2026-11-20
+// "Record pre-spawn profile preparation failures in Multi-Account launcher.log":
+// https://github.com/dmitry-ai/antigravity-addons/issues/61
 test('Pre-spawn profile preparation failures write ERROR to launcher.log and exit cleanly in a real launcher process', async context => {
 	const {launch} = require('./launcher');
 	const root = fixture(context);
@@ -830,6 +837,9 @@ test('Pre-spawn profile preparation failures write ERROR to launcher.log and exi
 	assert.equal(fs.existsSync(a0LogPath), true);
 	assert.match(fs.readFileSync(a0LogPath, 'utf8'), /ERROR: /);
 });
+// 2026-11-20
+// "Write UTF-16 IShellLinkW shortcuts in Multi-Account and Upgrade PowerShell installers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/64
 test('Save-UnicodeShortcut writes UTF-16 IShellLinkW .lnk files preserving Ⰿ/≻/♕/⛯ paths without ? corruption', {skip: 'win32' !== process.platform}, context => {
 	const root = fixture(context);
 	const uniDir = path.join(root, '\u2c0f', '\u227b', '\u2655', '\u26ef', 'Multi-Account');
@@ -857,6 +867,9 @@ test('Save-UnicodeShortcut writes UTF-16 IShellLinkW .lnk files preserving Ⰿ/�
 	assert.equal(parsed.WindowStyle, 7);
 	assert.equal(parsed.Arguments.includes('?'), false);
 });
+// 2026-11-21
+// "Forward language_server stdin payload in OAuthBridge to fix A6 startup freeze in Antigravity 2.34.0":
+// https://github.com/dmitry-ai/antigravity-addons/issues/65
 test('OAuthBridge forwards host bridge stdin payload written via child.stdin.end in a real child process while keeping stdin open, and refreshInitialPage uses loadHubWindowUrl when available', async context => {
 	const {OAuthBridge, refreshInitialPage} = require('./oauth-bridge');
 	const root = fixture(context);
@@ -969,6 +982,9 @@ test('OAuthBridge forwards host bridge stdin payload written via child.stdin.end
 	assert.deepEqual(loadedCalls, [{winId: 1, url: 'https://127.0.0.1:51827/'}]);
 	assert.deepEqual(reloadedCalls, []);
 });
+// 2026-11-21
+// "Launch Antigravity profiles even when the addons CDP runtime fails to start":
+// https://github.com/dmitry-ai/antigravity-addons/issues/66
 test('A failing addons CDP runtime is logged as a warning and does not abort the profile launch', async context => {
 	const {launch} = require('./launcher');
 	const root = fixture(context);

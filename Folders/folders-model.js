@@ -1,20 +1,12 @@
 // 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
-// https://github.com/dmitry-ai/antigravity-addons/issues/10
-// 2026-11-13 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
-// https://github.com/dmitry-ai/antigravity-addons/issues/24
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/31
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
-// https://github.com/dmitry-ai/antigravity-addons/issues/42
-// 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
-// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const INTERNAL_PROJECT_ID = 'cbe5c5cf-0878-4b4c-abe4-39d46e0b5b40';
 const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
+// 2026-11-14
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FolderActionDispatcher {
 	constructor(original, action) {
 		this.data = structuredClone('save-config' === action.action ? action.data : original);
@@ -87,6 +79,9 @@ class FolderActionDispatcher {
 		delete this.data.projectFolderMap[this.action.projectId];
 	}
 }
+// 2026-11-14
+// "Extract FolderRowBuilder, FolderActionDispatcher, and FoldersCliManager ES6 classes in Folders/folders-model.js and folders-manager.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/42
 class FolderRowBuilder {
 	constructor({collapsed = new Set(), data, hideOutsideProject = false, hideStandaloneConversations = false, projects, summaries = new Map()}) {
 		Object.assign(this, {
@@ -124,6 +119,9 @@ class FolderRowBuilder {
 			}
 		}
 	}
+	// 2026-10-28
+	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/12
 	appendStandaloneSection() {
 		if (!this.hideStandaloneConversations && this.conversations.has(null)) {
 			this.rows.push({kind: 'section', key: 'standalone', name: 'Conversations', depth: 0});
@@ -151,9 +149,6 @@ class FolderRowBuilder {
 		this.children = children;
 	}
 	indexProjects() {
-		// 2026-10-28 Dmitrii Fediuk https://github.com/dmitrii-fediuk
-		// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
-		// https://github.com/dmitry-ai/antigravity-addons/issues/12
 		for (const project of this.projects) {
 			if (!project.id || this.projectIds.has(project.id)) {
 				throw Error('Missing or duplicate native project id');
@@ -184,6 +179,9 @@ class FolderRowBuilder {
 			}
 		}
 	}
+	// 2026-10-28
+	// "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
+	// https://github.com/dmitry-ai/antigravity-addons/issues/12
 	isVisibleProject(project) {
 		return !project.archived
 			&& !(this.hideOutsideProject && 'outside-of-project' === project.id)
@@ -228,6 +226,9 @@ class FolderRowBuilder {
 }
 const active = summary => !!(summary.hasRunningSubagents || summary.notFullyIdle || summary.hasActiveChildren || /RUNNING|GENERATING|STREAMING|QUEUED|PENDING/.test(summary.status || ''));
 const applyAction = (original, action) => new FolderActionDispatcher(original, action).apply();
+// 2026-10-28
+// "Replace ASAR/AST patching with external CDP companion daemon, standalone virtualized Folders tree, and LanguageServer RPC adapter for Antigravity 2.27.0+":
+// https://github.com/dmitry-ai/antigravity-addons/issues/10
 const applySummaryUpdate = (current, message) => {
 	if (!message || 'object' !== typeof message || Array.isArray(message)) {
 		throw Error('Invalid conversation stream message');
@@ -255,6 +256,9 @@ const applySummaryUpdate = (current, message) => {
 };
 const buildRows = options => new FolderRowBuilder(options).build();
 const compare = (a, b) => collator.compare(a.name || '', b.name || '') || a.id.localeCompare(b.id);
+// 2026-11-13
+// "Consolidate Folders around standalone v2 architecture, delegated events, UMD test exports, and shared folders-model mutations":
+// https://github.com/dmitry-ai/antigravity-addons/issues/24
 const getDescendantIds = (folderId, folders = []) => {
 	const r = new Set();
 	const {children} = indexTree(folders);
@@ -279,6 +283,9 @@ const getFolderPath = (folderId, folders = []) => {
 	}
 	return parts.join(' / ');
 };
+// 2026-11-14
+// "Consolidate Folders module loader, tree indexer, declarative DOM helper, and CAS store/CLI wrappers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/44
 const indexTree = (folders = [], {compare: cmp = compare, excludedIds = null, sort = false, validate = false} = {}) => {
 	if (validate && !Array.isArray(folders)) {
 		throw Error('folders must be an array');
@@ -336,6 +343,9 @@ const timestamp = value => 'string' === typeof value
 	: value && 'object' === typeof value
 		? Number(value.seconds || 0) * 1000 + Number(value.nanos || 0) / 1e6
 		: 0;
+// 2026-11-14
+// "Unify Folders domain validation, tree traversal helpers, store checks, and CLI listing/mutations around folders-model.js":
+// https://github.com/dmitry-ai/antigravity-addons/issues/31
 const validateConfig = data => {
 	if (!data || 'object' !== typeof data || Array.isArray(data)) {
 		throw Error('Invalid folders configuration');
