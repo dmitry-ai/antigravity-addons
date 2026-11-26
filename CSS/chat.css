@@ -4,6 +4,81 @@
 /* 2026-11-14 Dmitrii Fediuk https://github.com/dmitrii-fediuk
 	"Replace Less build pipeline and tracked CSS/style.css with native Chromium CSS concatenated in memory":
 	https://github.com/dmitry-ai/antigravity-addons/issues/43 */
+/* 2026-11-26 Dmitrii Fediuk https://github.com/dmitrii-fediuk
+	"Keep composer send button visible with long input under elevated zoom":
+	https://github.com/dmitry-ai/antigravity-addons/issues/70 */
+[data-media-drop-scope]:has([data-testid='agent-input-box']) {
+	> div:has([data-testid='agent-input-box']) {
+		display: flex !important;
+		flex: 0 1 auto !important;
+		flex-direction: column !important;
+		max-height: 100% !important;
+		min-height: 0 !important;
+		div:not(.contents):has([data-testid='agent-input-box']) {
+			display: flex !important;
+			flex: 0 1 auto !important;
+			flex-direction: column !important;
+			min-height: 0 !important;
+		}
+	}
+}
+[data-testid='agent-input-box'] {
+	flex: 0 1 auto !important;
+	max-height: 100% !important;
+	min-height: 0 !important;
+	> :not(.surface-composer) {
+		flex-shrink: 0;
+	}
+	.surface-composer {
+		flex: 0 1 auto !important;
+		min-height: 0 !important;
+		> :not(.surface-composer-card) {
+			flex-shrink: 0;
+		}
+	}
+	.surface-composer-card {
+		flex: 0 1 auto !important;
+		min-height: 0 !important;
+		> div:has([contenteditable='true']) {
+			display: flex !important;
+			flex: 0 1 auto !important;
+			flex-direction: column !important;
+			min-height: 0 !important;
+			> div:not(:has([contenteditable='true'])):not(.absolute) {
+				flex-shrink: 0 !important;
+				max-height: min(120px, 25dvh) !important;
+				overflow-y: auto !important;
+			}
+			div:has([contenteditable='true']) {
+				display: flex !important;
+				flex: 0 1 auto !important;
+				flex-direction: column !important;
+				min-height: 0 !important;
+			}
+		}
+		.agy-composer-footer {
+			flex-shrink: 0 !important;
+		}
+	}
+	[contenteditable='true'] {
+		flex: 0 1 auto !important;
+		max-height: min(300px, max(72px, calc(100dvh - 230px))) !important;
+		min-height: 0 !important;
+		overflow-y: auto !important;
+		overscroll-behavior: contain;
+	}
+}
+@media (max-height: 560px) {
+	.agy-home > [data-media-drop-scope] {
+		> div:first-child {
+			gap: 8px !important;
+			padding-block: 8px !important;
+		}
+		> div:has([data-testid='agent-input-box']) {
+			padding-bottom: 8px !important;
+		}
+	}
+}
 [data-testid='conversation-view'] {
 	--max-conversation-width: none;
 	> div:has([data-testid='autoscroll-viewport']) > .absolute.bottom-0.pointer-events-none {
