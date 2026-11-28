@@ -2,7 +2,16 @@
 	"schemaVersion": 1,
 	"skillsRoot": "${HARNESS_SKILLS_DIR}",
 	"profiles": [
-		{"id": "A0", "userData": "Antigravity"},
+		{
+			"id": "A0",
+			"userData": "Antigravity"
+		},
+		{
+			"id": "A5",
+			"userData": "Antigravity-A5",
+			"email": "admin5@mage2.pro",
+			"chromeShortcut": "5"
+		},
 		{
 			"id": "A6",
 			"userData": "Antigravity-A6",

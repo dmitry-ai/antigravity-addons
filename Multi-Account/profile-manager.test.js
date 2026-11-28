@@ -198,3 +198,22 @@ test('parseArgs and runCli support list, validate, and add subcommands and rejec
 	assert.equal(cliValidate.status, 0, cliValidate.stderr);
 	assert.equal(JSON.parse(cliValidate.stdout).count, 3);
 });
+// 2026-11-28 "Register Antigravity profile A5 with generated badge icons": https://github.com/dmitry-ai/antigravity-addons/issues/78
+test('Repository profiles.json registers A5 in numeric order with generated PNG and ICO badge assets', () => {
+	const repo = new ProfileRepository(path.join(__dirname, 'profiles.json'));
+	const config = repo.validate();
+	assert.equal(config.skillsRoot, '${HARNESS_SKILLS_DIR}');
+	const ids = config.profiles.map(p => p.id);
+	const expectedOrder = [...ids].sort((a, b) => 'A0' === a ? -1 : 'A0' === b ? 1 : Number(a.slice(1)) - Number(b.slice(1)));
+	assert.deepEqual(ids, expectedOrder);
+	assert.deepEqual(config.profiles.find(p => 'A5' === p.id), {
+		id: 'A5',
+		userData: 'Antigravity-A5',
+		email: 'admin5@mage2.pro',
+		chromeShortcut: '5'
+	});
+	const png = fs.readFileSync(path.join(__dirname, 'A5.png'));
+	assert.deepEqual([...png.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+	const ico = fs.readFileSync(path.join(__dirname, 'A5.ico'));
+	assert.deepEqual([...ico.subarray(0, 4)], [0x00, 0x00, 0x01, 0x00]);
+});

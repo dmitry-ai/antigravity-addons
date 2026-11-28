@@ -67,6 +67,7 @@ class ProfileRepository {
 	}
 	/**
 	 * @used-by {@link ProfileProvisioner#validate}
+	 * @used-by {@link import('./profile-manager.test.js')}
 	 */
 	validate(config = this.load()) {
 		return validateProfilesConfig(config);
