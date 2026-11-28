@@ -6,10 +6,15 @@ Dim fso, nodePath, pattern, profile, root, script, sh, cmd, idx, arg
 ' https://github.com/dmitry-ai/antigravity-addons/issues/26
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
-profile = "A6"
-If 0 < WScript.Arguments.Count Then
-	profile = WScript.Arguments(0)
+' 2026-11-28 "Remove hardcoded A6 profile defaults from OAuthBridge and launchers": https://github.com/dmitry-ai/antigravity-addons/issues/76
+If 0 = WScript.Arguments.Count Then
+	If 0 < InStr(1, LCase(WScript.FullName), "cscript.exe", 1) Then
+		WScript.StdErr.WriteLine "launch.vbs: Antigravity profile argument is required"
+		WScript.Quit 1
+	End If
+	Err.Raise 5, "launch.vbs", "Antigravity profile argument is required"
 End If
+profile = WScript.Arguments(0)
 Set pattern = New RegExp
 pattern.Pattern = "^A\d+$"
 If Not pattern.Test(profile) Then

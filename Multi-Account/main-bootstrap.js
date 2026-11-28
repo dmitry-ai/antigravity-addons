@@ -172,12 +172,14 @@ const configureSecondaryProfile = ({app, appRequire, codeRoot, config, processes
 		const r = originalSpawn.call(this, executable, args, options);
 		if (isStandalone) {
 			const {OAuthBridge, refreshInitialPage} = resolveModule(appRequire, path.join(codeRoot, 'oauth-bridge.js')) || defaultOAuthBridge;
+			// 2026-11-28 "Remove hardcoded A6 profile defaults from OAuthBridge and launchers": https://github.com/dmitry-ai/antigravity-addons/issues/76
 			const bridge = new OAuthBridge({
 				child: r,
 				chromePort: config.chrome.debugPort,
 				expectedEmail: config.email,
 				onAuthenticated: () => refreshInitialPage({appRequire, id: config.id, userDataDir: config.userDataDir}),
 				open: url => shell.openExternal(url),
+				profileId: config.id,
 				report: message => appendLauncherLog(config.userDataDir, message, {fs})
 			});
 			globalThis.__ANTIGRAVITY_OAUTH_BRIDGES__ ||= new Map();

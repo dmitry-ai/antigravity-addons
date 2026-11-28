@@ -1061,3 +1061,118 @@ test('A failing addons CDP runtime is logged as a warning and does not abort the
 	assert.match(log, /WARNING: Addons runtime unavailable \(CDP runtime did not start; inspect test-root\); launching without addons/);
 	assert.doesNotMatch(log, /ERROR: CDP runtime did not start/);
 });
+// 2026-11-28
+// "Remove hardcoded A6 profile defaults from OAuthBridge and launchers":
+// https://github.com/dmitry-ai/antigravity-addons/issues/76
+test('OAuthBridge reports configured profileId dynamically, launchers require explicit profile arguments, and readChromeShortcut preserves --disable-features', async context => {
+	const {OAuthBridge} = require('./oauth-bridge');
+	const {readChromeShortcut} = require('./launcher');
+	const makeMockChild = () => {
+		const child = new EventEmitter();
+		child.stdin = {destroyed: false, end: () => child.stdin, write: () => true};
+		child.stderr = new EventEmitter();
+		child.stdout = new EventEmitter();
+		return child;
+	};
+	const mismatchLogs = [];
+	const mismatchBridge = new OAuthBridge({
+		child: makeMockChild(),
+		chromePort: 9222,
+		expectedEmail: 'admin5@mage2.pro',
+		profileId: 'A5',
+		open: async () => {},
+		report: msg => mismatchLogs.push(msg)
+	});
+	context.after(() => mismatchBridge.dispose());
+	mismatchBridge.consume('Headless auth: authenticated as "wrong@example.com"\n');
+	assert.equal(mismatchLogs[0], 'The signed-in account differs from the configured A5 email');
+	const refreshLogs = [];
+	const refreshBridge = new OAuthBridge({
+		child: makeMockChild(),
+		chromePort: 9222,
+		expectedEmail: 'admin5@mage2.pro',
+		profileId: 'A5',
+		open: async () => {},
+		onAuthenticated: async () => {
+			throw Error('refresh boom');
+		},
+		report: msg => refreshLogs.push(msg)
+	});
+	context.after(() => refreshBridge.dispose());
+	refreshBridge.consume('Headless auth: authenticated as "admin5@mage2.pro"\n');
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(refreshLogs[0], 'The A5 window could not refresh after sign-in');
+	const timeoutLogs = [];
+	const timeoutBridge = new OAuthBridge({
+		child: makeMockChild(),
+		chromePort: 9222,
+		profileId: 'A5',
+		open: async () => {},
+		report: msg => timeoutLogs.push(msg)
+	});
+	context.after(() => timeoutBridge.dispose());
+	timeoutBridge.pending = {deadline: Date.now() - 1, redirect: new URL('https://antigravity.google/oauth-callback'), state: 'expired'};
+	await timeoutBridge.poll();
+	assert.equal(timeoutLogs[0], 'Google sign-in timed out; retry in A5');
+	const noArgLauncher = cp.spawnSync(process.execPath, [path.join(__dirname, 'launcher.js')], {encoding: 'utf8', timeout: 10000});
+	assert.equal(noArgLauncher.status, 1);
+	assert.match(noArgLauncher.stderr, /Profile ID argument is required/i);
+	if ('win32' === process.platform) {
+		const cscript = path.join(process.env.SystemRoot || 'C:/Windows', 'System32/cscript.exe');
+		const noArgVbs = cp.spawnSync(cscript, ['//Nologo', path.join(__dirname, 'launch.vbs')], {encoding: 'utf8', timeout: 10000});
+		assert.notEqual(noArgVbs.status, 0);
+		assert.match(noArgVbs.stderr + noArgVbs.stdout, /profile argument is required/i);
+	}
+	const root = fixture(context);
+	const chromeExe = path.join(root, 'chrome.exe');
+	const chromeData = path.join(root, 'ChromeU');
+	fs.writeFileSync(chromeExe, '');
+	fs.mkdirSync(chromeData, {recursive: true});
+	fs.writeFileSync(path.join(chromeData, 'Local State'), JSON.stringify({
+		profile: {info_cache: {'Profile 7': {user_name: 'admin5@mage2.pro'}}}
+	}));
+	const parsedWithFeatures = readChromeShortcut(
+		{id: 'A5', email: 'admin5@mage2.pro', chromeShortcut: '5'},
+		{readShortcut: () => ({executable: chromeExe, command: `--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled --profile-directory="Profile 7" --remote-debugging-port=9222 --user-data-dir="${chromeData}"`})}
+	);
+	assert.equal(parsedWithFeatures.directory, 'Profile 7');
+	assert.ok(parsedWithFeatures.arguments.includes('--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled'));
+	const parsedDefaultFeatures = readChromeShortcut(
+		{id: 'A5', email: 'admin5@mage2.pro', chromeShortcut: '5'},
+		{readShortcut: () => ({executable: chromeExe, command: `--profile-directory="Profile 7" --remote-debugging-port=9222 --user-data-dir="${chromeData}"`})}
+	);
+	assert.ok(parsedDefaultFeatures.arguments.includes('--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled'));
+	const bridgeOpts = [];
+	const {fakeRequire, processes} = createElectronHarness({
+		codeRoot: __dirname,
+		homedir: root,
+		overrides: {
+			[path.join(__dirname, 'oauth-bridge.js')]: {
+				OAuthBridge: class {
+					constructor(opts) {
+						bridgeOpts.push(opts);
+					}
+				},
+				refreshInitialPage: async () => {}
+			}
+		}
+	});
+	bootstrap(fakeRequire, {
+		id: 'A5',
+		email: 'admin5@mage2.pro',
+		homeDir: root,
+		userDataDir: root,
+		codeRoot: __dirname,
+		chrome: {executable: chromeExe, arguments: ['--profile-directory=Profile 7'], debugPort: 9222},
+		browserEnvironment: {USERPROFILE: 'real'}
+	});
+	context.after(() => {
+		globalThis.__ANTIGRAVITY_INITIAL_WINDOW__?.dispose();
+		globalThis.__ANTIGRAVITY_UPDATE_GUARD__?.dispose();
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACCOUNT__;
+		delete globalThis.__ANTIGRAVITY_OAUTH_BRIDGES__;
+		delete globalThis.__ANTIGRAVITY_MANAGED_ACTIVATE__;
+	});
+	processes.spawn('C:/installed/language_server.exe', ['--standalone'], {env: {}});
+	assert.equal(bridgeOpts[0]?.profileId, 'A5');
+});

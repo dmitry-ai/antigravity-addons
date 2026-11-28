@@ -101,13 +101,15 @@ const refreshInitialPage = async ({appRequire, delayMs = 1500, id, userDataDir})
 // "Implement same-user isolated profile A6 with headless file-based token storage, OAuth callback bridge, window-identity badge icon, and sidebar section filters":
 // https://github.com/dmitry-ai/antigravity-addons/issues/12
 class OAuthBridge {
+	// 2026-11-28 "Remove hardcoded A6 profile defaults from OAuthBridge and launchers": https://github.com/dmitry-ai/antigravity-addons/issues/76
 	/**
 	 * @used-by {@link import('./main-bootstrap.js').configureSecondaryProfile}
 	 */
-	constructor({child, chromePort, open, report = () => {}, request = globalThis.fetch, onAuthenticated = () => {}, expectedEmail}) {
+	constructor({child, chromePort, open, profileId = 'secondary profile', report = () => {}, request = globalThis.fetch, onAuthenticated = () => {}, expectedEmail}) {
 		this.child = child;
 		this.chromePort = chromePort;
 		this.open = open;
+		this.profileId = profileId;
 		this.report = report;
 		this.request = request;
 		this.onAuthenticated = onAuthenticated;
@@ -145,6 +147,7 @@ class OAuthBridge {
 	}
 	/**
 	 * @used-by {@link OAuthBridge#constructor}
+	 * @used-by {@link import('./launcher.test.js')}
 	 */
 	consume(chunk) {
 		if (!this.stopped) {
@@ -153,10 +156,10 @@ class OAuthBridge {
 			if (authenticated && !this.authenticated) {
 				this.authenticated = true;
 				if (this.expectedEmail && authenticated[1].toLowerCase() !== this.expectedEmail.toLowerCase()) {
-					this.report('The signed-in account differs from the configured A6 email');
+					this.report(`The signed-in account differs from the configured ${this.profileId} email`);
 				}
 				else {
-					void Promise.resolve(this.onAuthenticated?.(authenticated[1])).catch(() => this.report('The A6 window could not refresh after sign-in'));
+					void Promise.resolve(this.onAuthenticated?.(authenticated[1])).catch(() => this.report(`The ${this.profileId} window could not refresh after sign-in`));
 				}
 			}
 			for (const match of this.buffer.matchAll(/https:\/\/accounts\.google\.com\/o\/oauth2\/(?:v2\/)?auth[^\s]+/g)) {
@@ -197,6 +200,7 @@ class OAuthBridge {
 	}
 	/**
 	 * @used-by {@link OAuthBridge#start}
+	 * @used-by {@link import('./launcher.test.js')}
 	 */
 	async poll() {
 		result: {
@@ -204,7 +208,7 @@ class OAuthBridge {
 				break result;
 			}
 			if (Date.now() > this.pending.deadline) {
-				this.fail('Google sign-in timed out; retry in A6');
+				this.fail(`Google sign-in timed out; retry in ${this.profileId}`);
 				break result;
 			}
 			try {

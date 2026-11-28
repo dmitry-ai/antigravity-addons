@@ -304,33 +304,43 @@ const prepareProfile = profile => {
 	}
 	fs.mkdirSync(path.join(profile.userDataDir, 'logs'), {recursive: true});
 };
+// 2026-11-28 "Remove hardcoded A6 profile defaults from OAuthBridge and launchers": https://github.com/dmitry-ai/antigravity-addons/issues/76
 /**
  * @used-by {@link import('./launcher.js')}
  * @used-by {@link launch}
  */
-const readChromeShortcut = profile => {
-	const script = "$p=Join-Path ([Environment]::GetFolderPath('Desktop')) '" + profile.chromeShortcut + ".lnk'; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($p); @{executable=$s.TargetPath;command=$s.Arguments}|ConvertTo-Json -Compress";
-	const shortcut = JSON.parse(cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true}).replace(/^\uFEFF/, ''));
-	if (!fs.existsSync(shortcut.executable) || 'chrome.exe' !== path.basename(shortcut.executable).toLowerCase()) {
+const readChromeShortcut = (profile, options = {}) => {
+	const fileSystem = options.fs || fs;
+	const readShortcut = options.readShortcut || (() => {
+		const script = "$p=Join-Path ([Environment]::GetFolderPath('Desktop')) '" + profile.chromeShortcut + ".lnk'; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($p); @{executable=$s.TargetPath;command=$s.Arguments}|ConvertTo-Json -Compress";
+		return JSON.parse(cp.execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true}).replace(/^\uFEFF/, ''));
+	});
+	const shortcut = readShortcut(profile);
+	if (!shortcut?.executable || !fileSystem.existsSync(shortcut.executable) || 'chrome.exe' !== path.basename(shortcut.executable).toLowerCase()) {
 		throw Error('Chrome shortcut is missing or invalid');
 	}
-	const value = flag => shortcut.command.match(new RegExp('(?:^|\\s)--' + flag + '=(?:"([^"]+)"|([^\\s]+))'))?.slice(1).find(Boolean);
+	const command = String(shortcut.command || '');
+	const value = flag => command.match(new RegExp('(?:^|\\s)--' + flag + '=(?:"([^"]+)"|([^\\s]+))'))?.slice(1).find(Boolean);
 	const userData = value('user-data-dir');
 	const directory = value('profile-directory');
 	const debugPort = Number(value('remote-debugging-port'));
+	const disableFeatures = value('disable-features') || 'ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled';
 	if (!userData || !path.isAbsolute(userData) || !directory || /[\\/]/.test(directory)) {
 		throw Error('Chrome shortcut must specify its user-data-dir and profile-directory');
+	}
+	if (options.expectedDirectory && directory !== options.expectedDirectory) {
+		throw Error('Chrome shortcut profile directory does not match ' + options.expectedDirectory);
 	}
 	if (!Number.isInteger(debugPort) || 1 > debugPort || 65535 < debugPort) {
 		throw Error('Chrome shortcut must specify its CDP port for the OAuth callback');
 	}
-	const state = readJsonSafe(path.join(userData, 'Local State'));
+	const state = readJsonSafe(path.join(userData, 'Local State'), fileSystem);
 	if (state?.profile?.info_cache?.[directory]?.user_name?.toLowerCase() !== profile.email.toLowerCase()) {
 		throw Error('Chrome shortcut account does not match ' + profile.email);
 	}
 	return {
 		executable: shortcut.executable,
-		arguments: ['--user-data-dir=' + userData, '--profile-directory=' + directory, '--remote-debugging-port=' + debugPort, '--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disable'],
+		arguments: ['--user-data-dir=' + userData, '--profile-directory=' + directory, '--remote-debugging-port=' + debugPort, '--disable-features=' + disableFeatures],
 		directory,
 		userData,
 		debugPort
@@ -342,7 +352,8 @@ const readChromeShortcut = profile => {
  */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (module === require.main) {
-	launch(process.argv[2] || 'A6', process.argv.slice(3)).catch(error => {
+	const targetProfile = process.argv[2];
+	(targetProfile ? launch(targetProfile, process.argv.slice(3)) : Promise.reject(Error('Profile ID argument is required'))).catch(error => {
 		console.error(error.message);
 		process.exitCode = 1;
 	});
