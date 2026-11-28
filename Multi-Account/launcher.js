@@ -142,6 +142,7 @@ const spawnOptions = (executable, profile, original = process.env) => ({
 /**
  * @used-by Multi-Account/launch.vbs
  * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./profile-manager.test.js')}
  * @used-by {@link import('./update-runner.js').UpdateRunner#run}
  */
 const launch = async (id, extraArgs = [], options = {}) => {
@@ -159,6 +160,10 @@ const launch = async (id, extraArgs = [], options = {}) => {
 		const profile = readProfiles(profilesOptions).find(item => item.id === id);
 		if (!profile) {
 			throw Error('Unknown profile: ' + id);
+		}
+		// 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
+		if (false === profile.enabled) {
+			throw Error('Profile ' + id + ' is disabled');
 		}
 		const cleanArgs = Array.isArray(extraArgs) ? extraArgs.filter(arg => 'string' === typeof arg && arg.length) : [];
 		const log = message => appendLauncherLog(profile.userDataDir, message, {fs});
@@ -283,6 +288,7 @@ const launch = async (id, extraArgs = [], options = {}) => {
 /**
  * @used-by {@link import('./launcher.js')}
  * @used-by {@link import('./launcher.test.js')}
+ * @used-by {@link import('./profile-manager.js')}
  * @used-by {@link import('./skills-manifest.test.js')}
  * @used-by {@link launch}
  */
@@ -307,6 +313,7 @@ const prepareProfile = profile => {
 // 2026-11-28 "Remove hardcoded A6 profile defaults from OAuthBridge and launchers": https://github.com/dmitry-ai/antigravity-addons/issues/76
 /**
  * @used-by {@link import('./launcher.js')}
+ * @used-by {@link import('./profile-manager.js')}
  * @used-by {@link launch}
  */
 const readChromeShortcut = (profile, options = {}) => {

@@ -143,6 +143,11 @@ class MockBaseWindow extends EventEmitter {
 	 * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
 	 * @used-by {@link import('../Multi-Account/main-bootstrap.js').configureSecondaryProfile}
 	 * @used-by {@link import('../Multi-Account/main-bootstrap.js')} (configureProtocolHandler)
+	 * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileProvisioner#add}
+	 * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileRepository#add}
+	 * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileRepository#upsert}
+	 * @used-by {@link import('../Multi-Account/profile-manager.js').sortProfiles}
+	 * @used-by {@link import('../Multi-Account/profile-manager.test.js')}
 	 * @used-by {@link import('../Multi-Account/update-guard.js')} (UpdateGuard#blockForSiblings)
 	 * @used-by {@link import('../Multi-Account/update-guard.js')} (UpdateGuard#constructor)
 	 * @used-by {@link import('../Multi-Account/update-guard.js')} (UpdateGuard#handleInstall)
@@ -167,7 +172,7 @@ class MockBaseWindow extends EventEmitter {
 	 * @used-by {@link import('./cdp-companion.js').Companion#tick}
 	 * @used-by {@link import('./main-debugger-bridge.js').installMainDebuggerBridge}
 	 * @used-by {@link import('./profile-endpoints.js').probeProfileEndpoint}
-	 * @used-by {@link import('./profiles.js').readProfiles}
+	 * @used-by {@link import('./profiles.js').validateProfilesConfig}
 	 * @used-by {@link import('./registry.js').discover}
 	 * @used-by {@link import('./runtime-health.js').buildInspectExpression}
 	 * @used-by {@link import('./runtime-health.js').inspectRuntime}
@@ -358,6 +363,8 @@ const createMockDocument = () => {
  * @used-by {@link import('../Folders/architecture.test.js')} (scratch)
  * @used-by {@link import('../Multi-Account/launcher.test.js')}
  * @used-by {@link import('../Multi-Account/launcher.test.js')} (fixture)
+ * @used-by {@link import('../Multi-Account/profile-manager.test.js')}
+ * @used-by {@link import('../Multi-Account/profile-manager.test.js')} (fixture)
  * @used-by {@link import('../Multi-Account/skills-manifest.test.js')}
  * @used-by {@link import('../Multi-Account/skills-manifest.test.js')} (fixture)
  * @used-by {@link import('./test-cdp-runtime.js')}

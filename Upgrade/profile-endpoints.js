@@ -18,14 +18,16 @@ const {readProfiles} = require('./profiles');
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25
+// 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
 /**
+ * @used-by {@link import('../Multi-Account/profile-manager.test.js')}
  * @used-by {@link import('./cdp-companion.js').Companion#tick}
  * @used-by {@link import('./cdp-companion.js')}
  * @used-by {@link import('./profile-endpoints.js')}
  * @used-by {@link import('./runtime-health.js').inspectRuntime}
  * @used-by {@link import('./runtime-health.js')}
  */
-const discoverEndpoints = async () => Promise.all(readProfiles().map(profile => probeProfileEndpoint(profile)));
+const discoverEndpoints = async (options = {}) => Promise.all(readProfiles(options).filter(profile => false !== profile.enabled).map(profile => probeProfileEndpoint(profile)));
 // 2026-11-13
 // "Decouple Upgrade host from Folders and Multi-Account internals, extract shared CDP/OS primitives, and unify npm test":
 // https://github.com/dmitry-ai/antigravity-addons/issues/25

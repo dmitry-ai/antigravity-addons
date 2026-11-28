@@ -70,6 +70,8 @@ const readJsonSafe = (filename, fileSystem = fs) => {
  * @used-by {@link import('../Multi-Account/main-bootstrap.js').bootstrap}
  * @used-by {@link import('../Multi-Account/main-bootstrap.js').configureSecondaryProfile}
  * @used-by {@link import('../Multi-Account/main-bootstrap.js')}
+ * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileRepository#save}
+ * @used-by {@link import('../Multi-Account/profile-manager.js')}
  * @used-by {@link import('../Multi-Account/skills-manifest.js').ensureSharedSkills}
  * @used-by {@link import('../Multi-Account/skills-manifest.js')}
  * @used-by {@link import('../Multi-Account/update-state.js').writeDeferredManifest}

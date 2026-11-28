@@ -19,6 +19,7 @@ const assertSafeWorktreeTarget = (explicitRoot, checkoutDir, env = process.env) 
 // 2026-11-26 "Isolate launcher test state and block worktree companion hijacking": https://github.com/dmitry-ai/antigravity-addons/issues/74
 /**
  * @used-by {@link assertSafeWorktreeTarget}
+ * @used-by {@link import('../Multi-Account/profile-manager.js')}
  * @used-by {@link import('./runtime-control.js')}
  */
 const isLinkedWorktree = (dir = __dirname) => {

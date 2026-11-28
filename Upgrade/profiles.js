@@ -183,6 +183,9 @@ const resolvePathsVariables = ({filename, pathsRegistry, env = process.env} = {}
 // "Break Upgrade and Multi-Account circular dependency, replace bootstrap.toString() with require, and split update-guard.js":
 // https://github.com/dmitry-ai/antigravity-addons/issues/40
 /**
+ * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileProvisioner#add}
+ * @used-by {@link import('../Multi-Account/profile-manager.js')}
+ * @used-by {@link import('../Multi-Account/profile-manager.test.js')}
  * @used-by {@link import('../Multi-Account/profiles.js')}
  * @used-by {@link import('./profile-endpoints.js').discoverEndpoints}
  * @used-by {@link import('./profile-endpoints.js')}
@@ -193,10 +196,8 @@ const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFi
 	if (!roaming) {
 		throw Error('APPDATA is required');
 	}
-	const config = readJsonFile(filename);
-	if (1 !== config.schemaVersion || !Array.isArray(config.profiles) || 'string' !== typeof config.skillsRoot || !config.skillsRoot.trim()) {
-		throw Error('Invalid Multi-Account configuration');
-	}
+	// 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
+	const config = validateProfilesConfig(readJsonFile(filename));
 	// 2026-11-20
 	// "Resolve skillsRoot templates in Multi-Account profiles from Harness paths.json":
 	// https://github.com/dmitry-ai/antigravity-addons/issues/60
@@ -206,29 +207,18 @@ const readProfiles = ({roaming = process.env.APPDATA, filename = resolveConfigFi
 	if (!path.isAbsolute(skillsRoot)) {
 		throw Error('Invalid Multi-Account configuration');
 	}
-	const ids = new Set();
-	const directories = new Set();
 	const r = config.profiles.map(profile => {
-		if (!/^A\d+$/.test(profile.id) || ids.has(profile.id) || !/^[a-z0-9-]+$/i.test(profile.userData) || directories.has(profile.userData.toLowerCase())) {
-			throw Error('Invalid or duplicate Antigravity profile');
-		}
-		ids.add(profile.id);
-		directories.add(profile.userData.toLowerCase());
-		if ('A0' !== profile.id && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email || '') || !/^\d+$/.test(profile.chromeShortcut || ''))) {
-			throw Error('Managed profiles require email and Chrome shortcut');
-		}
 		const userDataDir = path.join(roaming, profile.userData);
 		return {
 			...profile,
+			// 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
+			enabled: false !== profile.enabled,
 			userDataDir,
 			homeDir: path.join(userDataDir, 'home'),
 			portFile: path.join(userDataDir, 'DevToolsActivePort'),
 			skillsRoot
 		};
 	});
-	if (!ids.has('A0')) {
-		throw Error('The existing A0 profile must remain registered');
-	}
 	return r;
 };
 // 2026-11-14
@@ -242,4 +232,63 @@ const resolveConfigFile = (root = toolsRoot) => {
 	const folder = fs.existsSync(root) ? fs.readdirSync(root, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name)).find(item => item.isDirectory() && fs.existsSync(path.join(root, item.name, 'profiles.json'))) : null;
 	return folder ? path.join(root, folder.name, 'profiles.json') : path.join(root, 'profiles.json');
 };
-module.exports = {expandPathTemplate, readProfiles, resolveConfigFile, resolvePathsVariables};
+// 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
+/**
+ * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileProvisioner#add}
+ * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileRepository#save}
+ * @used-by {@link import('../Multi-Account/profile-manager.js').ProfileRepository#validate}
+ * @used-by {@link import('../Multi-Account/profile-manager.js')}
+ * @used-by {@link import('../Multi-Account/profile-manager.test.js')}
+ * @used-by {@link import('../Multi-Account/profiles.js')}
+ * @used-by {@link import('./profiles.js')}
+ * @used-by {@link readProfiles}
+ */
+const validateProfilesConfig = config => {
+	if (!config || 'object' !== typeof config || Array.isArray(config) || 1 !== config.schemaVersion || !Array.isArray(config.profiles) || 'string' !== typeof config.skillsRoot || !config.skillsRoot.trim()) {
+		throw Error('Invalid Multi-Account configuration');
+	}
+	const ids = new Set();
+	const directories = new Set();
+	const emails = new Set();
+	const shortcuts = new Set();
+	const profiles = config.profiles.map(profile => {
+		if (!profile || 'object' !== typeof profile || Array.isArray(profile) || !/^A\d+$/.test(profile.id || '') || ids.has(profile.id) || !/^[a-z0-9-]+$/i.test(profile.userData || '') || directories.has(profile.userData.toLowerCase())) {
+			throw Error('Invalid or duplicate Antigravity profile');
+		}
+		if (undefined !== profile.enabled && 'boolean' !== typeof profile.enabled) {
+			throw Error('Invalid Antigravity profile enabled flag');
+		}
+		if ('A0' === profile.id && false === profile.enabled) {
+			throw Error('The primary A0 profile cannot be disabled');
+		}
+		if (undefined !== profile.label && ('string' !== typeof profile.label || !profile.label.trim())) {
+			throw Error('Invalid Antigravity profile label');
+		}
+		ids.add(profile.id);
+		directories.add(profile.userData.toLowerCase());
+		const email = 'string' === typeof profile.email ? profile.email.trim() : '';
+		const chromeShortcut = 'string' === typeof profile.chromeShortcut ? profile.chromeShortcut.trim() : '';
+		if ('A0' !== profile.id && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d+$/.test(chromeShortcut))) {
+			throw Error('Managed profiles require email and Chrome shortcut');
+		}
+		if (email) {
+			const emailKey = email.toLowerCase();
+			if (emails.has(emailKey)) {
+				throw Error('Duplicate Antigravity profile email: ' + email);
+			}
+			emails.add(emailKey);
+		}
+		if (chromeShortcut) {
+			if (shortcuts.has(chromeShortcut)) {
+				throw Error('Duplicate Antigravity Chrome shortcut: ' + chromeShortcut);
+			}
+			shortcuts.add(chromeShortcut);
+		}
+		return {...profile};
+	});
+	if (!ids.has('A0')) {
+		throw Error('The existing A0 profile must remain registered');
+	}
+	return {...config, profiles};
+};
+module.exports = {expandPathTemplate, readProfiles, resolveConfigFile, resolvePathsVariables, validateProfilesConfig};

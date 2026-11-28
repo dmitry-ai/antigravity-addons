@@ -9,7 +9,7 @@
 		"check": "node upgrade.js --check",
 		"restore": "node upgrade.js --restore",
 		"start": "node upgrade.js",
-		"test": "node --test --test-force-exit --test-timeout=30000 test-registry.js test-cdp-runtime.js ../Folders/architecture.test.js ../Folders/folder-picker.test.js ../Multi-Account/launcher.test.js ../Multi-Account/skills-manifest.test.js ../Titlebar-Badges/badges.test.js",
+		"test": "node --test --test-force-exit --test-timeout=30000 test-registry.js test-cdp-runtime.js ../Folders/architecture.test.js ../Folders/folder-picker.test.js ../Multi-Account/launcher.test.js ../Multi-Account/profile-manager.test.js ../Multi-Account/skills-manifest.test.js ../Titlebar-Badges/badges.test.js",
 		"test:browser": "node --test --test-force-exit --test-timeout=30000 ../CSS/browser.test.js ../Folders/browser.test.js ../Titlebar-Badges/browser.test.js"
 	},
 	"devDependencies": {

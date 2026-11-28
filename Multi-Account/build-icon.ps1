@@ -9,8 +9,9 @@ if (-not $desktopPath) {
 # 2026-11-14
 # "Replace bootstrap.toString() injection with require, deduplicate Electron window hooks, split update-guard.js, and parameterize scripts from profiles.json":
 # https://github.com/dmitry-ai/antigravity-addons/issues/26
+# 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-$profiles = @($config.profiles | Where-Object { 'A0' -ne $_.id -and (-not $ProfileId -or $ProfileId -eq $_.id) })
+$profiles = @($config.profiles | Where-Object { 'A0' -ne $_.id -and $false -ne $_.enabled -and (-not $ProfileId -or $ProfileId -eq $_.id) })
 if (0 -eq $profiles.Count) {
 	throw 'No matching secondary profiles in profiles.json'
 }

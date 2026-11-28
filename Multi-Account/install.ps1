@@ -28,6 +28,10 @@ $dash = [char]0x2014
 # https://github.com/dmitry-ai/antigravity-addons/issues/26
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 foreach ($profile in $config.profiles) {
+	# 2026-11-28 "Add ProfileRepository and ProfileProvisioner CLI with duplicate checks": https://github.com/dmitry-ai/antigravity-addons/issues/77
+	if ($false -eq $profile.enabled) {
+		continue
+	}
 	if ('A0' -ne $profile.id) {
 		$shortcutPath = Join-Path $desktopPath ($profile.id + '.lnk')
 		Save-UnicodeShortcut `

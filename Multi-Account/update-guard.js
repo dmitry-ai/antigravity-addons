@@ -429,6 +429,7 @@ class UpdateGuard {
 	 * @used-by {@link import('../Folders/folders-model.js').active}
 	 * @used-by {@link import('../Upgrade/upgrade.js')}
 	 * @used-by {@link import('./launcher.test.js')}
+	 * @used-by {@link import('./profile-manager.test.js')}
 	 */
 	status() {
 		return {
